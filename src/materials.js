@@ -175,7 +175,9 @@ export function makeWaterMaterial(runeTex, {
 // The shimmering energy field hung between a dolmen gate's two pillars:
 // slow aurora bands, a fine vertical shimmer, soft rectangular edge fade,
 // and a gentle ripple along the plane so it hangs like woven light.
-export function makeVeilMaterial(color) {
+// uIgnite scales the whole field: a dark (warded) gate holds it at 0 until
+// its stormheart is claimed and the veil pours in.
+export function makeVeilMaterial(color, ignite = 1) {
   return new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
@@ -184,6 +186,7 @@ export function makeVeilMaterial(color) {
     uniforms: {
       uTime: { value: 0 },
       uColor: { value: new THREE.Color(color) },
+      uIgnite: { value: ignite },
     },
     vertexShader: /* glsl */ `
       varying vec2 vUv;
@@ -199,6 +202,7 @@ export function makeVeilMaterial(color) {
     fragmentShader: /* glsl */ `
       uniform float uTime;
       uniform vec3 uColor;
+      uniform float uIgnite;
       varying vec2 vUv;
       void main() {
         float x = vUv.x, y = vUv.y;
@@ -210,7 +214,80 @@ export function makeVeilMaterial(color) {
         // fine vertical shimmer rising through the field
         float shimmer = 0.5 + 0.5 * sin(y * 24.0 - uTime * 2.8 + sin(x * 13.0) * 1.6);
         vec3 col = uColor * (0.5 + 0.5 * bands) + vec3(0.55, 0.62, 0.95) * shimmer * 0.16;
-        float alpha = edge * (0.30 + 0.28 * bands + 0.14 * shimmer);
+        // an igniting veil pours in from the capstone down
+        float pour = smoothstep(1.0 - uIgnite * 1.15, 1.0 - uIgnite * 1.15 + 0.25, 1.0 - y);
+        float alpha = edge * (0.30 + 0.28 * bands + 0.14 * shimmer) * uIgnite * pour;
+        gl_FragColor = vec4(col * (0.7 + 0.5 * uIgnite), alpha);
+      }
+    `,
+  });
+}
+
+// The stormfront: a vast annular maelstrom sheet sealing the void beyond the
+// frontier ring. The water's visual language turned violent — churning bands,
+// debris-dark blotches, constant lightning flicker, and a glowing leading
+// wall at its inner edge. uInner animates the retreat; uFade dissolves the
+// whole storm once the last ward falls.
+export function makeStormMaterial(runeTex, { color, bright, flash, outer }) {
+  return new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    uniforms: {
+      uTime: { value: 0 },
+      uInner: { value: 0 },
+      uFade: { value: 1 },
+      uOuter: { value: outer },
+      uRunes: { value: runeTex },
+      uDeep: { value: new THREE.Color(color) },
+      uBright: { value: new THREE.Color(bright) },
+      uFlash: { value: new THREE.Color(flash) },
+    },
+    vertexShader: /* glsl */ `
+      varying vec3 vWorld;
+      uniform float uTime;
+      void main() {
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        float r = length(wp.xz);
+        float a = atan(wp.z, wp.x);
+        // the sheet heaves like a sea in fury
+        wp.y += sin(uTime * 1.4 + r * 0.05 + a * 5.0) * 1.4
+              + sin(uTime * 0.7 + r * 0.016 - a * 3.0) * 2.2;
+        vWorld = wp.xyz;
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform float uTime;
+      uniform float uInner;
+      uniform float uFade;
+      uniform float uOuter;
+      uniform sampler2D uRunes;
+      uniform vec3 uDeep;
+      uniform vec3 uBright;
+      uniform vec3 uFlash;
+      varying vec3 vWorld;
+      void main() {
+        float r = length(vWorld.xz);
+        float ang = atan(vWorld.z, vWorld.x);
+        // churn: two blotch layers wheeling against each other
+        vec2 sw1 = vec2(cos(uTime * 0.03), sin(uTime * 0.03));
+        float n1 = texture2D(uRunes, vWorld.xz * 0.0021 + sw1 * 0.15 + uTime * 0.004).a;
+        float n2 = texture2D(uRunes, vWorld.xz * 0.0063 - sw1 * 0.23 - uTime * 0.006).a;
+        // storm bands racing around the orbit line
+        float band = 0.5 + 0.5 * sin(r * 0.045 - uTime * 2.2 + ang * 6.0 + n1 * 7.0);
+        vec3 col = mix(uDeep, uBright, 0.16 + 0.42 * band * (0.4 + 0.6 * n1));
+        col = mix(col, uDeep * 0.55, n2 * 0.55); // debris-dark curds
+        // lightning: sparse cells flickering white
+        float bolt = pow(n2, 7.0) * max(0.0, sin(uTime * 11.0 + n1 * 43.0 + ang * 9.0));
+        col += uFlash * bolt * 2.4;
+        // the leading wall: a bright churn at the storm's inner edge
+        float rim = 1.0 - smoothstep(uInner + 6.0, uInner + 64.0, r);
+        col += uBright * rim * (0.5 + 0.5 * sin(uTime * 3.1 + ang * 14.0)) * 0.8;
+        float alpha = smoothstep(uInner, uInner + 26.0, r)   // calm within
+                    * (0.86 + 0.12 * n1)
+                    * (1.0 - smoothstep(uOuter * 0.82, uOuter * 0.98, r))
+                    * uFade;
         gl_FragColor = vec4(col, alpha);
       }
     `,

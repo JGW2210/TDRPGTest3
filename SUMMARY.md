@@ -25,77 +25,107 @@ paper sun in a dark aetherial papercraft cosmos. Everything is seeded
   shorelines); waters ≈ 80-90% of walkable tiles; region radius sized to
   its sea, hard-capped so facing gate islets can never bridge the void.
   Asteroid areas (`generateAsteroidRegion`, `area.asteroid`) are one
-  connected knot of ~10-18 rock hexes: no water, no fringe, no body — just
-  a slow rubble knot overhead. Their gate paving is rock, not water.
+  connected knot of ~10-18 rock hexes; each keeps a glowing HEALING SPRING
+  (`hex.spring` — one heart, once per visit, re-armed on area re-entry).
 - **Gates** = pairs of 7-hex bare-rock node islets on facing rims bearing
-  DOLMEN WAYGATES (`structures.js`): rough hash-jittered pillars, cracked
-  capstone, rubble, moss, carved rune plates, an aurora energy veil
-  (`makeVeilMaterial`) between the pillars. Entering (or clicking —
-  invisible hitboxes) one BLASTS the wisp to its twin. Same-ring gates
-  chain neighbors around each ring (through the waystations on ring 4), fly
-  ALONG THE ORBIT (polar-lerp arc), and their doorways FACE THE ORBIT'S
-  TANGENT signed toward the twin; radial/secret gates face their twin
-  straight on. Each ring boundary has exactly ONE randomly-placed radial
-  gate; 3 secret gates likewise. First use announces the Warden (boss hook
-  lives in `main.js handleGate`).
+  DOLMEN WAYGATES (`structures.js`). Entering (or clicking — invisible
+  hitboxes) one BLASTS the wisp to its twin. Same-ring gates chain neighbors
+  around each ring (through the waystations on ring 4), fly ALONG THE ORBIT,
+  doorways facing the orbit's tangent; radial/secret gates face their twin
+  straight on. Each ring boundary has exactly ONE radial gate
+  (`gate.boundary` = 0..3); 3 secret gates (`gate.secretGate`). First use
+  announces the Warden (boss hook lives in `main.js handleGate`).
+- **STORM PROGRESSION (Round 8)** — the old rune-pedestal locks are GONE.
+  A vast MAELSTROM SHEET (`makeStormMaterial`, ring mesh at renderOrder 5)
+  seals everything beyond the frontier ring; inner calm radii per frontier
+  live in `STORM_BOUNDARIES` (145/400/668/938 — chosen to clear region rims
+  + gate islets; re-check if orbits change). Each boundary's radial gate
+  starts DARK (no veil — `makeDolmenGate({startLit:false})`, veil alpha via
+  `uIgnite`) under a ward (`world.wards[]`: boundary, gateId, shardKey,
+  criterion 'shard', dispelled). A STORMHEART SHARD floats on a rock perch
+  (`hex.wardId`) two hexes from the departure islet. Stepping on it →
+  `main.js handleShardClaim`: ward dispels, `world.progress.frontier`
+  advances, `built.claimShard` flies the shard to the lintel, then
+  `built.igniteGate` + `built.setStormFrontier` (storm eases back; the
+  last ward dissolves the sheet and un-smothers the secrets' surge
+  pillars), all under an ignition cutscene (`WARD_LINES[boundary]`).
+  Dark gates refuse blasts with a flash message. STORM HERALDS — vast
+  horned silhouettes (`makeHerald`, NOT fogged) — pace each sealed
+  boundary near its gate and fade out on dispel. Criterion is pluggable:
+  boss tallies later.
+- **HAZARDS (Round 8)** — assigned in worldgen after the start hex, scaled
+  by `biome.dread`, skipped on gate/ward/shrine/spring/platform hexes and a
+  4-hex cradle around the start. `hex.hazard = {kind, period, phase, ...}`:
+  `snare` (isle glyph, one-shot — instanced mesh, `built.triggerSnare`
+  zero-scales instance + its fog base), `geyser` (water, telegraphed cycle
+  — `built.geyserErupting(key, t)`), `maw` (shore chomper —
+  `built.mawSnapping(key, t)`). Damage applies on enter AND while standing
+  (frame check in main). STORM STRIKES are runtime-only (`updateStrikes` in
+  main): ring ≥ 2, random hex in the wisp's region, 0.95s crackle telegraph
+  then bolt.
+- **HEARTS (Round 8)** — `run` state in main.js: `maxHalves` (6 start, cap
+  12), `halves`, `invulnUntil` (1.15s window + wisp blink), `dead`. Any
+  hazard = half a heart. `ui.renderHearts` draws papercraft split-heart SVGs
+  top-left; damage = red `#hurtflash` + hearts shake. Zero → `die()`:
+  announce, `#deathfade`, then reload with a NEW RANDOM SEED (rogue death).
+  `damage()` is inert during cutscenes and blasts (landing is safe-by-design:
+  you always arrive on hazard-free gate rock).
+- **ASTRAL SHRINES (Round 8)** — ~10 shrines, half the regions per ring
+  (rings 1-4, never asteroid/secret). Each = a 7-hex teleportation stone
+  islet in the sea (placed via `placeNode`, `hex.shrineRole='stone'`, stone
+  circle from `makeShrineStone`) + a FLOATING PLATFORM of ~9 astral hexes
+  (`hex.astral`, pale violet) hung at `hex.baseY` ≈ 58-80 on free grid
+  columns past the rim (the global grid is single-layer — cells + full
+  neighborhood must be empty; fringe growth skips baseY hexes). A light
+  beam links stone → platform. Stone ⇄ pad teleports reuse the blast
+  (`'line'`) + `suppressGateKey`. The altar (`shrineRole='altar'`,
+  `makeAltar`) is SILENT for now and grants a heart container (+2 max
+  halves, filled). `player._hexY`, hover marker, and path dots all add
+  `baseY`; sail-follow lifts the camera target to the destination's baseY.
+- **Heart-sprites** — runtime-only (main.js `updateHeartDrops`): up to 3
+  drifting hearts over discovered non-asteroid seas, heal half on catch,
+  fade after 90s.
 - **Per-biome identity** (config fields → renderers): `bodyShape` →
-  sculpted archetypes in `bodies.js` (sizes ~4-13; eye blinks, maw chews,
-  twinned lobes breathe); `terrain.style` (terrace/dune/crag/mesa/smooth) +
-  `island.top2` two-tone + shoreline water-glow tint in the isle loop;
-  `veil` → per-region particle weather (rise/fall/drift/firefly/still);
-  `landmark` → one named structure per non-secret region
-  (`makeLandmark`), label runic until discovery (`labelsByLandmark`);
-  `decor.kinds` → bespoke sets in `decorSets.js` (~40 kinds, `glow`/`tint`
-  flags).
-- **Locks**: 3 stormwalls seal random gates' departure nodes (rune-stone
-  key on an island in the same region); the Hollow Moon's outer node needs
-  3 rumor-rune obelisks struck across ring-2+ regions. Blocked hexes are
-  unwalkable and blasts refuse a stormbound far node.
+  sculpted archetypes in `bodies.js`; `terrain.style` + `island.top2` +
+  shoreline water-glow tint in the isle loop; `veil` → per-region particle
+  weather; `landmark` → one named structure per non-secret region (picker
+  skips hazard hexes); `decor.kinds` → bespoke sets in `decorSets.js`.
 - **Water**: two instanced layers sharing instance data — near-opaque
-  glassy base in each region's water color, sinking to per-hex noise
-  depths; plus a translucent ghost-sheet (+0.52, α≈0.32) unified to one
-  aetherial slate-blue, patchy along its drifting light-bands, wobbling at
-  its own slower/taller rate. Two rings of unwalkable fringe hexes fade
-  each region's rim into the void (render-only, not in the hex map).
-- **Fog of war** (`buildWorld` fog section): every region starts unseen —
-  instances zero-scaled via per-area registries (`instanceGroups`,
-  `objectsByArea`), objects hidden. `built.revealArea(areaId, animated)`
-  pops a region in (staggered easeOutBack swell). Main reveals the start
-  region instantly; `discoverArea` reveals the rest. Fogged port hitboxes
-  are filtered out of the raycast in `main.js hexKeyAt`.
-- **Discovery cutscene** (`cutscene.js` + `ui.dialogue`): on first landfall
-  the camera glides to the region's body (pitch levels to 0.5, slow yaw
-  drift), `INTRO_LINES[biome.key]` advance by click, final click glides
-  home. `controls.onClick` routes to `cutscene.advance()` while active.
-- **Render-order contract**: the sea draws base (0) then ghost-sheet (1);
-  ANY transparent thing above the water needs renderOrder ≥ 2 or the sheet
-  overpaints it (bodyGroup children get 3 via a traverse; veils/lock fx 2;
-  labels 30).
+  glassy base in each region's water color + a translucent unified
+  ghost-sheet (+0.52, renderOrder 1). Two rings of unwalkable fringe hexes
+  fade each region's rim (render-only; skips shrine platforms).
+- **Fog of war**: every region starts unseen — instances zero-scaled via
+  `instanceGroups`, objects hidden via `objectsByArea`/`regFx`.
+  `built.revealArea(areaId, animated)`. Fogged port hitboxes filtered out
+  of the raycast. Deliberately unfogged: leviathans, void debris/curios,
+  secret pillars (storm-smothered instead), the stormfront, storm heralds.
+- **Discovery cutscene** (`cutscene.js`): camera glide + click-through
+  lines (`INTRO_LINES`); the same class runs the gate-ignition scene.
+- **Render-order contract**: sea base 0, ghost-sheet 1, transparent
+  dressings ≥ 2 (bodyGroup traverse sets 3), stormfront 5, herald eyes and
+  strike/burst fx 6, labels 30.
 - **Leviathans**: two serpents loop the void between orbits; a third
-  wheels around the Unlit Star's hidden crossing as its discovery hint.
-- **UI**: non-modular floating runic text; Twin-Tongue deciphering (runes
-  → letters on discovery); labels depth-test-off + zoom-scaled; movement
-  grid lives in UI (pulsing hover hex outline + dotted route trail).
-- **Style**: dark cosmic indigo + papercraft — toon shading with ink
-  outline shells, paper sun with spinning ray crown, per-body signature
-  features, named drifting curios, squash & bounce everywhere.
+  wheels around the Unlit Star's hidden crossing.
+- **UI**: floating runic text; Twin-Tongue deciphering; hearts row;
+  hurt-flash + death-fade overlays; movement grid in UI (hover hex outline
+  + dotted route).
 
 ## Code map (src/)
 
 | File | Role |
 | --- | --- |
-| `config.js` | HEX size, RINGS radii, biome tables (incl. bodyShape/terrain/veil/landmark/decor kinds), ASTEROID_BIOMES, runes |
-| `worldgen.js` | Seeded gen: layout → regions + asteroid waystations → gates → locks → leviathans |
-| `buildWorld.js` | All meshes/décor/animators + runtime API (updateFlags, releaseLock, bounceIsle, boingGate, wobbleBody) |
-| `bodies.js` | sculptBody: bespoke per-body geometry archetypes (tear-free position-hash displacement) |
-| `structures.js` | makeDolmenGate + makeLandmark (17 landmark kinds) |
-| `cutscene.js` | Discovery cutscene: camera glide + click-through dialogue |
-| `decorSets.js` | buildDecorLibrary: ~40 merged decor geometries, glow/tint flags |
-| `materials.js` | Water shader (layer options: lift/ghost/unify/wobble/fade), energy veil, canvas textures |
-| `player.js` | Click-to-sail BFS stepping, squashy hops, `startBlast(destKey, 'arc'|'line')` |
+| `config.js` | HEX size, RINGS radii, STORM + STORM_BOUNDARIES + WARD_LINES, biome tables, ASTEROID_BIOMES, runes |
+| `worldgen.js` | Seeded gen: layout → regions → gates → storm wards + shard perches → shrines (stone islet + baseY platform) → springs → start hex → hazards |
+| `buildWorld.js` | All meshes/décor/animators + runtime API (igniteGate, claimShard, setStormFrontier, triggerSnare, geyserErupting, mawSnapping, claimAltar, bounceIsle, boingGate, wobbleBody, revealArea) |
+| `bodies.js` | sculptBody: bespoke per-body geometry archetypes |
+| `structures.js` | makeDolmenGate (startLit/ignite), makeShrineStone, makeAltar, makeHerald, makeLandmark |
+| `cutscene.js` | Camera glide + click-through dialogue (discovery + gate ignition) |
+| `decorSets.js` | buildDecorLibrary: ~40 merged decor geometries |
+| `materials.js` | Water shader, energy veil (uIgnite), storm sheet shader, canvas textures |
+| `player.js` | Click-to-sail BFS stepping, `startBlast(destKey, 'arc'\|'line')`, baseY-aware heights |
 | `controls.js` | LMB-drag glide, RMB-drag rotate, wheel zoom (max 3600) |
-| `main.js` | Wiring: lights/bloom, gate/lock/discovery handlers, hover+path UI, `window.__astral` debug handle |
-| `pathfind.js`, `hexmath.js`, `rng.js`, `labels.js`, `ui.js` | Support |
+| `main.js` | Wiring: run state (hearts/damage/death), hazard checks, storm strikes, heart-sprites, shard/shrine/altar/spring handlers, hover+path UI, `window.__astral` |
+| `pathfind.js`, `hexmath.js`, `rng.js`, `labels.js`, `ui.js` | Support (ui: renderHearts/hurt/deathFade) |
 
 ## Dev workflow
 
@@ -104,63 +134,83 @@ paper sun in a dark aetherial papercraft cosmos. Everything is seeded
   system chromium headless shell (under `/opt/pw-browsers/`) with
   `--enable-unsafe-swiftshader --use-gl=angle --use-angle=swiftshader`,
   serve `dist/` via `npx vite preview`, and drive the app through
-  `window.__astral` (`{ world, player, controls, built, cutscene }`):
+  `window.__astral` (`{ world, player, controls, built, cutscene, run,
+  damage, heal }`):
   - teleport: `player.hexKey = key; player._syncToHex()`; walk:
-    `player.requestMove(key)`; inspect `world.gates/locks/areas`.
-  - trigger a gate blast + discovery cutscene: teleport onto a port hex,
-    then `player.onEnterHex(world.hexes.get(key))`; after landing,
-    `cutscene.active` is true and `page.mouse.click(...)` advances the
-    dialogue (`controls.onClick` routes to `cutscene.advance()`).
+    `player.requestMove(key)`; inspect `world.gates/wards/shrines/areas`.
+  - claim a ward: teleport onto `world.wards[i].shardKey` and call
+    `player.onEnterHex(world.hexes.get(key))` — the ignition cutscene takes
+    the camera; `page.mouse.click(...)` advances it.
+  - IMPORTANT for tests: reveal/discover a region (`built.revealArea(id,
+    false); world.areas[id].discovered = true`) BEFORE teleporting onto its
+    hazards — an undiscovered landfall starts a discovery cutscene, and
+    `damage()` is inert during cutscenes.
   - lift fog directly for visual checks: `built.revealArea(areaId, false)`.
 - NOTE: headless SwiftShader runs a few fps and `dt` clamps at 0.05s, so
-  sim time crawls (~0.2-0.4 s/s): blasts and camera glides take several
-  real seconds — poll with `waitForFunction`, not fixed waits. All of it
-  is frame-rate independent on real GPUs.
-- The only expected console error headless is the Google Fonts fetch
-  (no network in the sandbox).
+  sim time crawls (~0.2-0.4 s/s): blasts, storm retreats, and camera glides
+  take many real seconds — poll with `waitForFunction`, not fixed waits.
+- Expected console noise headless: the Google Fonts fetch fails (no
+  network), surfacing as font errors / `ERR_CONNECTION_RESET`.
 
 ## Gotchas
 
 - Worldgen/build rng call ORDER is the seed contract — reordering rng
-  calls reshuffles every world.
+  calls reshuffles every world. (Round 8 re-ordered it: old seeds now
+  produce different worlds than in Round 7 builds. That's expected.)
 - Region `maxDist` cap (clear+9..15) is the geometric guarantee that two
-  facing gate islets never merge into a walkable void-bridge. If orbits or
-  region sizes change, re-check that invariant.
-- Custom instanced attributes live on the GEOMETRY (shared by base water,
-  ghost sheet); `instanceMatrix` lives on each MESH (shared by
-  assignment). The fringe mesh clones the geometry for its own attributes.
-- `hex.elev` is mutated at build time (height spread + terrain profile) —
-  build runs before Player is constructed; decor, gates, keystones, and
-  landmarks read it after the isle loop.
-- Labels must keep `depthTest: false` + renderOrder, or they vanish under
-  tiles.
-- FOG REGISTRATION IS MANDATORY: any new per-region visual must join the
-  fog of war — instanced tiles/decor via `instanceGroups` (mesh + base
-  matrices + byArea indices), one-off objects via `regFx(areaId, obj)` —
-  or it will float visible over undiscovered regions. Deliberately
-  unregistered: secret alignment pillars, leviathans, void debris/curios.
-- Per-region reveal state lives only in `area.discovered` (worldgen data)
-  + `revealedAreas` (renderer). There is no save/persistence yet — a
-  reload re-fogs everything except home.
-- `INTRO_LINES` in config.js is keyed by `biome.key` — a new biome without
-  an entry falls back to a generic arrival line in the cutscene.
-- The cutscene owns the camera by nulling `controls._focusTo` every frame
-  and lerping target/dist/pitch itself; anything else that wants camera
-  control must check `cutscene.active` (the sail-follow in main.js does).
+  facing gate islets never merge. `STORM_BOUNDARIES` (145/400/668/938)
+  additionally assume region extent + islets + shard perch stay inside
+  each boundary — re-check BOTH if orbits or region sizes change.
+- Custom instanced attributes live on the GEOMETRY; `instanceMatrix` on
+  each MESH. The fringe mesh clones the geometry for its own attributes.
+- `hex.elev` is mutated at build time — build runs before Player exists;
+  decor, gates, shards, shrine structures read it after the isle loop.
+- `hex.baseY` (shrine platforms) is the ONLY vertical offset: worldgen
+  sets it, and player/_hexY, buildWorld isle placement, hover marker,
+  path dots, and the camera-follow all add it. New per-hex visuals must
+  do the same or they'll render at sea level under the platform.
+- Shrine platform cells occupy free grid columns just OUTSIDE the region
+  rim with an empty 1-cell margin (checked at placement) — pathfinding
+  cannot reach them except by teleport; keep that margin or BFS will
+  walk into the sky.
+- FOG REGISTRATION IS MANDATORY: any new per-region visual must join
+  `instanceGroups` (mesh + base matrices + byArea) or `regFx(areaId, obj)`.
+  Deliberately unregistered: leviathans, void debris/curios, secret
+  pillars, stormfront, heralds.
+- `triggerSnare` zero-scales the instance in BOTH the live matrix array
+  and the fog `base` array — otherwise a later `setAreaScale` resurrects
+  the burnt-out glyph.
+- `damage()` is inert during `cutscene.active` and `player.blast`. Real
+  play never lands the wisp on a hazard from a blast (ports are bare
+  rock), but tests teleporting into undiscovered regions will silently
+  take no damage (see dev workflow note).
+- `suppressGateKey` guards BOTH gate blasts and shrine teleports against
+  instant bounce-back — set it to the destination key before any
+  `startBlast` from a trigger hex.
+- Labels must keep `depthTest: false` + renderOrder, or they vanish.
+- Per-region reveal state lives only in `area.discovered` + renderer
+  `revealedAreas`; ward/shrine/heart state lives in `world.wards`,
+  `world.shrines`, `world.progress`, and main's `run` — none persisted; a
+  reload is a fresh run (by design: death reloads with a new seed).
+- `INTRO_LINES` keyed by `biome.key`; `WARD_LINES` indexed by boundary.
+- The cutscene owns the camera by nulling `controls._focusTo` every
+  frame; anything else wanting camera control must check `cutscene.active`
+  (sail-follow and storm strikes in main do).
 
 ## Roadmap (undone, in rough priority)
 
-1. Warden combat at gates (hook: `handleGate` in main.js — gate has id,
-   rune, kind, both port keys, both area ids). Warden's Toll design in
-   DESIGN.md poll 10. The Cutscene class (camera glide + click-through
-   dialogue) is reusable for a warden-appearance scene.
-2. Run structure: permadeath loop, run seeds, unlocks — should persist
-   `area.discovered` so the fog of war survives reloads within a run.
-3. Tide-gated hexes (flood/drain with breath); flavor-specific water rules.
-4. Full planetary revolution (rigid region groups; gates re-anchor).
-5. Dewdrop lakes / shops / shrines at points of interest.
-6. Sound: chimes for discovery, deciphering ticks, blast whoosh,
-   cutscene dialogue murmurs.
+1. Combat: warden fights at gates (hook: `handleGate`), boss-tally ward
+   criteria (`ward.criterion`), shrine trials (hazard gauntlet first) in
+   front of the heart containers. Design as a full roguelike system —
+   deferred deliberately to be written as one piece.
+2. Run structure beyond death: run summary, meta unlocks, optional
+   same-seed practice mode; persist discovery/ward state within a run so
+   a reload doesn't wipe it.
+3. New discovery mechanic for the Hollow Moon (rumor obelisks retired).
+4. Tide-gated hexes; flavor-specific water rules.
+5. Full planetary revolution (rigid region groups; gates re-anchor).
+6. Sound: chimes for discovery, storm rumble, shard crack, blast whoosh,
+   heart tear.
 
 ## History
 
@@ -168,13 +218,16 @@ Built across sessions via design polls (all recorded in DESIGN.md): Ink &
 Starlight v1 with walkable rivers → Orb-Weaver's web + riverflight →
 papercraft turn → dark aetherial depth pass → isolated island regions with
 blast gates → vast seas → one-gate-per-ring + orbit blasts + layered
-living water + soft rims → Round 6 visual-identity pass (dolmen waygates
-facing orbit tangents, sculpted body archetypes, per-biome terrain/decor/
-veils/landmarks, 3/4/5/5 rings + asteroid waystations, Echo Verge / Silent
-Orchard / Maw Shallows; PR #2) → Round 7 (fog of war with animated
-reveals, first-landfall discovery cutscenes with per-region dialogue,
-transparent render-order fix; PR #3).
+living water + soft rims → Round 6 visual-identity pass (dolmen waygates,
+sculpted bodies, per-biome terrain/decor/veils/landmarks, asteroid
+waystations; PR #2) → Round 7 (fog of war, discovery cutscenes, render-order
+fix; PR #3) → Round 8 (Polls 17-24: stormfront progression replacing rune
+pedestals — maelstrom sheet, dark gates ignited by stormheart shards,
+ignition cutscenes, storm heralds; ring-scaled hazards — snares, geysers,
+maws, storm strikes; papercraft hearts with rogue death on a new seed;
+astral shrine platforms + teleport stones + heart-container altars;
+waystation springs; wandering heart-sprites).
 
-Dev branch convention: work happens on
-`claude/game-visuals-world-design-0hk7so`, PR'd to `main` and merged;
-after each merge the branch restarts fresh from `main` (same name).
+Dev branch convention: work happens on a `claude/...` branch, PR'd to
+`main` and merged; this round's branch is
+`claude/roguelike-progression-world-bvsh25`.

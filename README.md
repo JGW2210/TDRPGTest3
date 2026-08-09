@@ -20,7 +20,7 @@ for a different cosmos, or press **R** in-game.
 
 ## Deployment (GitHub Pages)
 
-Pushes to `main` or `claude/tdrpgtest3-world-map-skpoyn` run
+Pushes to `main` or `claude/roguelike-progression-world-bvsh25` run
 `.github/workflows/deploy.yml`, which builds the site and publishes it to
 GitHub Pages at `https://<user>.github.io/TDRPGTest3/`.
 
@@ -59,8 +59,7 @@ any mount path.
   and their blasts ride the LINE OF ORBIT in a sweeping curve; each ring has
   exactly ONE randomly-placed passage outward to the next ring, and those
   gates face their twin for a straight shot across the void. First crossing
-  stirs the gate's named Warden (the boss-fight hook); stormbound nodes
-  refuse the blast until their rune-stone is struck.
+  stirs the gate's named Warden (the boss-fight hook).
 - **Astral waters with depth** — every region has its own named water (the
   Heliotide, the Quicksilver Race, the Lidless Calm…). Hexes sink to
   different levels of the cosmic deep, near-borderless, with soft light-bands
@@ -78,19 +77,37 @@ any mount path.
   swelling into place — while the camera glides to its astral body and the
   cartographer's whisper delivers its arrival lines, advanced click by
   click, before returning you to your wisp.
+- **The stormfront** — a vast maelstrom sheet seals everything beyond the
+  ring you've earned: churning violet storm-bands, lightning, and vast
+  horned **storm heralds** pacing beside each sealed passage. Every outward
+  gate begins dark — no energy veil — until you seize the **stormheart
+  shard** crackling on a perch beside it: the shard streaks into the lintel,
+  the veil pours down between the pillars, and the storm rolls back one ring
+  in a retreating wave, all watched by an ignition cutscene. The final shard
+  dissolves the maelstrom entirely and bares the secret deep.
+- **Three papercraft hearts, halved** — trapped hexes cost half a heart:
+  one-shot **snare runes** on the isles, telegraphed **void geysers** in the
+  waters, snapping **maw blooms** on the shores, and (from ring 2 out)
+  wandering **storm strikes** — all denser and quicker with every ring.
+  Lose the last half and the wisp gutters out: rogue death, and a brand-new
+  cosmos grows from a fresh seed. Shrine altars grant heart containers,
+  stray **heart-sprites** drift over discovered seas to mend you, and each
+  asteroid waystation keeps a **healing spring** (one heart, once per visit).
+- **Astral shrines** — floating challenge platforms hung high off the rims
+  of regions from ring 1 outward, each betrayed by a thin beam of light
+  dropping to a 7-hex teleportation stone islet in the sea. Step onto the
+  stone circle and it hurls the wisp skyward; a silent altar waits on top
+  (its trial arrives with the combat pass), bearing a heart container.
 - **The tide** — the sun breathes on a slow cycle. Waters brighten at high
   tide, and *faint tide-paths* into the outer dark only glimmer into view at
   the peak.
-- **Stormwall rune-locks** — three ring passages are sealed by crackling
-  stormwalls near an area's harbor; step on the matching rune-stone to calm
-  them.
 - **Star-leviathans** — two serpents endlessly circle the middle rings, and a
   glowing third swims the hidden spoke to a secret stage (its hexes ride on
   its back).
 - **Three secret outer bodies**, far past the rim on extended spokes:
-  the Weeping Comet (faint tide-path), the Hollow Moon (strike all three
-  rumor-rune obelisks), the Unlit Star (follow the leviathan). At peak tide an
-  *alignment surge* pillar of light briefly marks each secret.
+  the Weeping Comet, the Hollow Moon, the Unlit Star (follow the leviathan).
+  The maelstrom smothers their signs until its last wall falls; then, at
+  peak tide, an *alignment surge* pillar of light briefly marks each secret.
 - **Dark aetherial papercraft look** — muted toned-down hues glowing softly
   against a deep indigo void, ink outline shells on every island and body, a
   craft-paper sun with a spinning crown of rays, sparkle stars, dark paper
@@ -121,17 +138,17 @@ any mount path.
   gates, rune-only until discovered.
 
 Everything is procedurally generated from the seed (layout, biome placement,
-archipelago shapes, river routes, gate runes, lock positions).
+archipelago shapes, gate runes, shard perches, hazards, shrine platforms).
 
 ## Project shape
 
 | File | Role |
 | --- | --- |
-| `src/config.js` | Biome/water/terrain/veil/landmark tables, ring layout, runes |
-| `src/worldgen.js` | Seeded generation: areas, hexes, asteroids, gates, locks, leviathans |
-| `src/buildWorld.js` | Turns world data into instanced meshes + cosmos décor |
+| `src/config.js` | Biome/water/terrain/veil/landmark tables, ring layout, storm boundaries, runes |
+| `src/worldgen.js` | Seeded generation: areas, hexes, asteroids, gates, storm wards, hazards, shrines, leviathans |
+| `src/buildWorld.js` | Turns world data into instanced meshes + stormfront, hazards, shrines, cosmos décor |
 | `src/bodies.js` | Sculpted astral-body archetypes (eye, maw, gas giant, husk…) |
-| `src/structures.js` | Dolmen waygates + per-region signature landmarks |
+| `src/structures.js` | Dolmen waygates, shrine stones & altars, storm heralds, landmarks |
 | `src/cutscene.js` | Discovery cutscene: camera glide + click-through dialogue |
 | `src/decorSets.js` | Bespoke per-biome island decor geometry library |
 | `src/materials.js` | Water/veil shaders, canvas textures |

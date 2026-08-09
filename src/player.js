@@ -62,7 +62,8 @@ export class Player {
   }
 
   _hexY(h) {
-    return h.kind === 'isle' ? h.elev + 0.15 : 0.35;
+    // astral shrine platforms carry their altitude in baseY
+    return (h.baseY || 0) + (h.kind === 'isle' ? h.elev + 0.15 : 0.35);
   }
 
   _hexPos(key) {

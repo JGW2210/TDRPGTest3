@@ -1,5 +1,5 @@
 // Breadth-first pathfinding over the global hex map. Uniform step cost;
-// blocked hexes (stormwalls, sealed secret paths) are impassable until unlocked.
+// blocked hexes stay impassable (a dormant flag kept for future seals).
 
 import * as Hx from './hexmath.js';
 

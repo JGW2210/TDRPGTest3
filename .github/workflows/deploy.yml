@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - claude/tdrpgtest3-world-map-skpoyn
+      - claude/roguelike-progression-world-bvsh25
   workflow_dispatch:
 
 permissions:

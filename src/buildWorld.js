@@ -4,15 +4,15 @@
 // landmarks and ambient veils, leviathans, and a deep runic cosmos.
 
 import * as THREE from 'three';
-import { HEX, RINGS } from './config.js';
+import { HEX, RINGS, STORM, STORM_BOUNDARIES } from './config.js';
 import * as Hx from './hexmath.js';
 import { makeNoise2D } from './rng.js';
 import {
-  makeRuneTexture, makeWaterMaterial, makeToonGradient,
+  makeRuneTexture, makeWaterMaterial, makeToonGradient, makeStormMaterial,
   makeGlowSpriteTexture, makeNebulaTexture, makeGlyphTexture, makeSparkleTexture,
 } from './materials.js';
 import { sculptBody } from './bodies.js';
-import { makeDolmenGate, makeLandmark } from './structures.js';
+import { makeDolmenGate, makeLandmark, makeShrineStone, makeAltar, makeHerald } from './structures.js';
 import { buildDecorLibrary } from './decorSets.js';
 import { makeLabel } from './labels.js';
 
@@ -99,7 +99,6 @@ export function buildWorld(world, rng) {
   waterGeo.setAttribute('aColor', new THREE.InstancedBufferAttribute(aColor, 3));
   waterGeo.setAttribute('aFlow', new THREE.InstancedBufferAttribute(aFlow, 4));
   waterGeo.setAttribute('aDepth', new THREE.InstancedBufferAttribute(aDepth, 1));
-  const flowAttr = waterGeo.getAttribute('aFlow');
   group.add(waterMesh);
 
   // a thin ghost sheet floats above the glassy base, wobbling on its own
@@ -123,7 +122,8 @@ export function buildWorld(world, rng) {
     const seen = new Set(world.hexes.keys());
     for (const area of world.areas) {
       if (area.asteroid) continue; // dry rock in the void — no watery rim
-      let frontier = area.hexKeys;
+      // shrine platforms hang in the sky: no sea fringe grows from them
+      let frontier = area.hexKeys.filter((k) => !world.hexes.get(k).baseY);
       for (let ringI = 0; ringI < 2; ringI++) {
         const fadeLevel = ringI === 0 ? 0.6 : 0.87;
         const next = [];
@@ -205,14 +205,18 @@ export function buildWorld(world, rng) {
       }
     }
     h.elev = Math.max(0.35, e);
-    // a touch of hand-cut wonk on every island
-    DUMMY.position.set(p.x, h.elev / 2, p.z);
+    // a touch of hand-cut wonk on every island; astral platforms carry their
+    // altitude in baseY (the grid itself stays flat)
+    DUMMY.position.set(p.x, (h.baseY || 0) + h.elev / 2, p.z);
     DUMMY.rotation.set((rng.float() - 0.5) * 0.05, 0, (rng.float() - 0.5) * 0.05);
     DUMMY.scale.set(1, h.elev, 1);
     DUMMY.updateMatrix();
     isleMesh.setMatrixAt(i, DUMMY.matrix);
     let col;
-    if (h.rock) {
+    if (h.astral) {
+      // shrine platform stone: pale violet, unclaimed by any biome
+      col = tone(jitterColor(0x9a8fd4, rng, 0.06), 0.7, 0.85);
+    } else if (h.rock) {
       // gate node islets and asteroid reefs are bare rock, unclaimed by any biome
       col = tone(jitterColor(0x6e6e80, rng, 0.08), 0.5, 0.75);
     } else {
@@ -278,7 +282,7 @@ export function buildWorld(world, rng) {
     let bestK = null, be = -1;
     for (const k of area.hexKeys) {
       const h = world.hexes.get(k);
-      if (h.kind !== 'isle' || h.rock || h.gateId !== null || h.lockKey !== null) continue;
+      if (h.kind !== 'isle' || h.rock || h.gateId !== null || h.hazard) continue;
       if (h.elev > be) { be = h.elev; bestK = k; }
     }
     if (bestK) landmarkSpots.set(area.id, bestK);
@@ -779,6 +783,7 @@ export function buildWorld(world, rng) {
   // capstone, rubble, moss, and an energy field slung between the pillars.
   const labelsByGate = new Map();
   const gatePortGroups = new Map();
+  const gateIgniters = new Map(); // gateId -> [ignite fns]
   const portHitboxes = []; // invisible click targets over each doorway
 
   for (const gate of world.gates) {
@@ -789,12 +794,18 @@ export function buildWorld(world, rng) {
     ];
     const groupsForGate = [];
     const gateLabels = [];
+    const igniters = [];
     for (const port of ports) {
       const h = world.hexes.get(port.key);
       const other = world.hexes.get(port.otherKey);
       const p = Hx.toWorld(h.q, h.r, HEX);
       const po = Hx.toWorld(other.q, other.r, HEX);
-      const { group: g } = makeDolmenGate({ rng, gradientMap, glyphTex, glowTex, animators });
+      // stormbound outward gates begin dark: the veil arrives with the shard
+      const { group: g, ignite } = makeDolmenGate({
+        rng, gradientMap, glyphTex, glowTex, animators,
+        startLit: gate.wardId === undefined,
+      });
+      igniters.push(ignite);
       g.position.set(p.x, Math.max(0, h.elev - 0.25), p.z);
       if (gate.kind === 'ring') {
         // same-ring doorways open along the orbit's tangent (signed toward
@@ -840,63 +851,419 @@ export function buildWorld(world, rng) {
     }
     labelsByGate.set(gate.id, gateLabels);
     gatePortGroups.set(gate.id, groupsForGate);
+    gateIgniters.set(gate.id, igniters);
   }
 
-  // ------------------------------------------------------------ locks
-  const lockFx = new Map();
-  for (const lock of world.locks) {
-    const pillars = new THREE.Group();
-    // rumor locks seal a whole hidden path — only pillar its first few hexes
-    for (const wk of lock.wallKeys.slice(0, 4)) {
-      const wh = world.hexes.get(wk);
-      const p = Hx.toWorld(wh.q, wh.r, HEX);
-      const cone = new THREE.Mesh(
-        new THREE.ConeGeometry(1.6, 8, 7, 1, true),
-        new THREE.MeshBasicMaterial({
-          color: 0xa79ad4, transparent: true, opacity: 0.35,
-          blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false,
-        })
-      );
-      cone.position.set(p.x, 4, p.z);
-      cone.renderOrder = 2;
-      pillars.add(cone);
-      animators.push((t, dt) => {
-        cone.rotation.y += dt * 2.2;
-        cone.scale.x = cone.scale.z = 1 + Math.sin(t * 5 + p.x) * 0.15;
-      });
-    }
-    group.add(pillars);
-    regFx(world.hexes.get(lock.wallKeys[0]).areaId, pillars);
+  // ------------------------------------------------------------ effect bursts
+  const bursts = [];
+  function burstAt(pos, color, scale = 6) {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: glowTex, color, transparent: true, opacity: 0.9,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    }));
+    s.position.copy(pos);
+    s.scale.setScalar(0.5);
+    s.renderOrder = 6;
+    group.add(s);
+    bursts.push({ s, t: 0, scale });
+  }
 
-    const stones = new Map();
-    for (const kk of lock.keyKeys) {
-      const kh = world.hexes.get(kk);
-      const p = Hx.toWorld(kh.q, kh.r, HEX);
-      const stone = new THREE.Mesh(
-        new THREE.BoxGeometry(1.1, 3.2, 0.8),
-        new THREE.MeshToonMaterial({ color: 0x8a7ab8, gradientMap, emissive: 0x6a4fc2, emissiveIntensity: 0.4 })
-      );
-      stone.position.set(p.x, kh.elev + 1.6, p.z);
-      stone.rotation.y = rng.angle();
-      group.add(stone);
-      regFx(kh.areaId, stone);
-      const glyphMat = new THREE.SpriteMaterial({
-        map: makeGlyphTexture(lock.rune.ch, '#efe4ff'),
-        transparent: true, opacity: 0.95, depthWrite: false, toneMapped: false,
-      });
-      const glyph = new THREE.Sprite(glyphMat);
-      glyph.scale.setScalar(2.4);
-      glyph.renderOrder = 2;
-      glyph.position.set(p.x, kh.elev + 4.6, p.z);
-      group.add(glyph);
-      regFx(kh.areaId, glyph);
-      const bob = rng.angle();
-      animators.push((t) => {
-        glyph.position.y = kh.elev + 4.6 + Math.sin(t * 1.6 + bob) * 0.35;
-      });
-      stones.set(kk, { stone, glyphMat });
+  // ------------------------------------------------------------ storm wards
+  // A stormheart shard crackles on its perch beside each dark outward gate.
+  // Claiming one sends it streaking into the dolmen's lintel.
+  const shardFx = new Map(); // wardId -> { group }
+  const shardFlights = [];
+  for (const ward of world.wards) {
+    const h = world.hexes.get(ward.shardKey);
+    const p = Hx.toWorld(h.q, h.r, HEX);
+    const g = new THREE.Group();
+    const shard = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.62, 0),
+      new THREE.MeshBasicMaterial({ color: 0xcabcff })
+    );
+    shard.scale.set(0.8, 1.7, 0.8);
+    const ink = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.62, 0),
+      new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide })
+    );
+    ink.scale.set(0.95, 1.85, 0.95);
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: glowTex, color: 0x8a76e6, transparent: true, opacity: 0.55,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    }));
+    glow.scale.setScalar(5.5);
+    glow.renderOrder = 3;
+    g.add(shard, ink, glow);
+    g.position.set(p.x, h.elev + 1.8, p.z);
+    group.add(g);
+    regFx(h.areaId, g);
+    const ph = rng.angle();
+    animators.push((t, dt) => {
+      if (g.userData.claimed) return;
+      g.rotation.y += dt * 1.4;
+      g.position.y = h.elev + 1.8 + Math.sin(t * 1.9 + ph) * 0.3;
+      glow.material.opacity = 0.42 + 0.28 * Math.sin(t * 6.2 + ph) * Math.sin(t * 2.3 + ph);
+    });
+    shardFx.set(ward.id, { group: g });
+  }
+
+  function claimShard(wardId, onDone) {
+    const ward = world.wards[wardId];
+    const fx = shardFx.get(wardId);
+    if (!fx || fx.group.userData.claimed) { onDone?.(); return; }
+    fx.group.userData.claimed = true;
+    const gh = world.hexes.get(world.gates[ward.gateId].portA);
+    const gp = Hx.toWorld(gh.q, gh.r, HEX);
+    shardFlights.push({
+      obj: fx.group,
+      from: fx.group.position.clone(),
+      to: new THREE.Vector3(gp.x, Math.max(0, gh.elev - 0.25) + 6.1, gp.z),
+      t: 0, dur: 1.15, onDone,
+    });
+  }
+
+  function igniteGate(gateId) {
+    for (const fn of gateIgniters.get(gateId) ?? []) fn();
+    for (const g of gatePortGroups.get(gateId) ?? []) {
+      burstAt(g.position.clone().add(new THREE.Vector3(0, 4.5, 0)), 0xb89aff, 11);
     }
-    lockFx.set(lock.id, { pillars, stones });
+  }
+
+  // ------------------------------------------------------------ the stormfront
+  // The maelstrom sheet: everything beyond the frontier ring churns beneath
+  // it. Dispelling a ward rolls its inner edge back to the next boundary;
+  // the last ward dissolves it entirely.
+  const stormState = {
+    inner: STORM_BOUNDARIES[world.progress.frontier] ?? STORM.outer,
+    target: STORM_BOUNDARIES[world.progress.frontier] ?? STORM.outer,
+    fade: 1, fadeTarget: 1,
+  };
+  const stormMat = makeStormMaterial(runeTex, STORM);
+  stormMat.uniforms.uInner.value = stormState.inner;
+  const stormMesh = new THREE.Mesh(
+    new THREE.RingGeometry(120, STORM.outer, 240, 20).rotateX(-Math.PI / 2),
+    stormMat
+  );
+  stormMesh.position.y = STORM.sheetY;
+  stormMesh.renderOrder = 5;
+  group.add(stormMesh);
+
+  // vast wardens pace the storm beside each sealed outward gate — deliberately
+  // NOT fogged: silhouettes through the maelstrom are the invitation
+  const heraldFx = new Map(); // boundary -> group
+  for (const ward of world.wards) {
+    const gate = world.gates[ward.gateId];
+    const ph = world.hexes.get(gate.portB);
+    const pw = Hx.toWorld(ph.q, ph.r, HEX);
+    const ang = Math.atan2(pw.z, pw.x);
+    const R = STORM_BOUNDARIES[ward.boundary] + 55;
+    const herald = makeHerald({ rng, glowTex });
+    const ph0 = rng.angle();
+    group.add(herald);
+    heraldFx.set(ward.boundary, herald);
+    animators.push((t) => {
+      if (herald.userData.gone) return;
+      const a = ang + Math.sin(t * 0.05 + ph0) * 0.2;
+      herald.position.set(Math.cos(a) * R, 2 + Math.sin(t * 0.4 + ph0) * 1.5, Math.sin(a) * R);
+      herald.rotation.y = -a + Math.PI / 2; // it watches the calm within
+    });
+  }
+
+  function setStormFrontier(frontier) {
+    if (frontier >= STORM_BOUNDARIES.length) stormState.fadeTarget = 0;
+    else stormState.target = STORM_BOUNDARIES[frontier];
+    const herald = heraldFx.get(frontier - 1);
+    if (herald && !herald.userData.gone) {
+      herald.userData.gone = true;
+      fadeOuts.push({ obj: herald, t: 0 });
+    }
+  }
+
+  // ------------------------------------------------------------ hazards
+  // snare runes: dim trap-glyphs waiting on the tiles (one-shot)
+  let snareMesh = null, snareBase = null;
+  const snareIndexByKey = new Map();
+  {
+    const snareKeys = [];
+    for (const [k, h] of world.hexes) {
+      if (h.hazard?.kind === 'snare') snareKeys.push(k);
+    }
+    if (snareKeys.length) {
+      const geo = new THREE.PlaneGeometry(2.7, 2.7).rotateX(-Math.PI / 2);
+      const mat = new THREE.MeshBasicMaterial({
+        map: makeGlyphTexture('ᚦ', '#ffb0a0'), transparent: true, opacity: 0.75,
+        depthWrite: false, toneMapped: false,
+      });
+      snareMesh = new THREE.InstancedMesh(geo, mat, snareKeys.length);
+      snareMesh.renderOrder = 2;
+      const byArea = new Map();
+      snareKeys.forEach((k, i) => {
+        const h = world.hexes.get(k);
+        const p = Hx.toWorld(h.q, h.r, HEX);
+        DUMMY.position.set(p.x, h.elev + 0.07, p.z);
+        DUMMY.rotation.set(0, rng.angle(), 0);
+        DUMMY.scale.setScalar(0.8 + rng.float() * 0.4);
+        DUMMY.updateMatrix();
+        snareMesh.setMatrixAt(i, DUMMY.matrix);
+        // outer rings hide their snares dimmer
+        const dread = Math.min(1, world.areas[h.areaId].biome.dread ?? 0);
+        snareMesh.setColorAt(i, new THREE.Color(0xff9a8a).lerp(new THREE.Color(0x5c3040), dread * 0.75));
+        snareIndexByKey.set(k, i);
+        if (!byArea.has(h.areaId)) byArea.set(h.areaId, []);
+        byArea.get(h.areaId).push(i);
+      });
+      group.add(snareMesh);
+      snareBase = snareMesh.instanceMatrix.array.slice();
+      instanceGroups.push({ mesh: snareMesh, base: snareBase, byArea });
+      animators.push((t) => {
+        snareMesh.material.opacity = 0.6 + 0.18 * Math.sin(t * 2.7);
+      });
+    }
+  }
+
+  function triggerSnare(hexKey) {
+    const i = snareIndexByKey.get(hexKey);
+    if (i === undefined || !snareMesh) return;
+    const arr = snareMesh.instanceMatrix.array;
+    for (let e = 0; e < 12; e++) {
+      arr[i * 16 + e] = 0;
+      snareBase[i * 16 + e] = 0; // stay burnt out under any fog rescale
+    }
+    snareMesh.instanceMatrix.needsUpdate = true;
+    const h = world.hexes.get(hexKey);
+    const p = Hx.toWorld(h.q, h.r, HEX);
+    burstAt(new THREE.Vector3(p.x, h.elev + 1, p.z), 0xff9a8a, 8);
+  }
+
+  // void geysers: telegraphed eruptions in the waters
+  const geyserFx = new Map(); // hexKey -> hazard spec
+  for (const [k, h] of world.hexes) {
+    if (h.hazard?.kind !== 'geyser') continue;
+    const spec = h.hazard;
+    const p = Hx.toWorld(h.q, h.r, HEX);
+    const g = new THREE.Group();
+    const foam = new THREE.Mesh(
+      new THREE.CircleGeometry(1.9, 14).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({
+        color: 0x9fd8ff, transparent: true, opacity: 0.12,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      })
+    );
+    foam.position.y = 0.7;
+    foam.renderOrder = 2;
+    const plume = new THREE.Mesh(
+      new THREE.ConeGeometry(1.35, 7.5, 7, 1, true),
+      new THREE.MeshBasicMaterial({
+        color: 0xb4e2ff, transparent: true, opacity: 0,
+        blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+      })
+    );
+    plume.renderOrder = 2;
+    g.add(foam, plume);
+    g.position.set(p.x, 0, p.z);
+    group.add(g);
+    regFx(h.areaId, g);
+    animators.push((t) => {
+      const u = (t + spec.phase) % spec.period;
+      const warnFrom = spec.period - spec.warn;
+      if (u < spec.erupt) {
+        const eu = Math.sin((u / spec.erupt) * Math.PI);
+        plume.scale.set(0.6 + eu * 0.5, Math.max(0.001, eu), 0.6 + eu * 0.5);
+        plume.position.y = 3.75 * eu;
+        plume.material.opacity = 0.6 * eu;
+        foam.material.opacity = 0.55;
+        foam.scale.setScalar(1.15);
+      } else {
+        plume.material.opacity = 0;
+        if (u > warnFrom) {
+          const wu = (u - warnFrom) / spec.warn;
+          foam.material.opacity = 0.15 + 0.45 * wu * (0.6 + 0.4 * Math.sin(t * 22));
+          foam.scale.setScalar(0.8 + wu * 0.35);
+        } else {
+          foam.material.opacity = 0.1 + 0.05 * Math.sin(t * 2 + spec.phase);
+          foam.scale.setScalar(0.8);
+        }
+      }
+    });
+    geyserFx.set(k, spec);
+  }
+
+  function geyserErupting(hexKey, t) {
+    const s = geyserFx.get(hexKey);
+    if (!s) return false;
+    return (t + s.phase) % s.period < s.erupt;
+  }
+
+  // maw blooms: snapping shore-flora with a visible rhythm
+  const mawFx = new Map(); // hexKey -> hazard spec
+  for (const [k, h] of world.hexes) {
+    if (h.hazard?.kind !== 'maw') continue;
+    const spec = h.hazard;
+    const area = world.areas[h.areaId];
+    const p = Hx.toWorld(h.q, h.r, HEX);
+    const g = new THREE.Group();
+    const jawMat = new THREE.MeshToonMaterial({
+      color: tone(jitterColor(area.biome.island.side, rng, 0.08), 0.9, 1.15), gradientMap,
+    });
+    const toothMat = new THREE.MeshToonMaterial({ color: 0xf2ead2, gradientMap });
+    const mkJaw = (up) => {
+      const jaw = new THREE.Group();
+      const lip = new THREE.Mesh(new THREE.CylinderGeometry(1.25, 1.45, 0.5, 7), jawMat);
+      jaw.add(lip);
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2 + 0.4;
+        const tooth = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.8, 4), toothMat);
+        tooth.position.set(Math.cos(a) * 0.95, up ? 0.5 : -0.5, Math.sin(a) * 0.95);
+        if (!up) tooth.rotation.x = Math.PI;
+        jaw.add(tooth);
+      }
+      return jaw;
+    };
+    const lower = mkJaw(true);
+    lower.position.y = 0.3;
+    const hinge = new THREE.Group();
+    const upper = mkJaw(false);
+    upper.position.set(0, 0.55, 1.0);
+    hinge.add(upper);
+    hinge.position.set(0, 0.55, -1.0);
+    g.add(lower, hinge);
+    g.position.set(p.x, h.elev, p.z);
+    g.rotation.y = rng.angle();
+    group.add(g);
+    regFx(h.areaId, g);
+    animators.push((t) => {
+      const u = (t + spec.phase) % spec.period;
+      const snapFrom = spec.period - spec.snap;
+      let open = 0.95;
+      if (u > snapFrom) {
+        const su = (u - snapFrom) / spec.snap;
+        open = 0.95 * Math.pow(Math.abs(su * 2 - 1), 1.4);
+      }
+      hinge.rotation.x = -open;
+    });
+    mawFx.set(k, spec);
+  }
+
+  function mawSnapping(hexKey, t) {
+    const s = mawFx.get(hexKey);
+    if (!s) return false;
+    const u = (t + s.phase) % s.period;
+    const snapFrom = s.period - s.snap;
+    return u > snapFrom + s.snap * 0.2 && u < snapFrom + s.snap * 0.8;
+  }
+
+  // ------------------------------------------------------------ springs
+  for (const [k, h] of world.hexes) {
+    if (!h.spring) continue;
+    const p = Hx.toWorld(h.q, h.r, HEX);
+    const g = new THREE.Group();
+    const pool = new THREE.Mesh(
+      new THREE.CircleGeometry(1.9, 14).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({
+        color: 0x9adbc0, transparent: true, opacity: 0.5,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      })
+    );
+    pool.position.y = h.elev + 0.08;
+    pool.renderOrder = 2;
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: glowTex, color: 0x9adbc0, transparent: true, opacity: 0.4,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    }));
+    glow.position.y = h.elev + 1.4;
+    glow.scale.setScalar(5);
+    glow.renderOrder = 3;
+    g.add(pool, glow);
+    g.position.set(p.x, 0, p.z);
+    group.add(g);
+    regFx(h.areaId, g);
+    const ph = rng.angle();
+    animators.push((t) => {
+      pool.material.opacity = 0.36 + 0.18 * Math.sin(t * 1.3 + ph);
+      glow.material.opacity = 0.3 + 0.14 * Math.sin(t * 2.1 + ph);
+    });
+  }
+
+  // ------------------------------------------------------------ astral shrines
+  // The stone circle in the sea, the light-beam to the sky, the platform's
+  // arrival disc and its silent altar.
+  const shrineFx = new Map();
+  for (const s of world.shrines) {
+    const sh = world.hexes.get(s.stoneKey);
+    const sp = Hx.toWorld(sh.q, sh.r, HEX);
+    const stone = makeShrineStone({ rng, gradientMap, glowTex, animators });
+    stone.position.set(sp.x, sh.elev, sp.z);
+    group.add(stone);
+    regFx(s.areaId, stone);
+
+    const ph = world.hexes.get(s.padKey);
+    const pp = Hx.toWorld(ph.q, ph.r, HEX);
+    const padTop = ph.baseY + ph.elev;
+
+    // arrival disc on the platform
+    const pad = new THREE.Mesh(
+      new THREE.CircleGeometry(1.6, 24).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({
+        color: 0xb9a6ff, transparent: true, opacity: 0.35,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      })
+    );
+    pad.position.set(pp.x, padTop + 0.1, pp.z);
+    pad.renderOrder = 2;
+    group.add(pad);
+    regFx(s.areaId, pad);
+
+    // the thin beam that betrays the platform overhead
+    const a2 = new THREE.Vector3(sp.x, sh.elev + 1, sp.z);
+    const b2 = new THREE.Vector3(pp.x, ph.baseY - 1.5, pp.z);
+    const len = a2.distanceTo(b2);
+    const beam = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.6, 1.3, len, 8, 1, true),
+      new THREE.MeshBasicMaterial({
+        color: 0xb9a6ff, transparent: true, opacity: 0.09,
+        blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+      })
+    );
+    beam.position.copy(a2).add(b2).multiplyScalar(0.5);
+    beam.quaternion.setFromUnitVectors(
+      new THREE.Vector3(0, 1, 0),
+      b2.clone().sub(a2).normalize()
+    );
+    beam.renderOrder = 2;
+    group.add(beam);
+    regFx(s.areaId, beam);
+
+    // soft glow under the platform's belly
+    const under = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: glowTex, color: 0x8a76e6, transparent: true, opacity: 0.22,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    }));
+    under.position.set(pp.x, ph.baseY - 2.5, pp.z);
+    under.scale.setScalar(24);
+    under.renderOrder = 3;
+    group.add(under);
+    regFx(s.areaId, under);
+
+    const ah = world.hexes.get(s.altarKey);
+    const ap = Hx.toWorld(ah.q, ah.r, HEX);
+    const altar = makeAltar({ rng, gradientMap, glowTex, animators });
+    altar.group.position.set(ap.x, ah.baseY + ah.elev, ap.z);
+    group.add(altar.group);
+    regFx(s.areaId, altar.group);
+
+    const bph = rng.angle();
+    animators.push((t) => {
+      beam.material.opacity = 0.06 + 0.05 * Math.sin(t * 1.1 + bph);
+      pad.material.opacity = 0.26 + 0.16 * Math.sin(t * 1.9 + bph);
+    });
+    shrineFx.set(s.id, { altar });
+  }
+
+  function claimAltar(shrineId) {
+    const fx = shrineFx.get(shrineId);
+    if (!fx) return;
+    fx.altar.claim();
+    burstAt(fx.altar.group.position.clone().add(new THREE.Vector3(0, 3.6, 0)), 0xff9ab8, 9);
   }
 
   // ------------------------------------------------------------ leviathans
@@ -1340,27 +1707,7 @@ export function buildWorld(world, rng) {
   }
 
   // ------------------------------------------------------------ runtime API
-  function updateFlags(hexKey) {
-    const i = waterIndexByKey.get(hexKey);
-    if (i === undefined) return;
-    const h = world.hexes.get(hexKey);
-    flowAttr.array[i * 4 + 3] = (h.faint ? 1 : 0) + (h.levi ? 2 : 0) + (h.blocked ? 4 : 0);
-    flowAttr.needsUpdate = true;
-  }
-
   const fadeOuts = [];
-  function releaseLock(lockId) {
-    const fx = lockFx.get(lockId);
-    if (fx) fadeOuts.push({ obj: fx.pillars, t: 0 });
-  }
-  function dimKeyStone(lockId, hexKey) {
-    const fx = lockFx.get(lockId);
-    const stoneFx = fx?.stones.get(hexKey);
-    if (stoneFx) {
-      stoneFx.stone.material.emissiveIntensity = 0.1;
-      stoneFx.glyphMat.opacity = 0.25;
-    }
-  }
 
   // ---- fog-of-war reveal
   // Instances grow in from nothing with a staggered elastic pop; objects
@@ -1421,6 +1768,46 @@ export function buildWorld(world, rng) {
     waterMat.uniforms.uBreath.value = breath;
     waterMatTop.uniforms.uTime.value = t;
     waterMatTop.uniforms.uBreath.value = breath;
+
+    // the stormfront churns, retreats, and finally dissolves
+    stormState.inner += (stormState.target - stormState.inner) * Math.min(1, dt * 0.55);
+    stormState.fade += (stormState.fadeTarget - stormState.fade) * Math.min(1, dt * 0.5);
+    stormMat.uniforms.uTime.value = t;
+    stormMat.uniforms.uInner.value = stormState.inner;
+    stormMat.uniforms.uFade.value = stormState.fade;
+    if (stormState.fade < 0.015) stormMesh.visible = false;
+
+    // claimed shards streak home to their lintels
+    for (let i = shardFlights.length - 1; i >= 0; i--) {
+      const f = shardFlights[i];
+      f.t += dt / f.dur;
+      if (f.t >= 1) {
+        f.obj.parent?.remove(f.obj);
+        burstAt(f.to, 0xcabcff, 9);
+        shardFlights.splice(i, 1);
+        f.onDone?.();
+      } else {
+        const u = f.t * f.t * (3 - 2 * f.t);
+        f.obj.position.lerpVectors(f.from, f.to, u);
+        f.obj.position.y += Math.sin(f.t * Math.PI) * 4;
+        f.obj.rotation.y += dt * 9;
+        f.obj.scale.setScalar(1 - f.t * 0.4);
+      }
+    }
+
+    for (let i = bursts.length - 1; i >= 0; i--) {
+      const b = bursts[i];
+      b.t += dt;
+      const u = b.t / 0.55;
+      if (u >= 1) {
+        b.s.parent?.remove(b.s);
+        bursts.splice(i, 1);
+      } else {
+        b.s.scale.setScalar(0.5 + u * b.scale);
+        b.s.material.opacity = 0.9 * (1 - u);
+      }
+    }
+
     for (let i = activeReveals.length - 1; i >= 0; i--) {
       const r = activeReveals[i];
       r.t += dt;
@@ -1440,7 +1827,10 @@ export function buildWorld(world, rng) {
     for (const fn of animators) fn(t, dt);
     for (const fx of secretFx) {
       const surge = THREE.MathUtils.smoothstep(breath, 0.86, 1.0);
-      fx.pillar.material.opacity = surge * 0.35;
+      // the storm smothers the alignment surges of secrets it still holds
+      const r = Math.hypot(fx.pillar.position.x, fx.pillar.position.z);
+      const held = stormState.fadeTarget > 0 && r > stormState.inner;
+      fx.pillar.material.opacity = held ? 0 : surge * 0.35;
     }
     for (let i = fadeOuts.length - 1; i >= 0; i--) {
       const f = fadeOuts[i];
@@ -1480,7 +1870,8 @@ export function buildWorld(world, rng) {
     group, animate,
     waterMesh, isleMesh, waterKeys, isleKeys, portHitboxes,
     labelsByArea, labelsByGate, labelsByLandmark,
-    updateFlags, releaseLock, dimKeyStone,
+    igniteGate, claimShard, setStormFrontier,
+    triggerSnare, geyserErupting, mawSnapping, claimAltar,
     bounceIsle, boingGate, wobbleBody, revealArea,
   };
 }

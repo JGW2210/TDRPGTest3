@@ -328,20 +328,121 @@ Direct feature notes (no poll this round):
 
 ---
 
+# Round 8 — The Stormfront, Hearts & Astral Shrines
+
+The roguelike run takes shape, chosen by poll. Alongside the ballots, three
+direct notes were implemented: the **rune pedestals are gone** (stormwall
+key-stones and rumor obelisks removed — ring progression is gated by the
+stormfront instead); each ring boundary's outward gate begins **dark** — its
+energy veil is absent until the ward is met, and ignition plays a cutscene at
+the gate; and for this pass the ward's criterion is a **trigger item beside
+the gate** (the criterion is pluggable — boss tallies join it with the combat
+write).
+
+## Poll 17 — Stormfront form
+
+- ☑ **Maelstrom sheet** — a vast flat storm-sea filling the void from just
+  past the frontier ring out to the world's edge: churning indigo-violet
+  bands, debris-dark curds, constant lightning flicker, a glowing leading
+  wall at its inner edge. Everything beyond hides beneath it (fog of war
+  included, and the secrets' alignment surges are smothered while held). On
+  dispel it rolls back to the next boundary in a retreating wave.
+- ☐ Curtain wall · ☐ Storm cloud belt · ☐ Sheet + curtain.
+
+**Implemented:** `makeStormMaterial` (materials.js) on a big ring mesh;
+`STORM_BOUNDARIES` in config.js hold the four calm radii (145/400/668/938,
+chosen to clear each ring's region rims + gate islets); `built.setStormFrontier`
+eases the retreat; the last ward dissolves the sheet entirely, exposing the
+secrets' surge pillars for the first time.
+
+## Poll 18 — The trigger item
+
+- ☑ **Stormheart shard** — a crackling crystal on a rocky perch two hexes
+  from the outward gate's departure islet. Stepping onto it seizes it: the
+  shard streaks into the dolmen's lintel, the veil pours down between the
+  pillars, and the stormfront rolls back — watched by an ignition cutscene
+  with two lines per boundary (`WARD_LINES`).
+- ☐ Warden's rune-key · ☐ Caged star · ☐ Storm-bell.
+
+## Poll 19 — Hazards (all four selected)
+
+All scale in density and intensity with the biome's dread; a live one costs
+half a heart; the home region keeps a gentle 4-hex cradle around the start.
+
+- ☑ **Snare runes** — dim trap-glyphs on isle hexes; snap once, then burn out.
+- ☑ **Void geysers** — water hexes erupting on a telegraphed cycle (bubbling
+  foam builds first); standing or landing mid-eruption hurts.
+- ☑ **Storm strikes** — from ring 2 outward, wandering lightning stalks the
+  wisp's region: a hex crackles for a beat, then the bolt lands.
+- ☑ **Maw blooms** — biome-tinted snapping shore-flora on a visible rhythm.
+
+## Poll 20 — Death rule
+
+- ☐ Same-seed rebirth · ☑ **New-seed rogue death** — losing the last
+  half-heart guts the run: the wisp gutters out, the screen falls dark, and a
+  brand-new cosmos grows from a fresh random seed.
+- ☐ Anchor respawn.
+
+## Poll 21 — Astral shrine placement
+
+- ☑ **Hover above the region** — the platform hangs ~60-80 units up off the
+  region's rim (the global grid is single-layer, so its cells live on free
+  sky columns just past the rim, carrying altitude in `baseY`), betrayed by a
+  thin beam of light dropping to its 7-hex teleportation stone islet in the
+  sea. The stone hurls the wisp skyward in a vertical blast; the arrival pad
+  dives you back down.
+- ☐ Adrift past the rim · ☐ Rises with the rings.
+
+## Poll 22 — Shrine trial
+
+- ☑ **Silent altar for now** — platform, altar, reward; trials get designed
+  properly alongside the combat/roguelike write. (Hazard gauntlet was the
+  recommended alternative and remains the natural first trial.)
+- ☐ Hazard gauntlet · ☐ Timed mote chase · ☐ Echo-order puzzle.
+
+## Poll 23 — Hearts UI
+
+- ☑ **Papercraft heart row** — three cut-paper hearts top-left, each split
+  into two torn halves; damage tears a half away with a shake, a red vignette
+  pulse, and a brief invulnerability blink on the wisp.
+- ☐ Halo pips on the wisp · ☐ Row + halo echo.
+
+## Poll 24 — Expansions (all four selected)
+
+- ☑ **Heart containers** — each shrine altar bears one: max hearts +1
+  (capped at six), immediately filled.
+- ☑ **Wandering heart-sprites** — rare drifting hearts over discovered seas;
+  sail onto one to mend half a heart.
+- ☑ **Storm heralds** — vast horned silhouettes pacing the maelstrom beside
+  each sealed outward gate, violet-eyed, dimly visible through the storm.
+  Foreshadowing for the boss pass; each dissolves when its gate ignites.
+- ☑ **Waystation springs** — each asteroid waystation keeps a glowing spring:
+  stepping on it heals one full heart, once per visit.
+
+---
+
 ## Boss / combat hooks
 
-Entering a gate port fires `handleGate` in `main.js` before the riverflight
-begins. A combat scene should hook exactly there (the Warden's Toll poll
-option — fight once to bind the gate, then free fast travel — is the natural
-extension): each gate has a stable id, rune, its two port hex keys, and the
-two area ids it bridges — enough to pick a warden, a difficulty, and an arena
-palette.
+Entering a gate port fires `handleGate` in `main.js` before the blast begins —
+a combat scene should hook exactly there (each gate has a stable id, rune,
+its two port hex keys, and the two area ids it bridges). The storm wards are
+the progression hook: each ward carries a `criterion` field ('shard' for this
+pass) and dispels through `handleShardClaim` — a boss-tally criterion slots
+into the same ward, replacing or joining the shard, with the same ignition
+cutscene and storm retreat. The storm heralds pacing each boundary are the
+wardens-to-be. The silent shrine altars are where combat trials land.
 
 ## Roadmap (not in v1)
 
+- Warden combat at gates; ward criteria driven by boss tallies; shrine
+  trials (hazard gauntlet first) guarding the heart containers.
+- Run structure beyond death: run seeds, meta unlocks, persistence of
+  `area.discovered` + ward state so a run survives a reload.
 - Tide-gated hexes that exist only at high/low tide.
 - Flow vectors influencing traversal cost/speed; flavor-specific rules.
-- Full planetary revolution (rigid area groups + river re-anchoring).
+- Full planetary revolution (rigid area groups + gate re-anchoring).
 - Leviathan route rearrangement; leviathans detaching to swim to secrets.
 - Fog-of-war cartography (areas sketch in as discovered).
-- Combat encounters at warden gates; run structure (permadeath loop, unlocks).
+- New discovery mechanics for the Hollow Moon (its rumor-rune obelisks
+  retired with the pedestal purge — it currently sits open once the last
+  stormfront falls).

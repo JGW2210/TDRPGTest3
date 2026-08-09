@@ -392,6 +392,42 @@ export const INTRO_LINES = {
   ],
 };
 
+// ---------------------------------------------------------------------------
+// The stormfront: a maelstrom sheet sealing everything beyond the frontier
+// ring. One boundary per ring crossing; each dispels when its ward's
+// criterion is met (this pass: seize the stormheart shard beside the gate).
+export const STORM = {
+  color: 0x241f4d,     // deep storm indigo
+  bright: 0x8a76e6,    // violet churn highlights
+  flash: 0xdfe6ff,     // lightning
+  outer: 2400,         // the sheet's far edge
+  sheetY: 9,           // hangs above the seas, below the labels
+};
+
+// Inner radius of the storm sheet for each frontier ring (0 = only the sun
+// region is calm). Chosen to clear each ring's region rims + gate islets.
+export const STORM_BOUNDARIES = [145, 400, 668, 938];
+
+// Two lines for the gate-ignition cutscene, per ring boundary.
+export const WARD_LINES = [
+  [
+    'The shard leaps from your grasp and buries itself in the lintel.',
+    'Aurora floods the doorway. Beyond, the first ring rides out the last of its storm.',
+  ],
+  [
+    'A second stormheart finds its gate, and the maelstrom unclenches its fist.',
+    'The second ring turns slowly in the calm you have made.',
+  ],
+  [
+    'The gate takes the shard like a debt long owed.',
+    'Past the calming line, the third ring glitters — and glitters back.',
+  ],
+  [
+    'The last stormfront breaks upon its own heart.',
+    'The outer dark lies open. Nothing else stands between you and the deep.',
+  ],
+];
+
 export const GATE_RUNES = [
   { ch: 'ᚠ', name: 'Fehu' }, { ch: 'ᚢ', name: 'Uruz' }, { ch: 'ᚦ', name: 'Thurisaz' },
   { ch: 'ᚨ', name: 'Ansuz' }, { ch: 'ᚱ', name: 'Raidho' }, { ch: 'ᚲ', name: 'Kenaz' },

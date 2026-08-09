@@ -4,6 +4,10 @@
 // (waters make up roughly 40-60% of the walkable tiles). Nothing connects
 // regions on foot — travel happens through gates: paired 7-hex rocky node
 // islets on facing rims that blast the player across the void.
+// Progression is stormbound: each ring boundary's single outward gate starts
+// dark under a storm ward, ignited by the stormheart shard perched beside it.
+// Regions also carry ring-scaled hazards, astral shrine platforms hung high
+// off their rims, and healing springs on the waystations.
 
 import {
   HEX, RINGS, SECRET_RADIUS, BIOMES, SECRET_BIOMES, ASTEROID_BIOMES, GATE_RUNES,
@@ -23,7 +27,8 @@ export function generateWorld(seedStr) {
   const hexes = new Map();
   const gates = [];
   const edges = [];
-  const locks = [];
+  const wards = [];
+  const shrines = [];
   const leviathans = [];
 
   // ---------------------------------------------------------------- layout
@@ -128,7 +133,7 @@ export function generateWorld(seedStr) {
         kind: 'isle', areaId: area.id, elev: 0.35 + rng.float() * 0.9,
         islandId: null, rock: true,
         flow: [0, 0], faint: false, blocked: false, levi: false,
-        gateId: null, lockKey: null,
+        gateId: null,
       });
       if (rec.areaId === area.id) area.hexKeys.push(Hx.key(q, r));
     }
@@ -249,13 +254,13 @@ export function generateWorld(seedStr) {
         rec = {
           kind: 'isle', areaId: area.id, elev, islandId: isl, rock: false,
           flow: [0, 0], faint: false, blocked: false, levi: false,
-          gateId: null, lockKey: null,
+          gateId: null,
         };
       } else {
         rec = {
           kind: 'water', areaId: area.id, elev: 0, islandId: null, rock: false,
           flow: [-vz / vl, vx / vl], faint: false, blocked: false, levi: false,
-          gateId: null, lockKey: null,
+          gateId: null,
         };
       }
       if (setHex(q, r, rec) === rec) area.hexKeys.push(Hx.key(q, r));
@@ -307,7 +312,9 @@ export function generateWorld(seedStr) {
       const cc = Hx.toHex(cx, cz, HEX);
       const ck = Hx.key(cc.q, cc.r);
       const existing = hexes.get(ck);
-      if (existing && existing.gateId !== null) continue; // another gate lives here
+      // another gate, a ward perch, or a shrine already lives here
+      if (existing && (existing.gateId !== null || existing.wardId !== undefined
+        || existing.shrineId !== undefined || existing.baseY)) continue;
       // center hex: rocky perch for the warden ring
       if (existing) {
         existing.kind = 'isle';
@@ -319,7 +326,7 @@ export function generateWorld(seedStr) {
           kind: 'isle', areaId: area.id, elev: 0.55 + rng.float() * 0.35,
           islandId: null, rock: true,
           flow: [0, 0], faint: false, blocked: false, levi: false,
-          gateId: null, lockKey: null,
+          gateId: null,
         });
         area.hexKeys.push(Hx.key(cc.q, cc.r));
         void rec;
@@ -333,7 +340,7 @@ export function generateWorld(seedStr) {
             kind: 'isle', areaId: area.id, elev: 0.4 + rng.float() * 0.4,
             islandId: null, rock: true,
             flow: [0, 0], faint: false, blocked: false, levi: false,
-            gateId: null, lockKey: null,
+            gateId: null,
           });
           area.hexKeys.push(nk);
         }
@@ -350,11 +357,11 @@ export function generateWorld(seedStr) {
             kind: 'isle', areaId: area.id, elev: 0.3 + rng.float() * 0.3,
             islandId: null, rock: true,
             flow: [0, 0], faint: false, blocked: false, levi: false,
-            gateId: null, lockKey: null,
+            gateId: null,
           } : {
             kind: 'water', areaId: area.id, elev: 0, islandId: null, rock: false,
             flow: [vx / vl, vz / vl], faint: false, blocked: false, levi: false,
-            gateId: null, lockKey: null,
+            gateId: null,
           });
           area.hexKeys.push(sk);
         }
@@ -379,10 +386,10 @@ export function generateWorld(seedStr) {
   const edgeSet = new Set();
   function addGate(a, b, kind = 'ring') {
     const ek = Math.min(a.id, b.id) + '-' + Math.max(a.id, b.id);
-    if (edgeSet.has(ek)) return;
+    if (edgeSet.has(ek)) return null;
     const ka = placeNode(a, kind === 'ring' ? orbitToward(a, b) : b.pos);
     const kb = placeNode(b, kind === 'ring' ? orbitToward(b, a) : a.pos);
-    if (!ka || !kb) return;
+    if (!ka || !kb) return null;
     edgeSet.add(ek);
     const rune = shuffledRunes[gates.length % shuffledRunes.length];
     const gate = {
@@ -395,6 +402,7 @@ export function generateWorld(seedStr) {
     hexes.get(kb).gateId = gate.id;
     gates.push(gate);
     edges.push({ a: a.id, b: b.id });
+    return gate;
   }
 
   const nearestArea = (pool, x, z) => {
@@ -421,73 +429,144 @@ export function generateWorld(seedStr) {
         addGate(g[i], nxt, 'ring');
       }
     }
-    // exactly ONE passage outward per ring boundary, at a random crossing
+    // exactly ONE passage outward per ring boundary, at a random crossing —
+    // it starts dark beneath a storm ward (boundary index = ri - 1)
     const inner = rng.pick(ringGroups[ri - 1]);
     const outer = nearestArea(ringGroups[ri], inner.pos.x, inner.pos.z);
-    addGate(inner, outer, 'radial');
+    const radial = addGate(inner, outer, 'radial');
+    if (radial) radial.boundary = ri - 1;
   }
   for (const s of secretsList) {
     const outer = ringGroups[ringGroups.length - 1];
-    addGate(nearestArea(outer, s.pos.x, s.pos.z), s, 'radial');
+    const sg = addGate(nearestArea(outer, s.pos.x, s.pos.z), s, 'radial');
+    if (sg) sg.secretGate = true;
   }
 
-  // ---------------------------------------------------------------- locks
-  let runeCursor = gates.length;
-
-  function isleKeysOf(area) {
-    return area.hexKeys.filter((k) => {
-      const h = hexes.get(k);
-      return h && h.kind === 'isle' && !h.rock && h.lockKey === null && h.gateId === null;
-    });
-  }
-
-  // Stormwalls: three ordinary gates are sealed on their departure node;
-  // the becalming rune-stone stands on an island of the same region.
-  const lockableGates = rng.shuffle(
-    gates.filter((g) =>
-      !areas[g.a].secret && !areas[g.b].secret &&
-      !areas[g.a].asteroid && !areas[g.b].asteroid && areas[g.a].ring > 0)
-  ).slice(0, 3);
-  for (const gate of lockableGates) {
-    const sideA = areas[gate.a];
-    const isles = isleKeysOf(sideA);
-    if (!isles.length) continue;
-    const rune = shuffledRunes[runeCursor % shuffledRunes.length];
-    runeCursor++;
-    const lock = {
-      id: locks.length, kind: 'stormwall', rune,
-      wallKeys: [gate.portA], keyKeys: [rng.pick(isles)],
-      struck: new Set(), unlocked: false,
+  // ---------------------------------------------------------------- storm wards
+  // Each ring boundary's radial gate starts DARK — no veil, no blast — and a
+  // stormheart shard waits on a rocky perch beside its departure islet.
+  // Claiming the shard ignites the gate and rolls the stormfront back one
+  // ring. (The ward's criterion is pluggable: boss tallies join here later.)
+  for (const gate of gates) {
+    if (gate.boundary === undefined) continue;
+    const c = Hx.parseKey(gate.portA);
+    // candidate perches: the ring of cells two out from the islet's heart
+    const ring2 = [];
+    {
+      let cq = c.q + 2, cr = c.r;
+      for (let side = 0; side < 6; side++) {
+        const d = Hx.DIRS[(side + 2) % 6];
+        for (let step = 0; step < 2; step++) {
+          ring2.push([cq, cr]);
+          cq += d[0]; cr += d[1];
+        }
+      }
+    }
+    const free = ring2.filter(([q, r]) => !hexes.has(Hx.key(q, r)));
+    if (!free.length) continue;
+    const [pq, pr] = free[rng.int(free.length)];
+    const ward = {
+      id: wards.length, boundary: gate.boundary, gateId: gate.id,
+      shardKey: Hx.key(pq, pr), dispelled: false, criterion: 'shard',
     };
-    locks.push(lock);
-    hexes.get(gate.portA).blocked = true;
-    hexes.get(lock.keyKeys[0]).lockKey = lock.id;
+    const area = areas[hexes.get(gate.portA).areaId];
+    setHex(pq, pr, {
+      kind: 'isle', areaId: area.id, elev: 0.6 + rng.float() * 0.3,
+      islandId: null, rock: true, wardId: ward.id,
+      flow: [0, 0], faint: false, blocked: false, levi: false,
+      gateId: null,
+    });
+    area.hexKeys.push(ward.shardKey);
+    gate.wardId = ward.id;
+    wards.push(ward);
+  }
+  wards.sort((a, b) => a.boundary - b.boundary);
+
+  // ---------------------------------------------------------------- astral shrines
+  // Floating challenge platforms hung high off a region's rim, reached only
+  // through a 7-hex teleportation stone islet embedded in its sea. The
+  // platform's cells live on free grid columns past the rim (the global grid
+  // is single-layer), rendered at altitude via baseY.
+  function placeShrine(area) {
+    const ch = Hx.toHex(area.pos.x, area.pos.z, HEX);
+    for (let tries = 0; tries < 14; tries++) {
+      const pa = rng.angle();
+      const rad = (area.hexRadius + 6 + rng.int(3)) * HEX * Hx.SQRT3;
+      const anchor = Hx.toHex(
+        area.pos.x + Math.cos(pa) * rad,
+        area.pos.z + Math.sin(pa) * rad, HEX
+      );
+      const tailDir = Hx.DIRS[rng.int(6)];
+      const cells = [[anchor.q, anchor.r]];
+      for (const d of Hx.DIRS) cells.push([anchor.q + d[0], anchor.r + d[1]]);
+      cells.push([anchor.q + tailDir[0] * 2, anchor.r + tailDir[1] * 2]);
+      cells.push([anchor.q + tailDir[0] * 3, anchor.r + tailDir[1] * 3]);
+      // the platform and its whole neighborhood must be free sky
+      let ok = true;
+      for (const [q, r] of cells) {
+        if (hexes.has(Hx.key(q, r))) { ok = false; break; }
+        for (const d of Hx.DIRS) {
+          const nk = Hx.key(q + d[0], r + d[1]);
+          if (hexes.has(nk) && !cells.some(([q2, r2]) => Hx.key(q2, r2) === nk)) { ok = false; break; }
+        }
+        if (!ok) break;
+      }
+      if (!ok) continue;
+
+      const baseY = 58 + rng.float() * 22;
+      const id = shrines.length;
+      for (const [q, r] of cells) {
+        setHex(q, r, {
+          kind: 'isle', areaId: area.id, elev: 0.45 + rng.float() * 0.35,
+          islandId: null, rock: true, astral: true, baseY,
+          flow: [0, 0], faint: false, blocked: false, levi: false,
+          gateId: null,
+        });
+        area.hexKeys.push(Hx.key(q, r));
+      }
+      // the stone islet in the sea, off a quiet stretch of rim
+      const toward = {
+        x: area.pos.x + Math.cos(pa) * 500,
+        z: area.pos.z + Math.sin(pa) * 500,
+      };
+      const stoneKey = placeNode(area, toward);
+      if (!stoneKey) {
+        for (const [q, r] of cells) {
+          hexes.delete(Hx.key(q, r));
+          area.hexKeys.pop();
+        }
+        return null;
+      }
+      const padKey = Hx.key(anchor.q, anchor.r);
+      const altarKey = Hx.key(anchor.q + tailDir[0] * 3, anchor.r + tailDir[1] * 3);
+      const stoneHex = hexes.get(stoneKey);
+      stoneHex.shrineId = id; stoneHex.shrineRole = 'stone';
+      const padHex = hexes.get(padKey);
+      padHex.shrineId = id; padHex.shrineRole = 'pad';
+      const altarHex = hexes.get(altarKey);
+      altarHex.shrineId = id; altarHex.shrineRole = 'altar';
+      const shrine = { id, areaId: area.id, stoneKey, padKey, altarKey, claimed: false, visited: false };
+      shrines.push(shrine);
+      return shrine;
+    }
+    return null;
+  }
+  for (let ri = 1; ri < ringGroups.length; ri++) {
+    const picks = rng.shuffle(ringGroups[ri].filter((a) => !a.asteroid && !a.secret));
+    for (const area of picks.slice(0, Math.max(1, Math.ceil(picks.length / 2)))) {
+      placeShrine(area);
+    }
   }
 
-  // Rumor lock: the Hollow Moon's gate stays sealed until three rumor-rune
-  // obelisks scattered across the main system are struck.
-  const rumorSecret = secretsList.find((s2) => s2.biome.secretHint === 'rumor');
-  const rumorGate = rumorSecret && gates.find((g) => g.a === rumorSecret.id || g.b === rumorSecret.id);
-  if (rumorGate) {
-    const outerPort = rumorGate.a === rumorSecret.id ? rumorGate.portB : rumorGate.portA;
-    const keyAreas = rng.shuffle(areas.filter((a) => !a.secret && !a.asteroid && a.ring >= 2)).slice(0, 3);
-    const keyKeys = [];
-    for (const ka of keyAreas) {
-      const isles = isleKeysOf(ka);
-      if (isles.length) keyKeys.push(rng.pick(isles));
-    }
-    if (keyKeys.length === 3) {
-      const rune = shuffledRunes[runeCursor % shuffledRunes.length];
-      runeCursor++;
-      const lock = {
-        id: locks.length, kind: 'rumor', rune,
-        wallKeys: [outerPort], keyKeys, struck: new Set(), unlocked: false,
-        secretAreaId: rumorSecret.id,
-      };
-      locks.push(lock);
-      hexes.get(outerPort).blocked = true;
-      for (const kk of keyKeys) hexes.get(kk).lockKey = lock.id;
-    }
+  // ---------------------------------------------------------------- springs
+  // Each asteroid waystation keeps a small healing spring among its rubble.
+  for (const area of areas) {
+    if (!area.asteroid) continue;
+    const cand = area.hexKeys.filter((k) => {
+      const h = hexes.get(k);
+      return h.gateId === null && h.wardId === undefined;
+    });
+    if (cand.length) hexes.get(cand[rng.int(cand.length)]).spring = true;
   }
 
   // ---------------------------------------------------------------- leviathans
@@ -528,7 +607,51 @@ export function generateWorld(seedStr) {
   }
   if (!startKey) startKey = sun.hexKeys[0] ?? hexes.keys().next().value;
 
+  // ---------------------------------------------------------------- hazards
+  // Trapped hexes thicken and quicken with every ring outward: snare runes on
+  // the isles, void geysers in the waters, maw blooms along the shores.
+  // (Storm strikes are a runtime hazard, driven by dread in main.)
+  const startHex = hexes.get(startKey);
+  for (const area of areas) {
+    const d = THREE_CLAMP(area.biome.dread ?? 0, 0, 1);
+    const snareP = area.ring === 0 ? 0.012 : 0.03 + 0.05 * d;
+    const geyserP = area.ring === 0 ? 0 : 0.018 + 0.032 * d;
+    const mawP = area.ring === 0 ? 0 : 0.05 + 0.08 * d;
+    for (const k of area.hexKeys) {
+      if (k === startKey) continue;
+      const h = hexes.get(k);
+      if (h.gateId !== null || h.wardId !== undefined || h.shrineId !== undefined
+        || h.baseY || h.spring) continue;
+      if (area.ring === 0 && Hx.dist(h.q, h.r, startHex.q, startHex.r) < 4) continue;
+      if (h.kind === 'water') {
+        if (rng.chance(geyserP)) {
+          h.hazard = {
+            kind: 'geyser', period: 7.5 - 3.5 * d + rng.float() * 2,
+            phase: rng.float() * 20, erupt: 1.15, warn: 1.2,
+          };
+        }
+      } else if (!h.rock) {
+        let shore = false;
+        for (const d2 of Hx.DIRS) {
+          const nh = hexes.get(Hx.key(h.q + d2[0], h.r + d2[1]));
+          if (!nh || nh.kind === 'water') { shore = true; break; }
+        }
+        if (shore && rng.chance(mawP)) {
+          h.hazard = {
+            kind: 'maw', period: 4.6 - 2.0 * d + rng.float() * 1.4,
+            phase: rng.float() * 20, snap: 0.55,
+          };
+        } else if (rng.chance(snareP)) {
+          h.hazard = { kind: 'snare' };
+        }
+      }
+    }
+  }
+
   const title = `The ${rng.pick(WORLD_ADJ)} ${rng.pick(WORLD_NOUN)}`;
 
-  return { seed: seedStr, title, areas, hexes, gates, edges, locks, leviathans, startKey };
+  return {
+    seed: seedStr, title, areas, hexes, gates, edges, wards, shrines,
+    leviathans, startKey, progress: { frontier: 0 },
+  };
 }
