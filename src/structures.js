@@ -41,9 +41,12 @@ const compose = (x, y, z, rx = 0, ry = 0, rz = 0) =>
 
 // ---------------------------------------------------------------- dolmen gate
 
-export function makeDolmenGate({ rng, gradientMap, glyphTex, glowTex, animators }) {
+// startLit: a warded (stormbound) gate begins DARK — no veil, no under-glow,
+// rune plates barely embers — until ignite() pours the energy field in.
+export function makeDolmenGate({ rng, gradientMap, glyphTex, glowTex, animators, startLit = true }) {
   const g = new THREE.Group();
   const seed = (rng.float() * 1e6) | 0;
+  const lit = { cur: startLit ? 1 : 0, target: startLit ? 1 : 0 };
 
   const stoneMat = new THREE.MeshToonMaterial({
     color: new THREE.Color(0x8c8678).offsetHSL((rng.float() - 0.5) * 0.03, 0, (rng.float() - 0.5) * 0.05),
@@ -134,15 +137,15 @@ export function makeDolmenGate({ rng, gradientMap, glyphTex, glowTex, animators 
     }
   }
 
-  // the energy field hung between the pillars
-  const veilMat = makeVeilMaterial(0xb89aff);
+  // the energy field hung between the pillars (absent while the gate is dark)
+  const veilMat = makeVeilMaterial(0xb89aff, lit.cur);
   const veil = new THREE.Mesh(new THREE.PlaneGeometry(4.0, 4.8, 1, 10), veilMat);
   veil.position.set(0, 2.78, 0);
   veil.renderOrder = 2;
   g.add(veil);
 
   const under = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: glowTex, color: 0xb89aff, transparent: true, opacity: 0.22,
+    map: glowTex, color: 0xb89aff, transparent: true, opacity: 0.22 * lit.cur,
     blending: THREE.AdditiveBlending, depthWrite: false,
   }));
   under.position.set(0, 3, 0);
@@ -160,16 +163,174 @@ export function makeDolmenGate({ rng, gradientMap, glyphTex, glowTex, animators 
     orbiters.push(s);
   }
   const phase = rng.angle();
-  animators.push((t) => {
+  animators.push((t, dt) => {
+    lit.cur += (lit.target - lit.cur) * Math.min(1, dt * 1.4);
     veilMat.uniforms.uTime.value = t;
-    plateMat.opacity = 0.68 + 0.22 * Math.sin(t * 1.3 + phase);
+    veilMat.uniforms.uIgnite.value = lit.cur;
+    under.material.opacity = 0.22 * lit.cur;
+    plateMat.opacity = (0.68 + 0.22 * Math.sin(t * 1.3 + phase)) * (0.22 + 0.78 * lit.cur);
     orbiters.forEach((s, i) => {
       const a = t * 0.5 + phase + i * Math.PI;
       s.position.set(Math.cos(a) * 4.5, 4.1 + Math.sin(t * 1.1 + i * 2) * 0.5, Math.sin(a) * 4.5);
+      s.material.opacity = plateMat.opacity;
     });
   });
 
-  return { group: g };
+  return { group: g, ignite: () => { lit.target = 1; } };
+}
+
+// ---------------------------------------------------------------- shrine stone
+// The teleportation stone at the heart of an astral shrine's sea islet: a
+// circle of six leaning menhirs around a glowing rune disc that hurls the
+// traveler skyward to the floating platform.
+export function makeShrineStone({ rng, gradientMap, glowTex, animators }) {
+  const g = new THREE.Group();
+  const seed = (rng.float() * 1e6) | 0;
+  const stoneMat = new THREE.MeshToonMaterial({ color: 0x7d76a1, gradientMap });
+
+  const parts = [];
+  const inks = [];
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + rng.float() * 0.2;
+    const h = 1.7 + rng.float() * 1.1;
+    const m = roughen(new THREE.BoxGeometry(0.62, h, 0.42), seed + i, 0.16);
+    const mtx = compose(Math.cos(a) * 2.1, h / 2, Math.sin(a) * 2.1, 0, -a, (rng.float() - 0.5) * 0.22);
+    const o = m.clone();
+    o.scale(1.18, 1.06, 1.18);
+    m.applyMatrix4(mtx);
+    o.applyMatrix4(mtx);
+    parts.push(m);
+    inks.push(o);
+  }
+  g.add(new THREE.Mesh(mergeGeometries(parts), stoneMat));
+  g.add(new THREE.Mesh(
+    mergeGeometries(inks),
+    new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide })
+  ));
+
+  const disc = new THREE.Mesh(
+    new THREE.CircleGeometry(1.5, 24).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({
+      color: 0xb9a6ff, transparent: true, opacity: 0.4,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    })
+  );
+  disc.position.y = 0.14;
+  disc.renderOrder = 2;
+  g.add(disc);
+
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTex, color: 0xb9a6ff, transparent: true, opacity: 0.35,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  }));
+  glow.position.y = 1.6;
+  glow.scale.setScalar(6);
+  glow.renderOrder = 3;
+  g.add(glow);
+
+  const ph = rng.angle();
+  animators.push((t) => {
+    disc.material.opacity = 0.28 + 0.2 * Math.sin(t * 1.7 + ph);
+    glow.material.opacity = 0.24 + 0.16 * Math.sin(t * 1.1 + ph);
+  });
+  return g;
+}
+
+// ---------------------------------------------------------------- shrine altar
+// The silent altar on a floating platform. Bears a papercraft heart-vessel
+// until claimed; trials arrive with the combat pass.
+export function makeAltar({ rng, gradientMap, glowTex, animators }) {
+  const g = new THREE.Group();
+  const ped = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.8, 1.15, 1.9, 7),
+    new THREE.MeshToonMaterial({ color: 0x7d76a1, gradientMap })
+  );
+  ped.position.y = 0.95;
+  const bowl = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.25, 0.75, 0.8, 8, 1, true),
+    new THREE.MeshToonMaterial({ color: 0x8c86ad, gradientMap, side: THREE.DoubleSide })
+  );
+  bowl.position.y = 2.2;
+  g.add(ped, bowl);
+
+  // a cut-paper heart, slowly turning above the bowl
+  const shape = new THREE.Shape();
+  shape.moveTo(0, -0.85);
+  shape.bezierCurveTo(-1.15, 0.1, -0.95, 0.95, -0.45, 0.95);
+  shape.bezierCurveTo(-0.12, 0.95, 0, 0.7, 0, 0.5);
+  shape.bezierCurveTo(0, 0.7, 0.12, 0.95, 0.45, 0.95);
+  shape.bezierCurveTo(0.95, 0.95, 1.15, 0.1, 0, -0.85);
+  const heart = new THREE.Mesh(
+    new THREE.ExtrudeGeometry(shape, { depth: 0.22, bevelEnabled: false }),
+    new THREE.MeshBasicMaterial({ color: 0xff8fa8 })
+  );
+  heart.position.y = 3.6;
+  const heartInk = new THREE.Mesh(
+    new THREE.ExtrudeGeometry(shape, { depth: 0.3, bevelEnabled: false }),
+    new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide })
+  );
+  heartInk.scale.setScalar(1.12);
+  heartInk.position.set(0, 3.6, -0.04);
+  g.add(heart, heartInk);
+
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTex, color: 0xff9ab8, transparent: true, opacity: 0.5,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  }));
+  glow.position.y = 3.6;
+  glow.scale.setScalar(5.5);
+  glow.renderOrder = 3;
+  g.add(glow);
+
+  const state = { claimed: false, t: 0 };
+  const ph = rng.angle();
+  animators.push((t, dt) => {
+    if (!state.claimed) {
+      heart.rotation.y += dt * 0.8;
+      heartInk.rotation.y = heart.rotation.y;
+      const bob = Math.sin(t * 1.4 + ph) * 0.18;
+      heart.position.y = 3.6 + bob;
+      heartInk.position.y = 3.6 + bob;
+      glow.position.y = 3.6 + bob;
+      glow.material.opacity = 0.38 + 0.2 * Math.sin(t * 2.1 + ph);
+    } else if (state.t < 1) {
+      state.t = Math.min(1, state.t + dt * 1.4);
+      const s = 1 - state.t;
+      heart.scale.setScalar(Math.max(0.001, s));
+      heartInk.scale.setScalar(Math.max(0.001, s * 1.12));
+      glow.material.opacity = 0.5 * s;
+    }
+  });
+  return { group: g, claim: () => { state.claimed = true; } };
+}
+
+// ---------------------------------------------------------------- storm herald
+// A vast slow warden pacing the maelstrom beside a sealed outward gate —
+// a dark silhouette glimpsed through the storm, gone when the gate ignites.
+export function makeHerald({ rng, glowTex }) {
+  const g = new THREE.Group();
+  const dark = new THREE.MeshBasicMaterial({ color: 0x0e0b1e });
+  const robe = new THREE.Mesh(new THREE.ConeGeometry(7.5, 30, 7), dark);
+  robe.position.y = 15;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(3.4, 8, 6), dark);
+  head.position.y = 32;
+  g.add(robe, head);
+  for (const side of [-1, 1]) {
+    const horn = new THREE.Mesh(new THREE.ConeGeometry(0.9, 6.5, 5), dark);
+    horn.position.set(side * 2.6, 36, 0);
+    horn.rotation.z = -side * 0.5;
+    g.add(horn);
+    const eye = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: glowTex, color: 0xb9a6ff, transparent: true, opacity: 0.9,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    }));
+    eye.position.set(side * 1.3, 32.4, 2.9);
+    eye.scale.setScalar(2.6);
+    eye.renderOrder = 6;
+    g.add(eye);
+  }
+  g.rotation.y = rng.angle();
+  return g;
 }
 
 // ---------------------------------------------------------------- landmarks

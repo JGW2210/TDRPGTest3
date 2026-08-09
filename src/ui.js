@@ -8,9 +8,46 @@ const el = (id) => document.getElementById(id);
 let announceTimer = null;
 let decodeTimer = null;
 
+// Papercraft heart halves: one SVG heart split down the middle, each half
+// filled or hollow. Slight per-heart tilt keeps the row hand-cut.
+const HEART_L = 'M12 20.5 C 5.6 14.6 1.6 10.4 1.6 6.9 C 1.6 4.1 3.8 1.8 6.6 1.8 C 8.9 1.8 11 3.3 12 5.4 Z';
+const HEART_R = 'M12 20.5 C 18.4 14.6 22.4 10.4 22.4 6.9 C 22.4 4.1 20.2 1.8 17.4 1.8 C 15.1 1.8 13 3.3 12 5.4 Z';
+
+function heartSvg(left, right) {
+  const half = (d, on) =>
+    `<path d="${d}" fill="${on ? '#ff8fa8' : 'rgba(244,236,216,0.10)'}" stroke="#1f1a36" stroke-width="1.6" stroke-linejoin="round"/>`;
+  return `<svg viewBox="0 0 24 22">${half(HEART_L, left)}${half(HEART_R, right)}</svg>`;
+}
+
 export const ui = {
   setLocation(text) {
     el('locline').textContent = text;
+  },
+
+  // ---- hearts, damage & death ----
+  renderHearts(halves, maxHalves) {
+    const box = el('hearts');
+    let html = '';
+    for (let i = 0; i < Math.ceil(maxHalves / 2); i++) {
+      const l = halves > i * 2, r = halves > i * 2 + 1;
+      html += `<span class="heart${l || r ? '' : ' empty'}" style="transform:rotate(${i % 2 ? 4 : -3}deg)">${heartSvg(l, r)}</span>`;
+    }
+    box.innerHTML = html;
+  },
+
+  hurt() {
+    const v = el('hurtflash');
+    v.classList.remove('show');
+    void v.offsetWidth; // restart the flash animation
+    v.classList.add('show');
+    const box = el('hearts');
+    box.classList.remove('shake');
+    void box.offsetWidth;
+    box.classList.add('shake');
+  },
+
+  deathFade() {
+    el('deathfade').classList.add('show');
   },
 
   announce(title, sub = '', holdMs = 4200) {
