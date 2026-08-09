@@ -11,7 +11,7 @@
 
 import {
   HEX, RINGS, SECRET_RADIUS, BIOMES, SECRET_BIOMES, ASTEROID_BIOMES, GATE_RUNES,
-  WORLD_ADJ, WORLD_NOUN,
+  TRAPS, HERMITS, WORLD_ADJ, WORLD_NOUN,
 } from './config.js';
 import { Rng, makeNoise2D } from './rng.js';
 import * as Hx from './hexmath.js';
@@ -29,6 +29,7 @@ export function generateWorld(seedStr) {
   const edges = [];
   const wards = [];
   const shrines = [];
+  const chains = [];
   const leviathans = [];
 
   // ---------------------------------------------------------------- layout
@@ -289,6 +290,7 @@ export function generateWorld(seedStr) {
       if (usedPorts.has(k)) continue;
       const h = hexes.get(k);
       if (!h || h.gateId !== null) continue;
+      if (h.baseY) continue; // floating cells are not the sea's rim
       const p = worldOf(h);
       const vx = p.x - c.x, vz = p.z - c.z;
       const L = Math.hypot(vx, vz) || 1;
@@ -482,14 +484,84 @@ export function generateWorld(seedStr) {
   }
   wards.sort((a, b) => a.boundary - b.boundary);
 
+  // ---------------------------------------------------------------- rock-hop helpers
+  // A single new rock cell just off the region's rim, facing `toward` —
+  // adjacent to whatever it grew from, so it is always sail-reachable.
+  function placeRimPerch(area, toward) {
+    const rim = pickRim(area, toward);
+    if (!rim) return null;
+    const rp = worldOf(rim);
+    let dx = toward.x - rp.x, dz = toward.z - rp.z;
+    const dl = Math.hypot(dx, dz) || 1;
+    dx /= dl; dz /= dl;
+    for (const shift of [1, 2]) {
+      const cc = Hx.toHex(rp.x + dx * HEX * Hx.SQRT3 * shift, rp.z + dz * HEX * Hx.SQRT3 * shift, HEX);
+      const ck = Hx.key(cc.q, cc.r);
+      if (hexes.has(ck)) continue;
+      setHex(cc.q, cc.r, {
+        kind: 'isle', areaId: area.id, elev: 0.5 + rng.float() * 0.25,
+        islandId: null, rock: true,
+        flow: [0, 0], faint: false, blocked: false, levi: false,
+        gateId: null,
+      });
+      area.hexKeys.push(ck);
+      usedPorts.add(Hx.key(rim.q, rim.r));
+      return ck;
+    }
+    return null;
+  }
+
+  // Claim a fully isolated cell near (x, z): the cell and ALL six neighbors
+  // must be empty sky (hop-rocks may never touch anything walkable — the
+  // grid is flat, so adjacency would let the wisp simply sail aboard).
+  function claimIsolated(x, z) {
+    const c0 = Hx.toHex(x, z, HEX);
+    const offs = [[0, 0], [1, 0], [0, 1], [-1, 0], [0, -1], [1, -1], [-1, 1]];
+    for (const [oq, or2] of offs) {
+      const q = c0.q + oq, r = c0.r + or2;
+      if (hexes.has(Hx.key(q, r))) continue;
+      let clear = true;
+      for (const d of Hx.DIRS) {
+        if (hexes.has(Hx.key(q + d[0], r + d[1]))) { clear = false; break; }
+      }
+      if (clear) return { q, r };
+    }
+    return null;
+  }
+
+  // Tracked commits so a half-built chain can be rolled back cleanly.
+  function makeTracker(area) {
+    const added = [];
+    return {
+      commit(q, r, rec) {
+        const k = Hx.key(q, r);
+        setHex(q, r, rec);
+        area.hexKeys.push(k);
+        added.push(k);
+        return k;
+      },
+      track(k) {
+        if (k) added.push(k);
+        return k;
+      },
+      rollback() {
+        const set = new Set(added);
+        for (const k of added) hexes.delete(k);
+        area.hexKeys = area.hexKeys.filter((k) => !set.has(k));
+      },
+    };
+  }
+
   // ---------------------------------------------------------------- astral shrines
-  // Floating challenge platforms hung high off a region's rim, reached only
-  // through a 7-hex teleportation stone islet embedded in its sea. The
-  // platform's cells live on free grid columns past the rim (the global grid
-  // is single-layer), rendered at altitude via baseY.
+  // Floating heart-vessel platforms hung high off a region's rim. Their old
+  // teleportation stones are gone (Round 9): each platform is reached by a
+  // rock-hop chain spiralling up from a launch springboard on the rim — but
+  // the chain starts HIDDEN (and blocked, so nothing can path onto it) until
+  // the region's starlit lodestone, perched on the far rim directly across
+  // the region, is claimed.
   function placeShrine(area) {
-    const ch = Hx.toHex(area.pos.x, area.pos.z, HEX);
     for (let tries = 0; tries < 14; tries++) {
+      const tk = makeTracker(area);
       const pa = rng.angle();
       const rad = (area.hexRadius + 6 + rng.int(3)) * HEX * Hx.SQRT3;
       const anchor = Hx.toHex(
@@ -513,39 +585,76 @@ export function generateWorld(seedStr) {
       }
       if (!ok) continue;
 
+      // commit the platform first so nothing else claims its sky
       const baseY = 58 + rng.float() * 22;
       const id = shrines.length;
       for (const [q, r] of cells) {
-        setHex(q, r, {
+        tk.commit(q, r, {
           kind: 'isle', areaId: area.id, elev: 0.45 + rng.float() * 0.35,
           islandId: null, rock: true, astral: true, baseY,
           flow: [0, 0], faint: false, blocked: false, levi: false,
           gateId: null,
         });
-        area.hexKeys.push(Hx.key(q, r));
       }
-      // the stone islet in the sea, off a quiet stretch of rim
-      const toward = {
-        x: area.pos.x + Math.cos(pa) * 500,
-        z: area.pos.z + Math.sin(pa) * 500,
-      };
-      const stoneKey = placeNode(area, toward);
-      if (!stoneKey) {
-        for (const [q, r] of cells) {
-          hexes.delete(Hx.key(q, r));
-          area.hexKeys.pop();
-        }
-        return null;
+      const padW = Hx.toWorld(anchor.q, anchor.r, HEX);
+
+      // launch springboard below the platform; lodestone straight across
+      const launchKey = tk.track(placeRimPerch(area, padW));
+      const lodeKey = launchKey && tk.track(placeRimPerch(area, {
+        x: 2 * area.pos.x - padW.x, z: 2 * area.pos.z - padW.z,
+      }));
+      if (!launchKey || !lodeKey) { tk.rollback(); continue; }
+
+      // the hop chain: rocks helixing up around the platform's column at a
+      // tight fixed orbit — the region's rim cells stay well clear
+      const lh = hexes.get(launchKey);
+      const lw = Hx.toWorld(lh.q, lh.r, HEX);
+      const th0 = Math.atan2(lw.z - padW.z, lw.x - padW.x);
+      const spin = rng.chance(0.5) ? 1 : -1;
+      const nHops = 5;
+      const hopKeys = [];
+      for (let i = 1; i <= nHops; i++) {
+        const t = i / (nHops + 1);
+        const th = th0 + spin * i * 0.8;
+        const r = (4.3 - t * 0.9) * HEX * Hx.SQRT3;
+        const cell = claimIsolated(padW.x + Math.cos(th) * r, padW.z + Math.sin(th) * r);
+        if (!cell) break;
+        hopKeys.push(tk.commit(cell.q, cell.r, {
+          kind: 'isle', areaId: area.id, elev: 0.45 + rng.float() * 0.3,
+          islandId: null, rock: true, baseY: baseY * Math.pow(t, 1.15),
+          flow: [0, 0], faint: false, blocked: false, levi: false,
+          gateId: null,
+        }));
       }
+      if (hopKeys.length < nHops) { tk.rollback(); continue; }
+
       const padKey = Hx.key(anchor.q, anchor.r);
       const altarKey = Hx.key(anchor.q + tailDir[0] * 3, anchor.r + tailDir[1] * 3);
-      const stoneHex = hexes.get(stoneKey);
-      stoneHex.shrineId = id; stoneHex.shrineRole = 'stone';
       const padHex = hexes.get(padKey);
       padHex.shrineId = id; padHex.shrineRole = 'pad';
       const altarHex = hexes.get(altarKey);
       altarHex.shrineId = id; altarHex.shrineRole = 'altar';
-      const shrine = { id, areaId: area.id, stoneKey, padKey, altarKey, claimed: false, visited: false };
+
+      const chain = {
+        id: chains.length, kind: 'shrine', areaId: area.id,
+        nodes: [launchKey, ...hopKeys, padKey],
+        hidden: true, lodeKey, shrineId: id,
+      };
+      const launchHex = hexes.get(launchKey);
+      launchHex.chainId = chain.id; launchHex.chainRole = 'launch';
+      for (const hk of hopKeys) {
+        const hh = hexes.get(hk);
+        hh.chainId = chain.id; hh.chainRole = 'hop';
+      }
+      for (const nk of [launchKey, ...hopKeys]) {
+        const nh = hexes.get(nk);
+        nh.hiddenChain = true;
+        nh.blocked = true;
+      }
+      padHex.chainId = chain.id;
+      hexes.get(lodeKey).lodeChain = chain.id;
+      chains.push(chain);
+      const shrine = { id, areaId: area.id, padKey, altarKey, chainId: chain.id, claimed: false, visited: false };
       shrines.push(shrine);
       return shrine;
     }
@@ -556,6 +665,113 @@ export function generateWorld(seedStr) {
     for (const area of picks.slice(0, Math.max(1, Math.ceil(picks.length / 2)))) {
       placeShrine(area);
     }
+  }
+
+  // ---------------------------------------------------------------- rock-hop attachments
+  // ~40% of regions grow a chain of floating rocks off their rim: a launch
+  // springboard, a few isolated hop-rocks bowing sideways over the void, and
+  // a small orbiting islet at the end — the Curio Peddler's gift market, or
+  // a hermit squatting on an astral curio. Visible from region discovery.
+  function placeChain(area, kind) {
+    for (let tries = 0; tries < 12; tries++) {
+      const tk = makeTracker(area);
+      const pa = rng.angle();
+      const rad = (area.hexRadius + 12 + rng.int(4)) * HEX * Hx.SQRT3;
+      const anchor = Hx.toHex(
+        area.pos.x + Math.cos(pa) * rad,
+        area.pos.z + Math.sin(pa) * rad, HEX
+      );
+      // the islet: the anchor plus four of its neighbors
+      const cells = [[anchor.q, anchor.r]];
+      const skip = rng.int(6);
+      for (let i = 0; i < 6; i++) {
+        if (i === skip || i === (skip + 1) % 6) continue;
+        cells.push([anchor.q + Hx.DIRS[i][0], anchor.r + Hx.DIRS[i][1]]);
+      }
+      let ok = true;
+      for (const [q, r] of cells) {
+        if (hexes.has(Hx.key(q, r))) { ok = false; break; }
+        for (const d of Hx.DIRS) {
+          const nk = Hx.key(q + d[0], r + d[1]);
+          if (hexes.has(nk) && !cells.some(([q2, r2]) => Hx.key(q2, r2) === nk)) { ok = false; break; }
+        }
+        if (!ok) break;
+      }
+      if (!ok) continue;
+
+      const destY = 2.5 + rng.float() * 4.5;
+      for (const [q, r] of cells) {
+        tk.commit(q, r, {
+          kind: 'isle', areaId: area.id, elev: 0.4 + rng.float() * 0.3,
+          islandId: null, rock: true, baseY: destY,
+          flow: [0, 0], faint: false, blocked: false, levi: false,
+          gateId: null,
+        });
+      }
+      const aw = Hx.toWorld(anchor.q, anchor.r, HEX);
+      const launchKey = tk.track(placeRimPerch(area, aw));
+      if (!launchKey) { tk.rollback(); continue; }
+
+      // hops: march from the launch toward the islet, bowing sideways
+      const lh = hexes.get(launchKey);
+      const lw = Hx.toWorld(lh.q, lh.r, HEX);
+      const dist = Math.hypot(aw.x - lw.x, aw.z - lw.z) || 1;
+      const nHops = Math.max(2, Math.round(dist / (HEX * Hx.SQRT3 * 3.4)) - 1);
+      const side = rng.chance(0.5) ? 1 : -1;
+      const px = (-(aw.z - lw.z) / dist) * side, pz = ((aw.x - lw.x) / dist) * side;
+      const bow = (6 + rng.float() * 5) * HEX;
+      const hopKeys = [];
+      for (let i = 1; i <= nHops; i++) {
+        const t = i / (nHops + 1);
+        const cell = claimIsolated(
+          lw.x + (aw.x - lw.x) * t + px * Math.sin(t * Math.PI) * bow,
+          lw.z + (aw.z - lw.z) * t + pz * Math.sin(t * Math.PI) * bow
+        );
+        if (!cell) break;
+        hopKeys.push(tk.commit(cell.q, cell.r, {
+          kind: 'isle', areaId: area.id, elev: 0.4 + rng.float() * 0.3,
+          islandId: null, rock: true, baseY: 1.5 + (destY - 1.5) * t,
+          flow: [0, 0], faint: false, blocked: false, levi: false,
+          gateId: null,
+        }));
+      }
+      if (hopKeys.length < nHops) { tk.rollback(); continue; }
+
+      // dock = the islet cell nearest the last hop; boon/hermit = farthest
+      const lastW = worldOf(hexes.get(hopKeys[hopKeys.length - 1]));
+      let dockKey = null, dockD = Infinity, farKey = null, farD = -Infinity;
+      for (const [q, r] of cells) {
+        const w = Hx.toWorld(q, r, HEX);
+        const d2 = Math.hypot(w.x - lastW.x, w.z - lastW.z);
+        if (d2 < dockD) { dockD = d2; dockKey = Hx.key(q, r); }
+        if (d2 > farD) { farD = d2; farKey = Hx.key(q, r); }
+      }
+      const chain = {
+        id: chains.length, kind, areaId: area.id,
+        nodes: [launchKey, ...hopKeys, dockKey],
+        destKeys: cells.map(([q, r]) => Hx.key(q, r)),
+        hidden: false, claimed: false, visited: false,
+        hermit: kind === 'event' ? rng.int(HERMITS.length) : null,
+        boonKey: farKey, dockKey,
+      };
+      const launchHex = hexes.get(launchKey);
+      launchHex.chainId = chain.id; launchHex.chainRole = 'launch';
+      for (const hk of hopKeys) {
+        const hh = hexes.get(hk);
+        hh.chainId = chain.id; hh.chainRole = 'hop';
+      }
+      for (const [q, r] of cells) hexes.get(Hx.key(q, r)).chainId = chain.id;
+      hexes.get(dockKey).chainRole = 'dock';
+      hexes.get(farKey).chainRole = kind === 'market' ? 'boon' : 'hermit';
+      chains.push(chain);
+      return chain;
+    }
+    return null;
+  }
+  for (const area of areas) {
+    if (area.asteroid || area.secret) continue;
+    if (!rng.chance(0.4)) continue;
+    placeChain(area, rng.chance(0.5) ? 'market' : 'event');
   }
 
   // ---------------------------------------------------------------- springs
@@ -616,11 +832,16 @@ export function generateWorld(seedStr) {
     const d = THREE_CLAMP(area.biome.dread ?? 0, 0, 1);
     const snareP = area.ring === 0 ? 0.012 : 0.03 + 0.05 * d;
     const geyserP = area.ring === 0 ? 0 : 0.018 + 0.032 * d;
-    const mawP = area.ring === 0 ? 0 : 0.05 + 0.08 * d;
+    // chompers come from the trap atlas: only mapped biomes carry them,
+    // rings 1-2 at ~30% density, the Maw Shallows boosted at home
+    const trap = TRAPS[area.biome.key];
+    const chompP = !trap || area.ring === 0 ? 0
+      : (0.05 + 0.08 * d) * (area.ring <= 2 ? 0.3 : 1) * (trap.boost ?? 1);
     for (const k of area.hexKeys) {
       if (k === startKey) continue;
       const h = hexes.get(k);
       if (h.gateId !== null || h.wardId !== undefined || h.shrineId !== undefined
+        || h.chainId !== undefined || h.lodeChain !== undefined
         || h.baseY || h.spring) continue;
       if (area.ring === 0 && Hx.dist(h.q, h.r, startHex.q, startHex.r) < 4) continue;
       if (h.kind === 'water') {
@@ -636,9 +857,10 @@ export function generateWorld(seedStr) {
           const nh = hexes.get(Hx.key(h.q + d2[0], h.r + d2[1]));
           if (!nh || nh.kind === 'water') { shore = true; break; }
         }
-        if (shore && rng.chance(mawP)) {
+        if (shore && rng.chance(chompP)) {
           h.hazard = {
-            kind: 'maw', period: 4.6 - 2.0 * d + rng.float() * 1.4,
+            kind: 'maw', trap: trap.kind, tint: trap.tint,
+            period: 4.6 - 2.0 * d + rng.float() * 1.4,
             phase: rng.float() * 20, snap: 0.55,
           };
         } else if (rng.chance(snareP)) {
@@ -651,7 +873,7 @@ export function generateWorld(seedStr) {
   const title = `The ${rng.pick(WORLD_ADJ)} ${rng.pick(WORLD_NOUN)}`;
 
   return {
-    seed: seedStr, title, areas, hexes, gates, edges, wards, shrines,
+    seed: seedStr, title, areas, hexes, gates, edges, wards, shrines, chains,
     leviathans, startKey, progress: { frontier: 0 },
   };
 }

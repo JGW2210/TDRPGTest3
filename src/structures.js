@@ -304,6 +304,361 @@ export function makeAltar({ rng, gradientMap, glowTex, animators }) {
   return { group: g, claim: () => { state.claimed = true; } };
 }
 
+// ---------------------------------------------------------------- chompers
+// The land-trap atlas: one snapping archetype per biome family, personalised
+// by tint. Every model exposes setOpen(o) with o in [0..1] (1 = jaws wide,
+// 0 = shut) — buildWorld drives the snap cycle.
+export function makeChomper(kind, { tint, gradientMap, rng }) {
+  const g = new THREE.Group();
+  const toon = (c) => new THREE.MeshToonMaterial({ color: c, gradientMap });
+  const basic = (c) => new THREE.MeshBasicMaterial({ color: c });
+  const toothMat = toon(0xf2ead2);
+  const bodyMat = toon(tint ?? 0x6e5c66);
+  let setOpen;
+
+  switch (kind) {
+    case 'flytrap': { // a Venus trap grown to hex scale
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2 + rng.float();
+        const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.35, 1.1, 4), bodyMat);
+        leaf.position.set(Math.cos(a) * 0.75, 0.28, Math.sin(a) * 0.75);
+        leaf.rotation.set(Math.sin(a) * 1.15, 0, -Math.cos(a) * 1.15);
+        g.add(leaf);
+      }
+      const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.2, 0.7, 6), bodyMat);
+      stem.position.y = 0.35;
+      g.add(stem);
+      const jaws = [];
+      for (const side of [-1, 1]) {
+        const jaw = new THREE.Group();
+        const pod = new THREE.Mesh(
+          new THREE.SphereGeometry(0.72, 8, 6, 0, Math.PI), bodyMat
+        );
+        pod.scale.set(1, 1.15, 0.5);
+        pod.rotation.x = side > 0 ? -Math.PI / 2 : Math.PI / 2;
+        jaw.add(pod);
+        for (let i = 0; i < 4; i++) {
+          const tooth = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.4, 4), toothMat);
+          tooth.position.set(-0.45 + i * 0.3, 0.05, side * 0.62);
+          tooth.rotation.x = side * 0.5;
+          jaw.add(tooth);
+        }
+        jaw.position.y = 0.75;
+        g.add(jaw);
+        jaws.push({ jaw, side });
+      }
+      setOpen = (o) => {
+        for (const { jaw, side } of jaws) jaw.rotation.x = side * (0.12 + 1.0 * o);
+      };
+      break;
+    }
+    case 'clamshell': { // a great pearl-clam agape on the shore
+      const pearl = new THREE.Mesh(new THREE.SphereGeometry(0.28, 8, 6), basic(0xfff2d9));
+      pearl.position.y = 0.42;
+      const lower = new THREE.Mesh(new THREE.SphereGeometry(1.0, 9, 6, 0, Math.PI * 2, 0, Math.PI / 2), bodyMat);
+      lower.scale.set(1, 0.42, 1);
+      lower.rotation.x = Math.PI;
+      lower.position.y = 0.44;
+      const hinge = new THREE.Group();
+      const upper = new THREE.Mesh(new THREE.SphereGeometry(1.0, 9, 6, 0, Math.PI * 2, 0, Math.PI / 2), bodyMat);
+      upper.scale.set(1, 0.42, 1);
+      upper.position.z = 1.0;
+      hinge.add(upper);
+      hinge.position.set(0, 0.46, -1.0);
+      for (let i = 0; i < 3; i++) { // barnacles
+        const b = new THREE.Mesh(new THREE.DodecahedronGeometry(0.13, 0), toon(0x8c8678));
+        const a = rng.angle();
+        b.position.set(Math.cos(a) * 0.8, 0.25, Math.sin(a) * 0.8);
+        g.add(b);
+      }
+      g.add(pearl, lower, hinge);
+      setOpen = (o) => { hinge.rotation.x = -1.05 * o; };
+      break;
+    }
+    case 'gearpress': { // Horolith's contribution: a clapping tooth-gear
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.22, 1.1, 6), toon(0x6e5426));
+      post.position.set(0, 0.55, -0.85);
+      const mkGear = () => {
+        const gear = new THREE.Group();
+        const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.85, 0.22, 9), bodyMat);
+        gear.add(disc);
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2;
+          const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.3), toothMat);
+          tooth.position.set(Math.cos(a) * 0.85, 0, Math.sin(a) * 0.85);
+          tooth.rotation.y = -a;
+          gear.add(tooth);
+        }
+        return gear;
+      };
+      const lower = mkGear();
+      lower.position.y = 0.28;
+      const hinge = new THREE.Group();
+      const upper = mkGear();
+      upper.position.z = 0.85;
+      hinge.add(upper);
+      hinge.position.set(0, 0.62, -0.85);
+      g.add(post, lower, hinge);
+      setOpen = (o) => { hinge.rotation.x = -1.1 * o; };
+      break;
+    }
+    case 'bonejaw': { // mandibles of something long unfed, half-buried
+      const jaws = [];
+      for (const side of [-1, 1]) {
+        const jaw = new THREE.Group();
+        const arc = new THREE.Mesh(
+          new THREE.TorusGeometry(0.85, 0.14, 6, 10, Math.PI * 0.85), bodyMat
+        );
+        arc.rotation.x = -Math.PI / 2;
+        arc.rotation.z = side > 0 ? -0.4 : Math.PI - 0.4 + 0.8;
+        jaw.add(arc);
+        for (let i = 0; i < 4; i++) {
+          const a = 0.35 + i * 0.6;
+          const tooth = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.45, 4), toothMat);
+          tooth.position.set(Math.cos(a) * 0.85 * side, 0.2, -Math.sin(a) * 0.85);
+          jaw.add(tooth);
+        }
+        jaw.position.y = 0.3;
+        g.add(jaw);
+        jaws.push({ jaw, side });
+      }
+      const knuckle = new THREE.Mesh(new THREE.DodecahedronGeometry(0.3, 0), bodyMat);
+      knuckle.position.set(0, 0.25, 0.9);
+      g.add(knuckle);
+      setOpen = (o) => {
+        for (const { jaw, side } of jaws) jaw.rotation.y = side * (0.15 + 0.85 * o);
+      };
+      break;
+    }
+    case 'lure': { // a pretty light on a stalk; the teeth wait below
+      const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.16, 1.5, 6), toon(0x3a3447));
+      stalk.position.y = 0.75;
+      stalk.rotation.z = 0.35;
+      const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 6), basic(tint ?? 0xffd9a8));
+      bulb.position.set(-0.5, 1.5, 0);
+      g.add(stalk, bulb);
+      const teeth = [];
+      for (let i = 0; i < 7; i++) {
+        const a = (i / 7) * Math.PI * 2;
+        const pivot = new THREE.Group();
+        const tooth = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.85, 4), toothMat);
+        tooth.position.y = 0.42;
+        pivot.add(tooth);
+        pivot.position.set(Math.cos(a) * 0.85, 0.1, Math.sin(a) * 0.85);
+        pivot.rotation.y = -a - Math.PI / 2;
+        g.add(pivot);
+        teeth.push(pivot);
+      }
+      setOpen = (o) => {
+        for (const p of teeth) p.rotation.x = -(1 - o) * 1.25 - 0.15;
+      };
+      break;
+    }
+    default: { // toothmaw — the Maw Shallows' native chomper
+      const mkJaw = (up) => {
+        const jaw = new THREE.Group();
+        const lip = new THREE.Mesh(new THREE.CylinderGeometry(1.25, 1.45, 0.5, 7), bodyMat);
+        jaw.add(lip);
+        for (let i = 0; i < 5; i++) {
+          const a = (i / 5) * Math.PI * 2 + 0.4;
+          const tooth = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.8, 4), toothMat);
+          tooth.position.set(Math.cos(a) * 0.95, up ? 0.5 : -0.5, Math.sin(a) * 0.95);
+          if (!up) tooth.rotation.x = Math.PI;
+          jaw.add(tooth);
+        }
+        return jaw;
+      };
+      const lower = mkJaw(true);
+      lower.position.y = 0.3;
+      const hinge = new THREE.Group();
+      const upper = mkJaw(false);
+      upper.position.set(0, 0.55, 1.0);
+      hinge.add(upper);
+      hinge.position.set(0, 0.55, -1.0);
+      g.add(lower, hinge);
+      setOpen = (o) => { hinge.rotation.x = -0.95 * o; };
+    }
+  }
+  g.rotation.y = rng.angle();
+  setOpen(1);
+  return { group: g, setOpen };
+}
+
+// ---------------------------------------------------------------- springboard
+// The launch hex of a rock-hop chain: a cracked stone springboard ringed by
+// small cairns that point the way out over the void.
+export function makeSpringboard({ rng, gradientMap, glowTex }) {
+  const g = new THREE.Group();
+  const seed = (rng.float() * 1e6) | 0;
+  const disc = new THREE.Mesh(
+    roughen(new THREE.CylinderGeometry(1.7, 1.9, 0.45, 8, 1), seed, 0.2),
+    new THREE.MeshToonMaterial({ color: 0x8c8678, gradientMap })
+  );
+  disc.position.y = 0.22;
+  disc.rotation.z = 0.05;
+  g.add(disc);
+  // the crack
+  const crack = new THREE.Mesh(
+    new THREE.BoxGeometry(2.6, 0.06, 0.12),
+    new THREE.MeshBasicMaterial({ color: INK })
+  );
+  crack.position.y = 0.46;
+  crack.rotation.y = rng.angle();
+  g.add(crack);
+  // pointing cairns at the void-side rim
+  for (let i = 0; i < 3; i++) {
+    const cairn = new THREE.Group();
+    let y = 0;
+    for (let s = 0; s < 3 - (i % 2); s++) {
+      const r = 0.24 - s * 0.06;
+      const stone = new THREE.Mesh(
+        new THREE.DodecahedronGeometry(r, 0),
+        new THREE.MeshToonMaterial({ color: 0x6e6e80, gradientMap })
+      );
+      stone.position.y = y + r;
+      y += r * 1.7;
+      cairn.add(stone);
+    }
+    cairn.position.set(1.1 + i * 0.25, 0.4, -0.9 + i * 0.9);
+    g.add(cairn);
+  }
+  const under = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTex, color: 0xb9a6ff, transparent: true, opacity: 0.28,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  }));
+  under.position.y = 0.7;
+  under.scale.setScalar(4.5);
+  under.renderOrder = 3;
+  g.add(under);
+  return g;
+}
+
+// ---------------------------------------------------------------- gift market
+// The Curio Peddler's stall: paper crates, a patched awning, a hooded
+// wisp-figure with lantern eyes.
+export function makeMarketStall({ rng, gradientMap, glowTex, animators }) {
+  const g = new THREE.Group();
+  const toon = (c) => new THREE.MeshToonMaterial({ color: c, gradientMap });
+  // crates
+  for (let i = 0; i < 4; i++) {
+    const s = 0.55 + rng.float() * 0.4;
+    const crate = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), toon(i % 2 ? 0xa6845c : 0x8c6e4a));
+    crate.position.set(-1.1 + rng.float() * 0.8, s / 2 + (i > 2 ? 0.8 : 0), 0.4 + rng.float() * 0.8);
+    crate.rotation.y = rng.angle();
+    g.add(crate);
+  }
+  // awning on two poles
+  for (const side of [-1, 1]) {
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 2.6, 5), toon(0x59431f));
+    pole.position.set(side * 1.5, 1.3, -0.4);
+    g.add(pole);
+  }
+  const awning = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.08, 2.2), toon(0xb8506a));
+  awning.position.set(0, 2.6, 0.2);
+  awning.rotation.x = -0.22;
+  const awning2 = new THREE.Mesh(new THREE.BoxGeometry(3.42, 0.06, 0.5), toon(0xe8e4d2));
+  awning2.position.set(0, 2.66, 0.75);
+  awning2.rotation.x = -0.22;
+  g.add(awning, awning2);
+  // the peddler: a taller, hooded cousin of the wisp
+  const body = new THREE.Mesh(new THREE.ConeGeometry(0.72, 2.4, 6), toon(0x3a3454));
+  body.position.set(0.4, 1.2, -0.6);
+  const hood = new THREE.Mesh(new THREE.ConeGeometry(0.5, 0.9, 6), toon(0x2c2740));
+  hood.position.set(0.4, 2.55, -0.6);
+  g.add(body, hood);
+  const eyes = [];
+  for (const side of [-1, 1]) {
+    const eye = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: glowTex, color: 0xffd9a8, transparent: true, opacity: 0.9,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    }));
+    eye.position.set(0.4 + side * 0.16, 2.25, -0.28);
+    eye.scale.setScalar(0.5);
+    eye.renderOrder = 3;
+    g.add(eye);
+    eyes.push(eye);
+  }
+  const ph = rng.angle();
+  animators.push((t) => {
+    const blink = Math.sin(t * 0.7 + ph) > -0.97 ? 1 : 0.1;
+    for (const e of eyes) e.material.opacity = 0.75 * blink;
+  });
+  g.rotation.y = rng.angle();
+  return g;
+}
+
+// The boon pedestal: the peddler's one free gift, floating until taken.
+export function makeBoonPedestal({ rng, gradientMap, glowTex, animators }) {
+  const g = new THREE.Group();
+  const ped = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.5, 0.7, 1.1, 7),
+    new THREE.MeshToonMaterial({ color: 0x7d76a1, gradientMap })
+  );
+  ped.position.y = 0.55;
+  const gift = new THREE.Mesh(
+    new THREE.OctahedronGeometry(0.42, 0),
+    new THREE.MeshBasicMaterial({ color: 0xffd9a8 })
+  );
+  gift.position.y = 1.9;
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTex, color: 0xffd9a8, transparent: true, opacity: 0.5,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  }));
+  glow.position.y = 1.9;
+  glow.scale.setScalar(3.2);
+  glow.renderOrder = 3;
+  g.add(ped, gift, glow);
+  const state = { claimed: false };
+  const ph = rng.angle();
+  animators.push((t, dt) => {
+    if (state.claimed) {
+      gift.scale.lerp(new THREE.Vector3(0.001, 0.001, 0.001), Math.min(1, dt * 3));
+      glow.material.opacity = Math.max(0, glow.material.opacity - dt * 0.8);
+    } else {
+      gift.rotation.y += dt * 1.1;
+      gift.position.y = 1.9 + Math.sin(t * 1.6 + ph) * 0.15;
+      glow.material.opacity = 0.38 + 0.18 * Math.sin(t * 2.2 + ph);
+    }
+  });
+  return { group: g, claim: () => { state.claimed = true; } };
+}
+
+// ---------------------------------------------------------------- hermit
+// A small robed figure by a cold little fire, out where nothing else sits.
+export function makeHermit({ rng, gradientMap, glowTex, animators }) {
+  const g = new THREE.Group();
+  const toon = (c) => new THREE.MeshToonMaterial({ color: c, gradientMap });
+  const robe = new THREE.Mesh(new THREE.ConeGeometry(0.6, 1.5, 6), toon(0x5c5470));
+  robe.position.y = 0.75;
+  const hood = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.7, 6), toon(0x474060));
+  hood.position.y = 1.65;
+  const staff = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 2.2, 5), toon(0x59431f));
+  staff.position.set(0.7, 1.1, 0);
+  staff.rotation.z = -0.12;
+  const tip = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTex, color: 0x9ffff0, transparent: true, opacity: 0.7,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  }));
+  tip.position.set(0.83, 2.25, 0);
+  tip.scale.setScalar(1.2);
+  tip.renderOrder = 3;
+  const fire = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTex, color: 0x8f9bff, transparent: true, opacity: 0.5,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  }));
+  fire.position.set(-0.8, 0.35, 0.5);
+  fire.scale.setScalar(1.8);
+  fire.renderOrder = 3;
+  g.add(robe, hood, staff, tip, fire);
+  const ph = rng.angle();
+  animators.push((t) => {
+    fire.material.opacity = 0.35 + 0.2 * Math.sin(t * 4.2 + ph) * Math.sin(t * 2.7);
+    tip.material.opacity = 0.55 + 0.2 * Math.sin(t * 1.3 + ph);
+  });
+  g.rotation.y = rng.angle();
+  return g;
+}
+
 // ---------------------------------------------------------------- storm herald
 // A vast slow warden pacing the maelstrom beside a sealed outward gate —
 // a dark silhouette glimpsed through the storm, gone when the gate ignites.

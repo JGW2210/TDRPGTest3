@@ -421,6 +421,89 @@ half a heart; the home region keeps a gentle 4-hex cradle around the start.
 
 ---
 
+# Round 9 — The Trap Atlas, Rock-Hop Chains & the Wandering Kindnesses
+
+Chosen by poll. Direct notes implemented alongside: chomper (maw) traps are
+sharply reduced in rings 1-2 and personalised per biome; ~40% of regions
+grow floating rock-hop attachments off their rims; the shrine platforms'
+teleport stones are replaced by trigger-revealed hop chains; and hops may
+only begin from a chain hex (launch springboard, hop-rock, dock, or pad) —
+never from open ground.
+
+## Poll 25 — Land-trap rework
+
+- ☑ **Full bespoke atlas** — six chomper archetypes mapped across the biomes
+  (`TRAPS` in config.js → `makeChomper` in structures.js): tooth-maw (Maw
+  Shallows only, boosted at home), Venus **flytrap** (Thornlight / Sporelight
+  / Silent Orchard), giant **clamshell** (Meridian / Grave of Anchors /
+  Unblinking), snapping **gear-press** (Cog Strand), buried **bone-jaw**
+  (Bleached Choir / Whisperdune / Umbral), biting **lure-lantern** (Lantern
+  Fen / Frostveil / Storm Aviary). Chimewood, Cinder, Echo Verge and the
+  secrets carry no chompers at all. Rings 1-2 place them at ~30% density.
+- ☐ Only maw + plant biomes · ☐ Minimal rework.
+
+## Poll 26 — Shrine access
+
+- ☑ **Chains replace stones** — the teleportation stone islets are gone.
+  Each shrine region hides a rock-hop chain helixing up around the
+  platform's column from a launch springboard on the rim (blocked + hidden
+  until revealed, so nothing can path onto it early).
+- ☐ Chain up, teleport down · ☐ Keep both.
+
+## Poll 27 — Market trade
+
+- ☑ **Gift stalls for now** — one free boon per market per run (a mend if
+  hurt, else a ward-charm); the true economy arrives designed alongside
+  combat. Bounty vouchers also redeem here.
+- ☐ Stardust economy · ☐ Heart barter.
+
+## Poll 28 — Event bodies
+
+- ☑ **Lore hermits for now** — six hermits (`HERMITS` in config.js), two
+  dialogue lines each through the cutscene system, a small gift on first
+  visit. Mechanical events wait for the combat pass.
+- ☐ Choice omens · ☐ Blessing/curse roulette.
+
+## Poll 29 — Chain trigger item
+
+- ☑ **Starlit lodestone** — a humming magnetic stone on a rim perch directly
+  ACROSS the region from the platform. Claiming it streaks it over the sea
+  to the launch hex while the drowned rocks heave up one by one (staggered
+  easeOutBack, launch-side first), watched by a cutscene (`LODE_LINES`).
+- ☐ Song shell · ☐ Kite-thread spool.
+
+## Poll 30 — Hop & launch
+
+- ☑ **Springboard leaps** — a cracked stone springboard ringed with pointing
+  cairns marks each launch hex. Hops reuse the blast arc at short range
+  (~0.5s squash-and-tumble). Clicking ANY rock of the chain hops the wisp
+  rock-to-rock toward it; hops refuse to start anywhere off-chain.
+- ☐ Sling stones · ☐ Dandelion drift.
+
+## Poll 31 — Marketkeeper
+
+- ☑ **The Curio Peddler** — a hooded, lantern-eyed cousin of the wisp behind
+  paper crates and a patched awning; the free boon floats above a pedestal
+  hex, taken by stepping up.
+- ☐ The slumped automaton · ☐ Offering stones.
+
+## Poll 32 — Extra run events (all four selected)
+
+- ☑ **Falling stars** — every couple of minutes a star falls onto a
+  discovered region; its crash-light burns for a minute. Reach it for half a
+  heart — or, in the dread rings, a ward-charm.
+- ☑ **Storm surges** — while a stormfront still stands, it occasionally
+  surges into the frontier ring: a warning, then ten seconds of quickened
+  strikes wherever the wisp sails.
+- ☑ **Merchant leviathan** — a fourth serpent with a gift-stall howdah
+  roams the void, occasionally coiling alongside a discovered region's rim
+  (a horn announces it); step onto its lamp-lit hex for a boon.
+- ☑ **Cartographer bounties** — one landmark errand per unlocked ring,
+  shown under the location line; honoring it banks a boon redeemable at any
+  market.
+
+---
+
 ## Boss / combat hooks
 
 Entering a gate port fires `handleGate` in `main.js` before the blast begins —

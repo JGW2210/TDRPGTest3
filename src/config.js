@@ -428,6 +428,76 @@ export const WARD_LINES = [
   ],
 ];
 
+// ---------------------------------------------------------------------------
+// Land-trap atlas (Round 9): the one-maw-fits-all chomper is retired. Each
+// biome that keeps a chomper gets a personalised archetype + tint; biomes
+// absent here carry no chompers at all (snares/geysers/strikes only).
+// Rings 1-2 place chompers at ~30% of base density; the Maw Shallows is
+// boosted — it is the trap's homeland.
+export const TRAPS = {
+  mawshallows: { kind: 'toothmaw', tint: 0x4a2620, boost: 1.6 },
+  thornlight: { kind: 'flytrap', tint: 0x3f7a33 },
+  sporelight: { kind: 'flytrap', tint: 0x8f6ac2 },
+  silentorchard: { kind: 'flytrap', tint: 0x9a8f7a },
+  meridian: { kind: 'clamshell', tint: 0x2f9aa6 },
+  graveanchors: { kind: 'clamshell', tint: 0x5c6a7a },
+  unblinking: { kind: 'clamshell', tint: 0x8ca69c },
+  cog: { kind: 'gearpress', tint: 0xb08c50 },
+  bleachedchoir: { kind: 'bonejaw', tint: 0xe6ddc9 },
+  whisperdune: { kind: 'bonejaw', tint: 0xcbb377 },
+  umbral: { kind: 'bonejaw', tint: 0x473a66 },
+  lanternfen: { kind: 'lure', tint: 0xff9adb },
+  frostveil: { kind: 'lure', tint: 0xd6f4ff },
+  storm: { kind: 'lure', tint: 0xa89aff },
+};
+
+// Two lines for the lodestone chain-reveal cutscene.
+export const LODE_LINES = [
+  'The lodestone tears free of your hands and streaks out over the sea.',
+  'One by one the drowned rocks answer it, heaving up out of the dark.',
+];
+
+// Hermits of the void — one squats on each event-body at the end of a rock
+// chain. Two lines apiece, spoken every visit; a small gift on the first.
+export const HERMITS = [
+  {
+    name: 'the Tidewatcher', lines: [
+      'I count the breaths of the sun. Eleven thousand and four, since you ask.',
+      'Take this and go quietly. The tide dislikes being watched back.',
+    ],
+  },
+  {
+    name: 'the Unlit Lamplighter', lines: [
+      'I put the stars out, one by one, when their shift is done.',
+      'You glow too loudly, little wisp. Here — dim yourself somewhere safe.',
+    ],
+  },
+  {
+    name: 'the Collector of Corners', lines: [
+      'Every void has corners. I keep the spare ones here.',
+      'Mind how you leave. You are standing on my second-best corner.',
+    ],
+  },
+  {
+    name: 'the Backwards Pilgrim', lines: [
+      'I am walking to where I started. It is further than you would think.',
+      'You travel outward? Then we have already met, somewhere ahead.',
+    ],
+  },
+  {
+    name: 'the Moth-Warden', lines: [
+      'The moths carry my letters to the Hearthstar. None have come back.',
+      'Post nothing you love. Take this instead — it never writes.',
+    ],
+  },
+  {
+    name: 'the Half-Asleep Astronomer', lines: [
+      'I have nearly finished naming the dark between the stars.',
+      'The gap you sailed through is called Gerald. Treat him kindly.',
+    ],
+  },
+];
+
 export const GATE_RUNES = [
   { ch: 'ᚠ', name: 'Fehu' }, { ch: 'ᚢ', name: 'Uruz' }, { ch: 'ᚦ', name: 'Thurisaz' },
   { ch: 'ᚨ', name: 'Ansuz' }, { ch: 'ᚱ', name: 'Raidho' }, { ch: 'ᚲ', name: 'Kenaz' },

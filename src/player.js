@@ -89,7 +89,7 @@ export class Player {
 
   // Gate blast: hurled across the void between node islets. Same-ring
   // crossings ride the orbit line ('arc'); outward crossings are a straight
-  // shot ('line').
+  // shot ('line'); rock-chain leaps are short snappy 'hop's.
   startBlast(destKey, mode = 'line') {
     const from = this._hexPos(this.hexKey);
     const to = this._hexPos(destKey);
@@ -107,12 +107,17 @@ export class Player {
     } else {
       dist = from.distanceTo(to);
     }
+    const hop = mode === 'hop';
     this.blast = {
       from, to, destKey, t: 0, arc,
-      dur: THREE.MathUtils.clamp(0.7 + dist / 260, 0.9, 2.6),
-      height: arc
-        ? THREE.MathUtils.clamp(dist * 0.1, 10, 45)
-        : THREE.MathUtils.clamp(dist * 0.22, 16, 90),
+      dur: hop
+        ? THREE.MathUtils.clamp(0.3 + dist / 90, 0.45, 0.95)
+        : THREE.MathUtils.clamp(0.7 + dist / 260, 0.9, 2.6),
+      height: hop
+        ? 2.2 + dist * 0.12
+        : arc
+          ? THREE.MathUtils.clamp(dist * 0.1, 10, 45)
+          : THREE.MathUtils.clamp(dist * 0.22, 16, 90),
     };
     this.path = [];
     this.stepT = 0;

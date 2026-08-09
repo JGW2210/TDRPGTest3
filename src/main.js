@@ -8,7 +8,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
-import { HEX, toRunes, INTRO_LINES, WARD_LINES } from './config.js';
+import { HEX, toRunes, INTRO_LINES, WARD_LINES, LODE_LINES, HERMITS } from './config.js';
 import * as Hx from './hexmath.js';
 import { Rng } from './rng.js';
 import { generateWorld } from './worldgen.js';
@@ -79,18 +79,44 @@ const springRested = new Set(); // waystation springs already used this visit
 
 // ---------------------------------------------------------------- the run
 // Three papercraft hearts, halved. Lose the last half and the run ends —
-// rogue death: the next cosmos grows from a fresh seed.
-const run = { maxHalves: 6, halves: 6, invulnUntil: -1, dead: false };
+// rogue death: the next cosmos grows from a fresh seed. A ward-charm (from
+// a gift market, hermit, or fallen star) eats one hit in your stead; a
+// bounty voucher buys a boon at any market.
+const run = { maxHalves: 6, halves: 6, invulnUntil: -1, dead: false, charm: 0, voucher: 0 };
 
 function damage(n = 1, note = '') {
   if (run.dead || cutscene.active || player.blast) return;
   if (clockTime < run.invulnUntil) return;
   run.invulnUntil = clockTime + 1.15;
+  if (run.charm > 0) {
+    run.charm -= 1;
+    ui.renderCharm(run.charm);
+    ui.hurt();
+    flashLocation('ᛉ ✦ the ward-charm shatters in your stead ✦', 2400);
+    return;
+  }
   run.halves = Math.max(0, run.halves - n);
   ui.renderHearts(run.halves, run.maxHalves);
   ui.hurt();
   if (note) flashLocation(note, 2200);
   if (run.halves <= 0) die();
+}
+
+// A boon: mend a heart if hurt, else a ward-charm, else nothing is consumed.
+function grantBoon(what) {
+  if (run.halves < run.maxHalves) {
+    heal(2);
+    ui.announce('A Gift Freely Given', `♥ ᛫ ${what} mends you`);
+    return true;
+  }
+  if (run.charm < 1) {
+    run.charm = 1;
+    ui.renderCharm(run.charm);
+    ui.announce('A Gift Freely Given', 'ᛉ ᛫ a ward-charm — it will eat the next bite');
+    return true;
+  }
+  flashLocation('✦ you want for nothing ᛫ the gift keeps ✦', 2400);
+  return false;
 }
 
 function heal(n) {
@@ -160,6 +186,7 @@ function handleShardClaim(hex) {
   if (!ward || ward.dispelled) return;
   ward.dispelled = true;
   world.progress.frontier = ward.boundary + 1;
+  newBounty(world.progress.frontier); // the cartographer posts the next ring's errand
   const gate = world.gates[ward.gateId];
   for (const l of built.labelsByGate.get(gate.id) ?? []) l.decipher();
   built.claimShard(ward.id, () => {
@@ -179,18 +206,122 @@ function handleShardClaim(hex) {
   });
 }
 
-function handleShrine(hex) {
-  const s = world.shrines[hex.shrineId];
-  if (!s) return;
-  const destKey = hex.shrineRole === 'stone' ? s.padKey : s.stoneKey;
-  suppressGateKey = destKey;
-  if (!s.visited) {
-    s.visited = true;
-    ui.announce('An Astral Shrine', 'ᛊ ᛫ the stone hurls you skyward');
-  } else {
-    flashLocation('✦ the stone takes you ✦', 2000);
+// ---------------------------------------------------------------- rock chains
+// Hops may only begin from a chain node (the launch springboard, a hop-rock,
+// the dock, or a shrine pad). Clicking any node of the same chain hops the
+// wisp rock to rock toward it.
+let pendingHops = [];
+
+function tryHop(currentHex, currentKey, targetKey) {
+  if (currentHex.chainId === undefined) return false;
+  const chain = world.chains[currentHex.chainId];
+  if (!chain || chain.hidden) return false;
+  const nodes = chain.nodes;
+  const ci = nodes.indexOf(currentKey);
+  const ti = nodes.indexOf(targetKey);
+  if (ci === -1 || ti === -1 || ti === ci) return false;
+  const step = ti > ci ? 1 : -1;
+  pendingHops = [];
+  for (let i = ci + step; i !== ti + step; i += step) pendingHops.push(nodes[i]);
+  hopNext();
+  return true;
+}
+
+function hopNext() {
+  const next = pendingHops.shift();
+  if (next) player.startBlast(next, 'hop');
+}
+
+// The starlit lodestone: wakes its shrine chain — rocks heave up out of the
+// dark, launch-side first, while the cutscene watches.
+function handleLodestone(hex) {
+  const chain = world.chains[hex.lodeChain];
+  if (!chain || !chain.hidden) return;
+  chain.hidden = false;
+  for (const nk of chain.nodes) {
+    const nh = world.hexes.get(nk);
+    nh.blocked = false;
+    nh.hiddenChain = false;
   }
-  player.startBlast(destKey, 'line');
+  built.claimLodestone(chain.id, () => built.revealChain(chain.id));
+  const lh = world.hexes.get(chain.nodes[0]);
+  const lp = Hx.toWorld(lh.q, lh.r, HEX);
+  const ph = world.hexes.get(chain.nodes[chain.nodes.length - 1]);
+  const pp = Hx.toWorld(ph.q, ph.r, HEX);
+  cutscene.startDiscovery({
+    title: 'The Rocks Remember the Sky',
+    sub: 'ᛚ ᛫ a way opens, stone by stone',
+    lines: LODE_LINES,
+    focus: new THREE.Vector3((lp.x + pp.x) / 2, (ph.baseY || 0) * 0.45, (lp.z + pp.z) / 2),
+    dist: 120,
+    homeOf: () => new THREE.Vector3(player.mesh.position.x, 0, player.mesh.position.z),
+  });
+}
+
+function handleBoon(hex) {
+  const chain = world.chains[hex.chainId];
+  if (!chain) return;
+  if (!chain.claimed) {
+    if (grantBoon("the peddler's gift")) {
+      chain.claimed = true;
+      built.claimBoon(chain.id);
+    }
+  } else if (run.voucher > 0) {
+    if (grantBoon('the bounty boon')) {
+      run.voucher -= 1;
+      refreshBountyLine();
+    }
+  } else {
+    flashLocation('✦ the peddler has nothing more for you ✦', 2200);
+  }
+}
+
+function handleHermit(hex) {
+  const chain = world.chains[hex.chainId];
+  if (!chain) return;
+  const hermit = HERMITS[chain.hermit ?? 0];
+  if (!chain.visited) {
+    chain.visited = true;
+    if (run.halves < run.maxHalves) heal(2);
+    else if (run.charm < 1) { run.charm = 1; ui.renderCharm(run.charm); }
+  }
+  const hp = Hx.toWorld(hex.q, hex.r, HEX);
+  cutscene.startDiscovery({
+    title: hermit.name,
+    sub: '᛫ a hermit of the void ᛫',
+    lines: hermit.lines,
+    focus: new THREE.Vector3(hp.x, (hex.baseY || 0) + 3, hp.z),
+    dist: 28,
+    homeOf: () => new THREE.Vector3(
+      player.mesh.position.x,
+      world.hexes.get(player.hexKey)?.baseY || 0,
+      player.mesh.position.z
+    ),
+  });
+}
+
+// ---------------------------------------------------------------- bounties
+// The cartographer posts one landmark bounty per unlocked ring; honoring it
+// banks a boon redeemable at any gift market.
+const bounty = { active: null };
+
+function refreshBountyLine() {
+  if (bounty.active) ui.setBounty(`bounty ᛫ set foot on ${bounty.active.text}`);
+  else if (run.voucher > 0) ui.setBounty(`✶ ${run.voucher} boon${run.voucher > 1 ? 's' : ''} owed at any market`);
+  else ui.setBounty('');
+}
+
+function newBounty(ring) {
+  const cands = world.areas.filter((a) =>
+    a.ring === ring && !a.asteroid && !a.secret && built.landmarkSpots.has(a.id));
+  if (!cands.length) { bounty.active = null; refreshBountyLine(); return; }
+  const area = cands[(Math.random() * cands.length) | 0];
+  bounty.active = {
+    ring, areaId: area.id,
+    hexKey: built.landmarkSpots.get(area.id),
+    text: area.biome.landmark.name,
+  };
+  refreshBountyLine();
 }
 
 function handleAltar(hex) {
@@ -257,9 +388,23 @@ player.onEnterHex = (hex) => {
     damage(1, '✦ the maw bloom bites ✦');
   }
   if (hex.wardId !== undefined) handleShardClaim(hex);
+  if (hex.lodeChain !== undefined) handleLodestone(hex);
   if (hex.spring) handleSpring(hex);
   if (hex.shrineRole === 'altar') handleAltar(hex);
-  if ((hex.shrineRole === 'stone' || hex.shrineRole === 'pad') && k !== suppressGateKey) handleShrine(hex);
+  if (hex.chainRole === 'boon') handleBoon(hex);
+  if (hex.chainRole === 'hermit') handleHermit(hex);
+  if (bounty.active && k === bounty.active.hexKey) {
+    bounty.active = null;
+    run.voucher += 1;
+    refreshBountyLine();
+    ui.announce('Bounty Honored', '✶ ᛫ the cartographer credits you a boon — any market keeps it');
+  }
+  if (merchantVisit.state === 'parked' && k === merchantVisit.hexKey) {
+    grantBoon("the merchant's favor");
+    departMerchant();
+  }
+  // mid-chain: keep hopping toward the clicked rock
+  if (pendingHops.length && hex.chainId !== undefined) hopNext();
   if (hex.gateId !== null && k !== suppressGateKey) handleGate(hex, k);
 };
 
@@ -337,8 +482,15 @@ controls.onClick = (x, y) => {
   if (cutscene.advance()) return; // clicks progress the cutscene dialogue
   const key = hexKeyAt(x, y);
   if (!key) return;
+  const cur = world.hexes.get(player.hexKey);
+  if (!player.blast && cur && tryHop(cur, player.hexKey, key)) return;
   if (!player.requestMove(key)) {
-    flashLocation('✦ the currents do not reach there ✦');
+    const th = world.hexes.get(key);
+    if (th?.chainId !== undefined && !world.chains[th.chainId]?.hidden) {
+      flashLocation('✦ hop the void-rocks from their springboard ✦');
+    } else {
+      flashLocation('✦ the currents do not reach there ✦');
+    }
   }
 };
 
@@ -376,10 +528,29 @@ addEventListener('pointermove', (e) => {
     }
   } else if (hex.wardId !== undefined && !world.wards[hex.wardId].dispelled) {
     text = 'a stormheart shard crackles ᛫ seize it';
-  } else if (hex.shrineRole === 'stone') {
-    text = 'a teleportation stone hums ᛫ step in';
+  } else if (hex.lodeChain !== undefined && world.chains[hex.lodeChain]?.hidden) {
+    text = 'a starlit lodestone hums ᛫ seize it';
+  } else if (hex.chainRole === 'launch') {
+    text = 'a springboard stone ᛫ click a rock to hop the void';
+  } else if (hex.chainRole === 'hop') {
+    text = 'a hop-rock adrift ᛫ leap along the chain';
+  } else if (hex.chainRole === 'dock') {
+    text = 'the dock stone ᛫ the chain home begins here';
+  } else if (hex.chainRole === 'boon') {
+    const bc = world.chains[hex.chainId];
+    text = !bc.claimed
+      ? "the peddler's gift ᛫ step up and take it"
+      : run.voucher > 0
+        ? 'the pedestal waits ᛫ your bounty boon is owed'
+        : 'a bare pedestal ᛫ the gift is given';
+  } else if (hex.chainRole === 'hermit') {
+    text = 'a hermit of the void ᛫ approach';
+  } else if (hex.chainId !== undefined && world.chains[hex.chainId]?.kind === 'market') {
+    text = "the Curio Peddler's islet";
+  } else if (hex.chainId !== undefined && world.chains[hex.chainId]?.kind === 'event') {
+    text = "a hermit's curio, adrift";
   } else if (hex.shrineRole === 'pad') {
-    text = 'the way back down';
+    text = 'the shrine platform ᛫ hop the chain down';
   } else if (hex.shrineRole === 'altar') {
     text = world.shrines[hex.shrineId].claimed
       ? 'a spent altar'
@@ -396,14 +567,27 @@ addEventListener('pointermove', (e) => {
 
 // ---------------------------------------------------------------- storm strikes
 // From ring 2 outward, wandering lightning stalks whichever region holds the
-// wisp: a hex glows and crackles for a beat, then the bolt lands.
+// wisp: a hex glows and crackles for a beat, then the bolt lands. While a
+// stormfront still stands, it occasionally SURGES into the frontier ring —
+// a warning, then ten seconds of quickened strikes wherever the wisp sails.
 const strikes = { next: 10, live: [] };
+const surge = { next: 130, until: 0, areaId: -1 };
 
 function updateStrikes(t, dt) {
   const curArea = world.areas[world.hexes.get(player.hexKey).areaId];
   const dread = Math.min(1, curArea.biome.dread ?? 0);
-  if (curArea.ring >= 2 && t > strikes.next && !run.dead && !cutscene.active) {
-    strikes.next = t + 8 - 5 * dread + Math.random() * 3;
+  if (t > surge.next && world.progress.frontier < world.wards.length
+    && !run.dead && !cutscene.active) {
+    surge.next = t + 90 + Math.random() * 60;
+    if (curArea.ring === world.progress.frontier && curArea.discovered) {
+      surge.until = t + 10;
+      surge.areaId = curArea.id;
+      flashLocation('ᚢ ✦ the stormfront SURGES ✦ ware the sky', 2800);
+    }
+  }
+  const surging = t < surge.until && curArea.id === surge.areaId;
+  if ((curArea.ring >= 2 || surging) && t > strikes.next && !run.dead && !cutscene.active) {
+    strikes.next = t + (surging ? 1.1 : 8 - 5 * dread + Math.random() * 3);
     const keys = curArea.hexKeys;
     const key = keys[(Math.random() * keys.length) | 0];
     const h = world.hexes.get(key);
@@ -523,6 +707,148 @@ function updateHeartDrops(t, dt) {
   }
 }
 
+// ---------------------------------------------------------------- falling stars
+// Every couple of minutes a star falls onto a discovered region: a streak,
+// an impact glow, and a 60-second crash-light. Reach it in time for a mend —
+// or, out in the dread rings, a ward-charm.
+const stars = { next: 75, live: [] };
+
+function spawnFallingStar() {
+  const cands = world.areas.filter((a) => a.discovered && !a.asteroid);
+  if (!cands.length) return null;
+  const area = cands[(Math.random() * cands.length) | 0];
+  const keys = area.hexKeys.filter((k) => {
+    const h = world.hexes.get(k);
+    return !h.hazard && !h.baseY && h.gateId === null && h.wardId === undefined
+      && h.chainId === undefined && h.lodeChain === undefined && !h.spring;
+  });
+  if (!keys.length) return null;
+  const key = keys[(Math.random() * keys.length) | 0];
+  const h = world.hexes.get(key);
+  const p = Hx.toWorld(h.q, h.r, HEX);
+  const y0 = h.kind === 'isle' ? h.elev : 0.3;
+  const streak = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: heartGlowTex, color: 0xfff6e0, transparent: true, opacity: 0.95,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  }));
+  streak.scale.setScalar(7);
+  streak.renderOrder = 6;
+  streak.position.set(p.x + 80, 130, p.z + 50);
+  scene.add(streak);
+  const star = {
+    key, area: area.id, x: p.x, z: p.z, y0,
+    landAt: clockTime + 1.4, until: clockTime + 61.4,
+    streak, marker: null, ring: null,
+  };
+  stars.live.push(star);
+  return star;
+}
+
+function updateStars(t, dt) {
+  if (!run.dead && t > stars.next) {
+    stars.next = t + 100 + Math.random() * 60;
+    spawnFallingStar();
+  }
+  for (let i = stars.live.length - 1; i >= 0; i--) {
+    const s = stars.live[i];
+    if (s.streak) {
+      const u = Math.min(1, 1 - (s.landAt - t) / 1.4);
+      s.streak.position.set(s.x + 80 * (1 - u), s.y0 + 130 * (1 - u) * (1 - u), s.z + 50 * (1 - u));
+      if (u >= 1) {
+        scene.remove(s.streak);
+        s.streak = null;
+        built.burstAt(new THREE.Vector3(s.x, s.y0 + 1, s.z), 0xfff6e0, 12);
+        s.marker = new THREE.Sprite(new THREE.SpriteMaterial({
+          map: heartGlowTex, color: 0xfff0c9, transparent: true, opacity: 0.7,
+          blending: THREE.AdditiveBlending, depthWrite: false,
+        }));
+        s.marker.position.set(s.x, s.y0 + 1.2, s.z);
+        s.marker.scale.setScalar(5);
+        s.marker.renderOrder = 6;
+        scene.add(s.marker);
+        if (world.hexes.get(player.hexKey)?.areaId === s.area) {
+          flashLocation('★ ✦ a star has fallen nearby ✦', 2600);
+        }
+      }
+    } else if (s.marker) {
+      s.marker.material.opacity = (0.45 + 0.3 * Math.sin(t * 3.2)) * Math.min(1, (s.until - t) / 8);
+    }
+    const caught = !s.streak && player.hexKey === s.key && !player.blast && !run.dead;
+    if (caught) {
+      const area = world.areas[s.area];
+      if (area.ring >= 3 && run.charm < 1) {
+        run.charm = 1;
+        ui.renderCharm(run.charm);
+        ui.announce('Starlight, Bottled', 'ᛉ ᛫ the fallen star hardens into a ward-charm');
+      } else {
+        heal(1);
+        ui.announce('Starlight, Caught', '★ ᛫ half a heart mends in your hands');
+      }
+    }
+    if (caught || t > s.until) {
+      if (s.streak) scene.remove(s.streak);
+      if (s.marker) scene.remove(s.marker);
+      stars.live.splice(i, 1);
+    }
+  }
+}
+
+// ---------------------------------------------------------------- the merchant
+// Now and then the merchant leviathan surfaces alongside a discovered
+// region's rim, howdah lamp lit. Step onto the marked hex for its favor.
+const merchantVisit = { next: 210, state: 'idle', hexKey: null, until: 0, marker: null };
+
+function departMerchant() {
+  merchantVisit.state = 'idle';
+  merchantVisit.hexKey = null;
+  if (merchantVisit.marker) {
+    scene.remove(merchantVisit.marker);
+    merchantVisit.marker = null;
+  }
+  built.merchant.depart();
+}
+
+function updateMerchant(t) {
+  if (merchantVisit.state === 'idle' && t > merchantVisit.next && !run.dead) {
+    merchantVisit.next = t + 220 + Math.random() * 90;
+    const cands = world.areas.filter((a) => a.discovered && !a.asteroid);
+    if (!cands.length) return;
+    const area = cands[(Math.random() * cands.length) | 0];
+    const rims = area.hexKeys.filter((k) => {
+      const h = world.hexes.get(k);
+      if (h.kind !== 'water' || h.hazard || h.baseY) return false;
+      for (const d of Hx.DIRS) {
+        if (!world.hexes.has(Hx.key(h.q + d[0], h.r + d[1]))) return true;
+      }
+      return false;
+    });
+    if (!rims.length) return;
+    const key = rims[(Math.random() * rims.length) | 0];
+    const h = world.hexes.get(key);
+    const p = Hx.toWorld(h.q, h.r, HEX);
+    merchantVisit.state = 'coming';
+    merchantVisit.hexKey = key;
+    built.merchant.sendTo(p.x, p.z, () => {
+      merchantVisit.state = 'parked';
+      merchantVisit.until = clockTime + 120;
+      merchantVisit.marker = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: heartGlowTex, color: 0xffd9a8, transparent: true, opacity: 0.55,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      }));
+      merchantVisit.marker.position.set(p.x, 2.2, p.z);
+      merchantVisit.marker.scale.setScalar(5);
+      merchantVisit.marker.renderOrder = 6;
+      scene.add(merchantVisit.marker);
+      ui.announce('A Horn Sounds Across the Void', '᛫ the merchant leviathan surfaces ᛫ seek its lamp');
+    });
+  } else if (merchantVisit.state === 'parked') {
+    if (merchantVisit.marker) {
+      merchantVisit.marker.material.opacity = 0.4 + 0.25 * Math.sin(t * 2.6);
+    }
+    if (t > merchantVisit.until) departMerchant();
+  }
+}
+
 // ---------------------------------------------------------------- keys
 addEventListener('keydown', (e) => {
   if (e.key === 'f' || e.key === 'F') controls.focus(player.mesh.position);
@@ -541,14 +867,19 @@ addEventListener('resize', () => {
 });
 
 // dev/debug handle (also used by automated smoke tests)
-window.__astral = { world, player, controls, built, cutscene, run, damage, heal };
+window.__astral = {
+  world, player, controls, built, cutscene, run, damage, heal,
+  debug: { spawnFallingStar, bounty, newBounty, merchantVisit, surge, grantBoon, tryHop },
+};
 
 // ---------------------------------------------------------------- opening
 ui.setSeed(seed, world.title);
 ui.renderHearts(run.halves, run.maxHalves);
-ui.fadeHintLater();
+ui.renderCharm(run.charm);
+newBounty(0); // the cartographer's first errand, close to home
 const startArea = areaOf(world.hexes.get(world.startKey));
 lastAreaId = startArea.id;
+ui.fadeHintLater();
 discoverArea(startArea, false); // home is known from the first breath — no cutscene
 setLocationFor(world.hexes.get(world.startKey));
 setTimeout(() => ui.announce(world.title, `${toRunes('the astral reaches')} ᛫ seed ${seed}`, 5200), 600);
@@ -583,6 +914,8 @@ function frame() {
   }
   updateStrikes(t, dt);
   updateHeartDrops(t, dt);
+  updateStars(t, dt);
+  updateMerchant(t);
   // the wisp blinks through its invulnerability window
   player.mesh.visible = run.dead || t >= run.invulnUntil || Math.sin(t * 34) > -0.35;
 

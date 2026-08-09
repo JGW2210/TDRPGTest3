@@ -53,35 +53,76 @@ paper sun in a dark aetherial papercraft cosmos. Everything is seeded
   horned silhouettes (`makeHerald`, NOT fogged) — pace each sealed
   boundary near its gate and fade out on dispel. Criterion is pluggable:
   boss tallies later.
-- **HAZARDS (Round 8)** — assigned in worldgen after the start hex, scaled
-  by `biome.dread`, skipped on gate/ward/shrine/spring/platform hexes and a
-  4-hex cradle around the start. `hex.hazard = {kind, period, phase, ...}`:
-  `snare` (isle glyph, one-shot — instanced mesh, `built.triggerSnare`
-  zero-scales instance + its fog base), `geyser` (water, telegraphed cycle
-  — `built.geyserErupting(key, t)`), `maw` (shore chomper —
-  `built.mawSnapping(key, t)`). Damage applies on enter AND while standing
-  (frame check in main). STORM STRIKES are runtime-only (`updateStrikes` in
-  main): ring ≥ 2, random hex in the wisp's region, 0.95s crackle telegraph
-  then bolt.
-- **HEARTS (Round 8)** — `run` state in main.js: `maxHalves` (6 start, cap
-  12), `halves`, `invulnUntil` (1.15s window + wisp blink), `dead`. Any
-  hazard = half a heart. `ui.renderHearts` draws papercraft split-heart SVGs
-  top-left; damage = red `#hurtflash` + hearts shake. Zero → `die()`:
-  announce, `#deathfade`, then reload with a NEW RANDOM SEED (rogue death).
-  `damage()` is inert during cutscenes and blasts (landing is safe-by-design:
-  you always arrive on hazard-free gate rock).
-- **ASTRAL SHRINES (Round 8)** — ~10 shrines, half the regions per ring
-  (rings 1-4, never asteroid/secret). Each = a 7-hex teleportation stone
-  islet in the sea (placed via `placeNode`, `hex.shrineRole='stone'`, stone
-  circle from `makeShrineStone`) + a FLOATING PLATFORM of ~9 astral hexes
-  (`hex.astral`, pale violet) hung at `hex.baseY` ≈ 58-80 on free grid
-  columns past the rim (the global grid is single-layer — cells + full
-  neighborhood must be empty; fringe growth skips baseY hexes). A light
-  beam links stone → platform. Stone ⇄ pad teleports reuse the blast
-  (`'line'`) + `suppressGateKey`. The altar (`shrineRole='altar'`,
-  `makeAltar`) is SILENT for now and grants a heart container (+2 max
-  halves, filled). `player._hexY`, hover marker, and path dots all add
-  `baseY`; sail-follow lifts the camera target to the destination's baseY.
+- **HAZARDS (Round 8, trap atlas Round 9)** — assigned in worldgen after
+  the start hex, scaled by `biome.dread`, skipped on
+  gate/ward/shrine/chain/lodestone/spring/platform hexes and a 4-hex cradle
+  around the start. `hex.hazard = {kind, period, phase, ...}`: `snare`
+  (isle glyph, one-shot — instanced mesh, `built.triggerSnare` zero-scales
+  instance + its fog base), `geyser` (water, telegraphed cycle —
+  `built.geyserErupting(key, t)`), `maw` (shore chomper —
+  `built.mawSnapping(key, t)`). CHOMPERS COME FROM THE TRAP ATLAS
+  (`TRAPS` in config.js): six archetypes (toothmaw / flytrap / clamshell /
+  gearpress / bonejaw / lure) built by `makeChomper(kind).setOpen(o)`,
+  mapped per biome with tints; unmapped biomes (chimewood, cinder,
+  echoverge, secrets) carry none; rings 1-2 at ~30% density; Maw Shallows
+  boosted. Damage applies on enter AND while standing (frame check in
+  main). STORM STRIKES are runtime-only (`updateStrikes` in main): ring ≥ 2
+  (or during a SURGE), random hex in the wisp's region, 0.95s crackle
+  telegraph then bolt.
+- **HEARTS (Round 8) + CHARM/VOUCHER (Round 9)** — `run` state in main.js:
+  `maxHalves` (6 start, cap 12), `halves`, `invulnUntil` (1.15s window +
+  wisp blink), `dead`, `charm` (0/1 — a ward-charm eats one hit before
+  hearts do, `ui.renderCharm`), `voucher` (bounty boons owed). Any hazard
+  = half a heart. `grantBoon()` = mend if hurt, else charm, else nothing
+  consumed. `ui.renderHearts` draws papercraft split-heart SVGs top-left;
+  damage = red `#hurtflash` + hearts shake. Zero → `die()`: announce,
+  `#deathfade`, then reload with a NEW RANDOM SEED (rogue death).
+  `damage()` is inert during cutscenes and blasts (landing is
+  safe-by-design: ports and chain nodes are hazard-free).
+- **RUN EVENTS (Round 9, all runtime-only in main.js)** — FALLING STARS
+  (`updateStars`/`spawnFallingStar`): every ~2min a star streaks onto a
+  discovered region, 60s crash-light; catching it = half a heart, or a
+  ward-charm in rings 3+. STORM SURGES (in `updateStrikes`, `surge` state):
+  while any ward stands, occasional 10s bursts of quickened strikes in the
+  frontier ring where the wisp sails. MERCHANT LEVIATHAN
+  (`updateMerchant` + `built.merchant.sendTo/depart`): a fourth serpent
+  with a howdah roams a 470-radius circle, occasionally parks at a
+  discovered region's rim water hex; stepping on its marked hex grants a
+  boon. CARTOGRAPHER BOUNTIES (`newBounty`/`refreshBountyLine` + `#bounty`
+  line): one landmark errand per unlocked ring (uses
+  `built.landmarkSpots`); honoring banks a voucher redeemable at any
+  market pedestal.
+- **ASTRAL SHRINES (Round 8, chain access Round 9)** — ~10 shrines, half
+  the regions per ring (rings 1-4, never asteroid/secret). Each = a
+  FLOATING PLATFORM of ~9 astral hexes (`hex.astral`, pale violet) hung at
+  `hex.baseY` ≈ 58-80 on free grid columns past the rim (single-layer grid:
+  cells + full neighborhood must be empty; fringe growth skips baseY
+  hexes). THE TELEPORT STONES ARE GONE: access is a HIDDEN ROCK-HOP CHAIN
+  helixing up around the platform column (launch springboard on the rim
+  below, 5 hop-rocks at a tight fixed orbit, ending on the pad), blocked +
+  `hiddenChain` until the region's STARLIT LODESTONE — perched on the FAR
+  rim, straight across the region (`hex.lodeChain`) — is claimed
+  (`handleLodestone`: unblock, `built.claimLodestone` flight,
+  `built.revealChain` staggered surfacing, cutscene w/ `LODE_LINES`). The
+  altar (`shrineRole='altar'`, `makeAltar`) is SILENT for now and grants a
+  heart container (+2 max halves, filled). `player._hexY`, hover marker,
+  and path dots all add `baseY`; sail-follow lifts the camera target to
+  the destination's baseY.
+- **ROCK-HOP CHAINS (Round 9)** — `world.chains[]` (`kind`:
+  'shrine'|'market'|'event'; `nodes` = [launchKey, ...hopKeys, dock/pad];
+  `destKeys`, `boonKey`, `dockKey` for attachments). ~40% of non-secret,
+  non-asteroid regions grow a VISIBLE attachment chain: launch springboard
+  (`makeSpringboard`, `chainRole='launch'`) → 2-4 isolated hop-rocks
+  bowing over the void (baseY 2.5-7) → a 5-cell orbiting islet: either the
+  CURIO PEDDLER's gift market (`makeMarketStall` + `makeBoonPedestal`,
+  `chainRole='boon'` — one free boon per run via `grantBoon`; bounty
+  vouchers also redeem here) or a HERMIT (`makeHermit` + a drifting curio;
+  `HERMITS` in config, dialogue via cutscene, gift on first visit). HOPS
+  START ONLY FROM CHAIN NODES: `tryHop` in main walks `chain.nodes`
+  sequentially with `player.startBlast(key, 'hop')` (short snappy arc);
+  clicking any node while on a node hops rock-to-rock toward it. Hop cells
+  are claimed by `claimIsolated` (cell + all 6 neighbors empty) because
+  BFS is elevation-blind — adjacency would let the wisp sail aboard.
 - **Heart-sprites** — runtime-only (main.js `updateHeartDrops`): up to 3
   drifting hearts over discovered non-asteroid seas, heal half on catch,
   fade after 90s.
@@ -114,18 +155,18 @@ paper sun in a dark aetherial papercraft cosmos. Everything is seeded
 
 | File | Role |
 | --- | --- |
-| `config.js` | HEX size, RINGS radii, STORM + STORM_BOUNDARIES + WARD_LINES, biome tables, ASTEROID_BIOMES, runes |
-| `worldgen.js` | Seeded gen: layout → regions → gates → storm wards + shard perches → shrines (stone islet + baseY platform) → springs → start hex → hazards |
-| `buildWorld.js` | All meshes/décor/animators + runtime API (igniteGate, claimShard, setStormFrontier, triggerSnare, geyserErupting, mawSnapping, claimAltar, bounceIsle, boingGate, wobbleBody, revealArea) |
+| `config.js` | HEX size, RINGS radii, STORM + STORM_BOUNDARIES + WARD_LINES, TRAPS atlas, HERMITS, LODE_LINES, biome tables, ASTEROID_BIOMES, runes |
+| `worldgen.js` | Seeded gen: layout → regions → gates → storm wards → shrines (baseY platform + hidden helix chain + lodestone) → attachment chains (markets/hermits) → springs → start hex → hazards (trap atlas) |
+| `buildWorld.js` | All meshes/décor/animators + runtime API (igniteGate, claimShard, setStormFrontier, triggerSnare, geyserErupting, mawSnapping, claimAltar, revealChain, claimLodestone, claimBoon, merchant, burstAt, landmarkSpots, bounceIsle, boingGate, wobbleBody, revealArea) |
 | `bodies.js` | sculptBody: bespoke per-body geometry archetypes |
-| `structures.js` | makeDolmenGate (startLit/ignite), makeShrineStone, makeAltar, makeHerald, makeLandmark |
+| `structures.js` | makeDolmenGate (startLit/ignite), makeChomper (6 trap archetypes, setOpen), makeSpringboard, makeMarketStall, makeBoonPedestal, makeHermit, makeAltar, makeHerald, makeLandmark, makeShrineStone (retired, unused) |
 | `cutscene.js` | Camera glide + click-through dialogue (discovery + gate ignition) |
 | `decorSets.js` | buildDecorLibrary: ~40 merged decor geometries |
 | `materials.js` | Water shader, energy veil (uIgnite), storm sheet shader, canvas textures |
-| `player.js` | Click-to-sail BFS stepping, `startBlast(destKey, 'arc'\|'line')`, baseY-aware heights |
+| `player.js` | Click-to-sail BFS stepping, `startBlast(destKey, 'arc'\|'line'\|'hop')`, baseY-aware heights |
 | `controls.js` | LMB-drag glide, RMB-drag rotate, wheel zoom (max 3600) |
-| `main.js` | Wiring: run state (hearts/damage/death), hazard checks, storm strikes, heart-sprites, shard/shrine/altar/spring handlers, hover+path UI, `window.__astral` |
-| `pathfind.js`, `hexmath.js`, `rng.js`, `labels.js`, `ui.js` | Support (ui: renderHearts/hurt/deathFade) |
+| `main.js` | Wiring: run state (hearts/charm/voucher/death), hop logic (tryHop/pendingHops), hazard checks, storm strikes + surges, heart-sprites, falling stars, merchant visits, bounties, shard/lodestone/altar/boon/hermit/spring handlers, hover+path UI, `window.__astral` |
+| `pathfind.js`, `hexmath.js`, `rng.js`, `labels.js`, `ui.js` | Support (ui: renderHearts/renderCharm/setBounty/hurt/deathFade) |
 
 ## Dev workflow
 
@@ -171,8 +212,19 @@ paper sun in a dark aetherial papercraft cosmos. Everything is seeded
   do the same or they'll render at sea level under the platform.
 - Shrine platform cells occupy free grid columns just OUTSIDE the region
   rim with an empty 1-cell margin (checked at placement) — pathfinding
-  cannot reach them except by teleport; keep that margin or BFS will
-  walk into the sky.
+  cannot reach them except along the hop chain; keep that margin or BFS
+  will walk into the sky. Hop-rocks enforce the same via `claimIsolated`
+  (cell + all six neighbors empty): BFS is elevation-blind, so ANY
+  adjacency to walkable cells is a bridge.
+- `pickRim` MUST skip `baseY` cells — freshly committed platforms/islets
+  live in `area.hexKeys` and out-score every true rim hex on
+  alignment+distance, which silently detaches launches from the region
+  (this was a real Round 9 bug; the smoke test now asserts launch
+  attachment).
+- Hidden shrine chains are pulled OUT of the isle fog byArea groups
+  (`chainHiddenIdx`) and zero-scaled at build; `revealChain` restores
+  them. They are also `blocked` in the hex map until the lodestone claim
+  clears it — both halves matter (visibility and pathability).
 - FOG REGISTRATION IS MANDATORY: any new per-region visual must join
   `instanceGroups` (mesh + base matrices + byArea) or `regFx(areaId, obj)`.
   Deliberately unregistered: leviathans, void debris/curios, secret
@@ -228,6 +280,16 @@ maws, storm strikes; papercraft hearts with rogue death on a new seed;
 astral shrine platforms + teleport stones + heart-container altars;
 waystation springs; wandering heart-sprites).
 
+→ Round 9 (Polls 25-32: the trap atlas — six personalised chomper
+archetypes, rings 1-2 thinned; rock-hop chains — launch springboards,
+isolated hop-rocks, Curio Peddler gift markets and void hermits on
+orbiting islets; shrine teleport stones replaced by lodestone-revealed
+helix chains; ward-charms + bounty vouchers; falling stars, storm surges,
+the merchant leviathan, cartographer bounties).
+
 Dev branch convention: work happens on a `claude/...` branch, PR'd to
 `main` and merged; this round's branch is
-`claude/roguelike-progression-world-bvsh25`.
+`claude/roguelike-progression-world-bvsh25`. NOTE: GitHub Pages deploys
+from `main` only — dev branches must NOT be added to the deploy workflow
+triggers (the `github-pages` environment rejects them, and via the shared
+concurrency group a failing dev run can cancel the real deploy).
