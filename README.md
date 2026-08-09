@@ -20,9 +20,12 @@ for a different cosmos, or press **R** in-game.
 
 ## Deployment (GitHub Pages)
 
-Pushes to `main` or `claude/roguelike-progression-world-bvsh25` run
-`.github/workflows/deploy.yml`, which builds the site and publishes it to
-GitHub Pages at `https://<user>.github.io/TDRPGTest3/`.
+Pushes to `main` run `.github/workflows/deploy.yml`, which builds the site
+and publishes it to GitHub Pages at `https://<user>.github.io/TDRPGTest3/`.
+Only `main` may deploy: the `github-pages` environment's protection rules
+reject other branches, so dev branches are not workflow triggers (their runs
+would fail at the deploy job and — via the shared `pages` concurrency group —
+could cancel a legitimate `main` deploy).
 
 One-time setup if the first run can't enable Pages by itself:
 repo **Settings → Pages → Source: GitHub Actions**, then re-run the workflow

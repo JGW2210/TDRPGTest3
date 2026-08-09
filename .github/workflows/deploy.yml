@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - claude/roguelike-progression-world-bvsh25
   workflow_dispatch:
 
 permissions:
