@@ -39,6 +39,32 @@ export const ui = {
     announceTimer = setTimeout(() => box.classList.remove('show'), holdMs);
   },
 
+  // Cutscene dialogue: one floating line at a time, advanced by click.
+  // The line shimmers in as runes resolving into letters, Twin-Tongue style.
+  dialogue(text) {
+    const box = el('dialogue');
+    const textEl = el('dialogue-text');
+    clearInterval(this._dialogueTimer);
+    const chars = text.split('');
+    let progress = 0;
+    const steps = 16;
+    textEl.textContent = toRunes(text);
+    box.classList.add('show');
+    this._dialogueTimer = setInterval(() => {
+      progress++;
+      const p = progress / steps;
+      textEl.textContent = chars
+        .map((c, i) => (i / chars.length < p ? c : toRunes(c)))
+        .join('');
+      if (progress >= steps) clearInterval(this._dialogueTimer);
+    }, 45);
+  },
+
+  hideDialogue() {
+    clearInterval(this._dialogueTimer);
+    el('dialogue').classList.remove('show');
+  },
+
   hover(text, x, y) {
     const h = el('hover');
     h.textContent = text;

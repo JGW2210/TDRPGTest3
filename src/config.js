@@ -291,6 +291,107 @@ export const SECRET_BIOMES = [
   },
 ];
 
+// Two lines of arrival dialogue per region, spoken by the cartographer's
+// whisper during the discovery cutscene (advanced by click).
+export const INTRO_LINES = {
+  emberglass: [
+    "The Hearthstar's warmth reaches even here, where glass grows like coral.",
+    'Every tide leaves embers on the shore. None of them cool.',
+  ],
+  chimewood: [
+    'Listen — the crystals ring each other awake as you pass.',
+    'Sailors tune their hearts to the Silverstream, and are never lost again.',
+  ],
+  sporelight: [
+    'Spores drift upward like slow rain that changed its mind.',
+    'The mires glow kindly. Do not ask what feeds them.',
+  ],
+  cinder: [
+    'Ash settles on the water here, and keeps burning.',
+    'Pyrrhus smoulders with old grudges; its barrows remember the fire.',
+  ],
+  meridian: [
+    'Thalassa drowned long ago, and kept on growing.',
+    'The Undertow pulls all reckonings toward the deep.',
+  ],
+  cog: [
+    'Every isle here keeps its own stubborn time.',
+    'Horolith turns, and the Quicksilver Race runs like a wound spring.',
+  ],
+  whisperdune: [
+    'The dunes murmur your name. Best not to answer.',
+    'Mirages sail these waters. So, now, do you.',
+  ],
+  frostveil: [
+    'The Voidmelt is warmer than the air. Barely.',
+    'Nivalis hides behind its veil and watches the ice bloom.',
+  ],
+  thornlight: [
+    "The bramble grows toward a light that isn't there yet.",
+    'Verdanth overgrew its own name. Given time, it will overgrow yours.',
+  ],
+  graveanchors: [
+    'Every anchor here was dropped with a prayer. None were answered.',
+    'The Stygian Drift is slow, but it forgets nothing.',
+  ],
+  storm: [
+    "Fulmen's storms have circled a thousand years without making landfall.",
+    "Ride the Galestream lightly. It already knows where you're going.",
+  ],
+  lanternfen: [
+    'The fen lights lanterns for travelers it has taken a liking to.',
+    'Dusk never quite finishes here. Vesperine prefers it so.',
+  ],
+  echoverge: [
+    'Say nothing. The Verge will say it back, and mean it differently.',
+    'Resonar split in an age before echoes; the halves still answer each other.',
+  ],
+  bleachedchoir: [
+    'The choir bleached white waiting for a note that never came.',
+    'Cantus sings through its hollows when the void breathes right.',
+  ],
+  silentorchard: [
+    'The orchard is silent. The fruit is not asleep.',
+    'Pomarium bears every season at once, and harvests none.',
+  ],
+  umbral: [
+    'Your shadow arrived here before you did.',
+    "Nokturn casts light's opposite. Step carefully between the terraces.",
+  ],
+  mawshallows: [
+    'The tide here swallows. The shallows are its teeth.',
+    'Fauces hungers slowly. It has never once been full.',
+  ],
+  unblinking: [
+    'Ophthal has watched your whole approach. It is watching now.',
+    'The Lidless Calm ripples only when something below is pleased.',
+  ],
+  shatterreef: [
+    'Bare stone, thin dark, and the long way between.',
+    'Rest here, traveler. Nothing else does.',
+  ],
+  anvilshoal: [
+    'Something vast was forged out here, and the anvil left behind.',
+    'The rubble still rings faintly when struck.',
+  ],
+  orphanteeth: [
+    'The jaw of something that once bit stars.',
+    'Walk the teeth. Mind the gaps.',
+  ],
+  weepingcomet: [
+    'Lacrimae grieves for a sun it never met.',
+    'The Tearstream never freezes. Grief keeps it moving.',
+  ],
+  hollowmoon: [
+    'Cavum is empty, and empty things ring loudest.',
+    "The Echo Tide answers bells that haven't rung yet.",
+  ],
+  unlitstar: [
+    'Nihil shines darkness the way other stars shine light.',
+    'You have found the place the light forgot on purpose.',
+  ],
+};
+
 export const GATE_RUNES = [
   { ch: 'ᚠ', name: 'Fehu' }, { ch: 'ᚢ', name: 'Uruz' }, { ch: 'ᚦ', name: 'Thurisaz' },
   { ch: 'ᚨ', name: 'Ansuz' }, { ch: 'ᚱ', name: 'Raidho' }, { ch: 'ᚲ', name: 'Kenaz' },

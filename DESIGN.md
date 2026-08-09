@@ -303,6 +303,31 @@ seams — is retired.
 
 ---
 
+# Round 7 — The Fog and the First Landfall
+
+Direct feature notes (no poll this round):
+
+- **Fog of war** — every region except home starts unseen: its tiles,
+  decor, gates, landmark, veil, labels, and astral body are invisible
+  (instances scaled to nothing, objects hidden). Only the void's own
+  furniture — stars, belts, comets, curios, leviathans, and the secrets'
+  alignment-surge pillars — shows from the start. Fogged gate doorways are
+  unclickable; fogged tiles can't be hovered or sailed to.
+- **Discovery cutscene** — first landfall after a gate blast lifts the fog:
+  tiles pop in with a staggered elastic swell while the camera leaves the
+  wisp, levels out, and glides to the region's celestial body. The
+  cartographer's whisper delivers two arrival lines per region
+  (`INTRO_LINES` in config.js), each advanced by click and shimmering from
+  runes into letters; the final click sends the camera home to the wisp.
+  The home region reveals silently at start.
+- **Transparency layering fix** — planet rings (and every transparent
+  dressing: halos, storm-bands, dust veils, gate glows, ambient-veil
+  particles, lock pillars) now carry renderOrder 2-3, above the sea's
+  ghost-sheet (renderOrder 1). Previously the sheet drew after them and
+  overpainted them — rings appeared to sink beneath the hexes.
+
+---
+
 ## Boss / combat hooks
 
 Entering a gate port fires `handleGate` in `main.js` before the riverflight

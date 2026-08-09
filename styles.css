@@ -97,6 +97,43 @@ html, body {
 }
 #hover.show { opacity: 0.95; }
 
+/* ---- cutscene dialogue ---- */
+#dialogue {
+  position: absolute;
+  bottom: 12%;
+  left: 0;
+  right: 0;
+  text-align: center;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+#dialogue.show { opacity: 1; }
+
+#dialogue-text {
+  margin: 0 auto;
+  max-width: 720px;
+  font-size: 23px;
+  font-style: italic;
+  letter-spacing: 0.1em;
+  line-height: 1.5;
+  color: #eef0ff;
+  text-shadow:
+    0 2px 0 rgba(43, 38, 74, 0.9),
+    0 0 18px rgba(160, 170, 255, 0.35);
+}
+
+#dialogue-hint {
+  margin-top: 12px;
+  font-size: 13px;
+  letter-spacing: 0.3em;
+  color: #9aa3cc;
+  animation: dialogue-pulse 1.6s ease-in-out infinite;
+}
+@keyframes dialogue-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.9; }
+}
+
 /* ---- bottom hint + seed ---- */
 #hint {
   position: absolute;
