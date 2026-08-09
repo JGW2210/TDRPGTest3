@@ -6,7 +6,7 @@
 // islets on facing rims that blast the player across the void.
 
 import {
-  HEX, RINGS, SECRET_RADIUS, BIOMES, SECRET_BIOMES, GATE_RUNES,
+  HEX, RINGS, SECRET_RADIUS, BIOMES, SECRET_BIOMES, ASTEROID_BIOMES, GATE_RUNES,
   WORLD_ADJ, WORLD_NOUN,
 } from './config.js';
 import { Rng, makeNoise2D } from './rng.js';
@@ -34,7 +34,7 @@ export function generateWorld(seedStr) {
   function mkArea(biome, ring, pos, spoke = null) {
     const a = {
       id: areas.length, biome, ring, pos, spoke,
-      hexKeys: [], secret: !!biome.secretHint,
+      hexKeys: [], secret: !!biome.secretHint, asteroid: !!biome.asteroid,
       angle: Math.atan2(pos.z, pos.x),
       hexRadius: 13, // scoring scale for port picking
     };
@@ -70,6 +70,27 @@ export function generateWorld(seedStr) {
     return mkArea(b, 5, pos, sp);
   });
 
+  // asteroid waystations: small bare-rock reefs adrift in some of the gaps
+  // between the outer ring's neighboring regions, threaded into its gate chain
+  const outerSorted = ringGroups[ringGroups.length - 1].slice().sort((a, b) => a.angle - b.angle);
+  const asteroidByGap = new Map(); // gap index i = between outerSorted[i] and [i+1]
+  {
+    const outerRadius = RINGS[RINGS.length - 1].radius;
+    const gapPicks = rng.shuffle([...Array(outerSorted.length).keys()])
+      .slice(0, ASTEROID_BIOMES.length);
+    gapPicks.forEach((gi, i) => {
+      const a = outerSorted[gi], b = outerSorted[(gi + 1) % outerSorted.length];
+      let da = b.angle - a.angle;
+      while (da <= 0) da += TAU;
+      const ang = a.angle + da / 2;
+      const rad = outerRadius + rng.range(-25, 25);
+      const area = mkArea(ASTEROID_BIOMES[i], RINGS.length, {
+        x: Math.cos(ang) * rad, z: Math.sin(ang) * rad,
+      });
+      asteroidByGap.set(gi, area);
+    });
+  }
+
   // ---------------------------------------------------------------- regions
   function setHex(q, r, rec) {
     const k = Hx.key(q, r);
@@ -81,10 +102,43 @@ export function generateWorld(seedStr) {
 
   // Grow one region: a connected water blob wrapped around the body's
   // nestling gap, then islands grown inside it.
+  // Asteroid waystations: one connected knot of bare rock, no sea at all.
+  function generateAsteroidRegion(area) {
+    const c = area.pos;
+    const ch = Hx.toHex(c.x, c.z, HEX);
+    const target = 10 + rng.int(8);
+    area.hexRadius = 5;
+    const localKey = (q, r) => q + ',' + r;
+    const cells = new Set([localKey(ch.q, ch.r)]);
+    const frontier = [[ch.q, ch.r]];
+    let guard = 0;
+    while (cells.size < target && guard++ < 4000) {
+      const [fq, fr] = frontier[rng.int(frontier.length)];
+      const dir = Hx.DIRS[rng.int(6)];
+      const nq = fq + dir[0], nr = fr + dir[1];
+      const nk = localKey(nq, nr);
+      if (cells.has(nk) || Hx.dist(nq, nr, ch.q, ch.r) > 4) continue;
+      if (hexes.get(Hx.key(nq, nr)) !== undefined) continue;
+      cells.add(nk);
+      frontier.push([nq, nr]);
+    }
+    for (const k of cells) {
+      const [q, r] = k.split(',').map(Number);
+      const rec = setHex(q, r, {
+        kind: 'isle', areaId: area.id, elev: 0.35 + rng.float() * 0.9,
+        islandId: null, rock: true,
+        flow: [0, 0], faint: false, blocked: false, levi: false,
+        gateId: null, lockKey: null,
+      });
+      if (rec.areaId === area.id) area.hexKeys.push(Hx.key(q, r));
+    }
+  }
+
   function generateRegion(area) {
     const c = area.pos;
     const ch = Hx.toHex(c.x, c.z, HEX);
-    const clear = area.biome.bodyKind === 'sun' ? 4 : 3;
+    // giants need a wider nestling gap than moons
+    const clear = area.biome.bodyKind === 'sun' || area.biome.bodySize >= 10 ? 4 : 3;
 
     const nIslands = area.secret ? 3 : 3 + rng.int(3);
     const islandSizes = [];
@@ -208,7 +262,10 @@ export function generateWorld(seedStr) {
     }
   }
 
-  for (const area of areas) generateRegion(area);
+  for (const area of areas) {
+    if (area.asteroid) generateAsteroidRegion(area);
+    else generateRegion(area);
+  }
 
   // ---------------------------------------------------------------- gates
   // A gate is a pair of 7-hex rocky node islets on facing rims; entering a
@@ -282,13 +339,19 @@ export function generateWorld(seedStr) {
         }
       }
       // guarantee the islet touches the region: pave the line from the rim
+      // (asteroid reefs pave stone — they have no sea to pave with)
       for (const step of Hx.line(rim.q, rim.r, cc.q, cc.r)) {
         const sk = Hx.key(step.q, step.r);
         if (!hexes.has(sk)) {
           const sp = Hx.toWorld(step.q, step.r, HEX);
           const vx = sp.x - area.pos.x, vz = sp.z - area.pos.z;
           const vl = Math.hypot(vx, vz) || 1;
-          setHex(step.q, step.r, {
+          setHex(step.q, step.r, area.asteroid ? {
+            kind: 'isle', areaId: area.id, elev: 0.3 + rng.float() * 0.3,
+            islandId: null, rock: true,
+            flow: [0, 0], faint: false, blocked: false, levi: false,
+            gateId: null, lockKey: null,
+          } : {
             kind: 'water', areaId: area.id, elev: 0, islandId: null, rock: false,
             flow: [vx / vl, vz / vl], faint: false, blocked: false, levi: false,
             gateId: null, lockKey: null,
@@ -345,8 +408,18 @@ export function generateWorld(seedStr) {
 
   for (let ri = 1; ri < ringGroups.length; ri++) {
     const g = ringGroups[ri].slice().sort((p, q2) => p.angle - q2.angle);
+    const isOuter = ri === ringGroups.length - 1;
     for (let i = 0; i < g.length; i++) {
-      if (g.length > 1) addGate(g[i], g[(i + 1) % g.length], 'ring');
+      if (g.length <= 1) continue;
+      const nxt = g[(i + 1) % g.length];
+      // an asteroid waystation in this gap splits the crossing in two hops
+      const ast = isOuter ? asteroidByGap.get(i) : undefined;
+      if (ast) {
+        addGate(g[i], ast, 'ring');
+        addGate(ast, nxt, 'ring');
+      } else {
+        addGate(g[i], nxt, 'ring');
+      }
     }
     // exactly ONE passage outward per ring boundary, at a random crossing
     const inner = rng.pick(ringGroups[ri - 1]);
@@ -371,7 +444,9 @@ export function generateWorld(seedStr) {
   // Stormwalls: three ordinary gates are sealed on their departure node;
   // the becalming rune-stone stands on an island of the same region.
   const lockableGates = rng.shuffle(
-    gates.filter((g) => !areas[g.a].secret && !areas[g.b].secret && areas[g.a].ring > 0)
+    gates.filter((g) =>
+      !areas[g.a].secret && !areas[g.b].secret &&
+      !areas[g.a].asteroid && !areas[g.b].asteroid && areas[g.a].ring > 0)
   ).slice(0, 3);
   for (const gate of lockableGates) {
     const sideA = areas[gate.a];
@@ -395,7 +470,7 @@ export function generateWorld(seedStr) {
   const rumorGate = rumorSecret && gates.find((g) => g.a === rumorSecret.id || g.b === rumorSecret.id);
   if (rumorGate) {
     const outerPort = rumorGate.a === rumorSecret.id ? rumorGate.portB : rumorGate.portA;
-    const keyAreas = rng.shuffle(areas.filter((a) => !a.secret && a.ring >= 2)).slice(0, 3);
+    const keyAreas = rng.shuffle(areas.filter((a) => !a.secret && !a.asteroid && a.ring >= 2)).slice(0, 3);
     const keyKeys = [];
     for (const ka of keyAreas) {
       const isles = isleKeysOf(ka);

@@ -92,6 +92,7 @@ function discoverArea(area, loud = true) {
   if (area.discovered) return;
   area.discovered = true;
   built.labelsByArea.get(area.id)?.decipher();
+  built.labelsByLandmark.get(area.id)?.decipher();
   built.wobbleBody(area.id);
   if (loud) {
     const sub = area.secret ? `${area.biome.body} ᛫ a secret held by the dark` : area.biome.body;

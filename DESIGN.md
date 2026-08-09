@@ -232,6 +232,77 @@ Direct rework notes: the walkable web is gone.
 
 ---
 
+# Round 6 — Ruin Gates, Sculpted Worlds & the Wider Rim
+
+A visual-identity pass, chosen by poll. Alongside the ballots, two direct
+notes were implemented: ring-kind gates now FACE THE ORBIT'S TANGENT (signed
+toward their twin, matching the arc the blast flies) instead of pointing
+straight at the far gate; and the outer rings widened — ring 3 grew to 5
+regions, ring 4 to 5, with small bare-rock **asteroid waystations** threaded
+into ring 4's gate chain (the Shatter Reef, the Anvil Shoal, the Orphaned
+Teeth — no astral body, no sea, two dolmen doorways each).
+
+## Poll 13 — Gate form (ancient ruins + energy field)
+
+- ☑ **Dolmen Waygate** — two massive rough-hewn stone pillars carry a cracked
+  capstone lintel; a shimmering energy veil hangs in the doorway. Rubble,
+  fallen shards, moss, and the warden's rune carved into both pillar faces.
+- ☐ Twin Obelisks · ☐ Broken Archway · ☐ Sunken Henge.
+
+**Implemented:** `structures.js makeDolmenGate` — hash-roughened stone (no
+vertex tearing), merged ink hulls, `makeVeilMaterial` aurora-band field,
+half-buried thresholds, two pacing warning glyphs. The old torus warden
+rings, swirl iris, and pylons are gone.
+
+## Poll 14 — Astral body rework
+
+- ☑ **Sculpted archetypes** — bespoke geometry per body; sizes re-spread
+  (~4–13) so giants dwarf moons; jagged noise only where a theme wants it.
+- ☐ Smooth worlds, loud features · ☐ Exaggerated scale drama.
+
+**Implemented:** `bodies.js sculptBody` — crystal (Aeolith), budding
+(Mycora), cracked (Pyrrhus), sea giant (Thalassa, 11), machined drums
+(Horolith), dune-banded (Sarrakh), cratered (Nivalis/Ossuar/Vesperine),
+mossy (Verdanth), oblate banded gas giant with a great-spot (Fulmen, 13),
+lidless eye that rarely blinks (Ophthal), split husk (Cantus), night shard
+(Nokturn), twinned lobes with a glowing core (Resonar), petrified orchard
+(Pomarium), fanged maw (Fauces), teardrop (Lacrimae), open bell-shell with a
+swinging clapper (Cavum), black-rayed inverse sun (Nihil). The old shared
+jagged icosahedron — which per-vertex noise was literally tearing at the
+seams — is retired.
+
+## Poll 15 — Region differentiation layers (all four selected)
+
+- ☑ **Bespoke decor sets** — every biome furnishes its shores from its own
+  hand-built kit (`decorSets.js`): ember-fins, chime-bells, spore caps, cog
+  stacks, rust anchors, bone arches, eyestalks, tooth-rocks…
+- ☑ **Signature landmarks** — one named structure per region
+  (`structures.js makeLandmark`): the First Hearth, the Great Chime, the
+  Stopped Clock, the Lidless Idol, the Baleen Arch… labeled, runic until the
+  region is discovered.
+- ☑ **Terrain identity** — per-biome island shaping profiles (terrace /
+  dune / crag / mesa / smooth), two-tone island tops mottled by noise, and
+  shoreline hexes tinted by their water's glow.
+- ☑ **Ambient veils** — per-region particle weather: rising embers and
+  spores, falling snow and petals, wandering fireflies, sliding mists,
+  near-still watching motes.
+
+## Poll 16 — New biomes (1× ring 3, 2× ring 4)
+
+- ☐ Glass, Wax & Thread · ☐ Rust, Silk & Salt
+- ☑ **Echo, Orchard & Maw** —
+  **The Echo Verge** (Resonar, the Answering Dark): a still slate-blue sea,
+  terraced twin-toned isles, paired echo-stones, rings of answered light
+  rippling from the split planet.
+  **The Silent Orchard** (Pomarium, the Fruiting Dark): a pale fallow-milk
+  sea, petrified orchard trees, glowing fallen fruit, petals shed into the
+  dark that never land.
+  **The Maw Shallows** (Fauces, the Hungering Hollow): a swallowing red
+  tide, crag isles studded with tooth-rocks and rib-bones, a planet that is
+  mostly mouth, slowly chewing.
+
+---
+
 ## Boss / combat hooks
 
 Entering a gate port fires `handleGate` in `main.js` before the riverflight

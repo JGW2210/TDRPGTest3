@@ -172,39 +172,46 @@ export function makeWaterMaterial(runeTex, {
   });
 }
 
-// Pastel pinwheel iris inside each gate port ring.
-export function makeSwirlMaterial(color) {
+// The shimmering energy field hung between a dolmen gate's two pillars:
+// slow aurora bands, a fine vertical shimmer, soft rectangular edge fade,
+// and a gentle ripple along the plane so it hangs like woven light.
+export function makeVeilMaterial(color) {
   return new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
     side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
     uniforms: {
       uTime: { value: 0 },
       uColor: { value: new THREE.Color(color) },
     },
     vertexShader: /* glsl */ `
       varying vec2 vUv;
+      uniform float uTime;
       void main() {
-        vUv = uv - 0.5;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        vUv = uv;
+        vec3 p = position;
+        p.z += sin(uv.y * 6.0 + uTime * 1.7) * 0.09 * uv.y;
+        p.x += sin(uv.y * 9.0 - uTime * 1.1) * 0.04;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
       }
     `,
     fragmentShader: /* glsl */ `
       uniform float uTime;
       uniform vec3 uColor;
       varying vec2 vUv;
-      const vec3 INK = vec3(0.21, 0.18, 0.31);
       void main() {
-        float r = length(vUv) * 2.0;
-        if (r > 1.0) discard;
-        float ang = atan(vUv.y, vUv.x);
-        float spiral = sin(ang * 4.0 - uTime * 1.2 + r * 6.0);
-        float blade = step(0.0, spiral);
-        vec3 col = mix(uColor * 0.85, uColor * 1.1, blade);
-        float line = 1.0 - smoothstep(0.0, 0.25, abs(spiral));
-        col = mix(col, INK, line * 0.3);
-        float glow = smoothstep(1.0, 0.3, r);
-        gl_FragColor = vec4(col, glow * 0.85);
+        float x = vUv.x, y = vUv.y;
+        // soft fade at the stone edges, harder at the threshold
+        float edge = smoothstep(0.0, 0.14, x) * smoothstep(1.0, 0.86, x)
+                   * smoothstep(0.0, 0.07, y) * smoothstep(1.0, 0.78, y);
+        // slow aurora folds drifting sideways
+        float bands = 0.5 + 0.5 * sin(x * 8.0 + sin(y * 6.0 + uTime * 1.2) * 1.4 + uTime * 0.8);
+        // fine vertical shimmer rising through the field
+        float shimmer = 0.5 + 0.5 * sin(y * 24.0 - uTime * 2.8 + sin(x * 13.0) * 1.6);
+        vec3 col = uColor * (0.5 + 0.5 * bands) + vec3(0.55, 0.62, 0.95) * shimmer * 0.16;
+        float alpha = edge * (0.30 + 0.28 * bands + 0.14 * shimmer);
+        gl_FragColor = vec4(col, alpha);
       }
     `,
   });
