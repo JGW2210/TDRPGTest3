@@ -8,13 +8,14 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
-import { HEX, toRunes } from './config.js';
+import { HEX, toRunes, INTRO_LINES } from './config.js';
 import * as Hx from './hexmath.js';
 import { Rng } from './rng.js';
 import { generateWorld } from './worldgen.js';
 import { buildWorld } from './buildWorld.js';
 import { AstralControls } from './controls.js';
 import { Player } from './player.js';
+import { Cutscene } from './cutscene.js';
 import { ui } from './ui.js';
 import { updateLabels } from './labels.js';
 
@@ -65,6 +66,8 @@ const controls = new AstralControls(renderer.domElement, camera);
 controls.target.copy(player.mesh.position);
 controls.dist = 120;
 
+const cutscene = new Cutscene(controls);
+
 // ---------------------------------------------------------------- state
 const announcedGates = new Set();
 let suppressGateKey = null; // the port we just landed on — don't bounce back
@@ -91,12 +94,22 @@ function flashLocation(text, ms = 1800) {
 function discoverArea(area, loud = true) {
   if (area.discovered) return;
   area.discovered = true;
+  // the fog lifts: tiles pop in staggered while the cutscene watches the body
+  built.revealArea(area.id, loud);
   built.labelsByArea.get(area.id)?.decipher();
   built.labelsByLandmark.get(area.id)?.decipher();
   built.wobbleBody(area.id);
   if (loud) {
-    const sub = area.secret ? `${area.biome.body} ᛫ a secret held by the dark` : area.biome.body;
-    ui.announce(area.biome.area, sub);
+    const b = area.biome;
+    const sub = area.secret ? `${b.body} ᛫ a secret held by the dark` : b.body;
+    const bodyY = b.bodyKind === 'sun' ? 20 : b.bodySize + 7;
+    cutscene.startDiscovery({
+      title: b.area, sub,
+      lines: INTRO_LINES[b.key],
+      focus: new THREE.Vector3(area.pos.x, bodyY, area.pos.z),
+      dist: THREE.MathUtils.clamp(b.bodySize * 6, 50, 110),
+      homeOf: () => new THREE.Vector3(player.mesh.position.x, 0, player.mesh.position.z),
+    });
   }
 }
 
@@ -221,8 +234,12 @@ const pointer = new THREE.Vector2();
 function hexKeyAt(clientX, clientY) {
   pointer.set((clientX / innerWidth) * 2 - 1, -(clientY / innerHeight) * 2 + 1);
   raycaster.setFromCamera(pointer, camera);
+  // fogged regions' tiles are zero-scaled (unhittable); fogged gate
+  // doorways must be filtered out by hand
   const hits = raycaster.intersectObjects(
-    [built.waterMesh, built.isleMesh, ...built.portHitboxes], false
+    [built.waterMesh, built.isleMesh,
+      ...built.portHitboxes.filter((hb) => world.areas[hb.userData.areaId].discovered)],
+    false
   );
   if (!hits.length) return null;
   const hit = hits[0];
@@ -232,6 +249,7 @@ function hexKeyAt(clientX, clientY) {
 }
 
 controls.onClick = (x, y) => {
+  if (cutscene.advance()) return; // clicks progress the cutscene dialogue
   const key = hexKeyAt(x, y);
   if (!key) return;
   const hex = world.hexes.get(key);
@@ -249,6 +267,11 @@ let hoverCooldown = 0;
 addEventListener('pointermove', (e) => {
   if (hoverCooldown > 0) return;
   hoverCooldown = 0.08;
+  if (cutscene.active) {
+    ui.hideHover();
+    hoverMarker.visible = false;
+    return;
+  }
   const key = hexKeyAt(e.clientX, e.clientY);
   if (!key) {
     ui.hideHover();
@@ -297,14 +320,13 @@ addEventListener('resize', () => {
 });
 
 // dev/debug handle (also used by automated smoke tests)
-window.__astral = { world, player, controls };
+window.__astral = { world, player, controls, built, cutscene };
 
 // ---------------------------------------------------------------- opening
 ui.setSeed(seed, world.title);
 ui.fadeHintLater();
 const startArea = areaOf(world.hexes.get(world.startKey));
-startArea.discovered = true;
-built.labelsByArea.get(startArea.id)?.decipher();
+discoverArea(startArea, false); // home is known from the first breath — no cutscene
 setLocationFor(world.hexes.get(world.startKey));
 setTimeout(() => ui.announce(world.title, `${toRunes('the astral reaches')} ᛫ seed ${seed}`, 5200), 600);
 
@@ -328,10 +350,12 @@ function frame() {
   hoverMarker.material.opacity = 0.55 + 0.35 * Math.sin(t * 4);
 
   // gentle follow while sailing or mid-blast, unless the player is steering
-  // (follow the ground shadow of the arc, not the arc's height)
-  if (player.isMoving && performance.now() / 1000 - controls.lastPanTime > 2.5) {
+  // or a cutscene owns the camera (follow the ground shadow, not arc height)
+  if (player.isMoving && !cutscene.active
+    && performance.now() / 1000 - controls.lastPanTime > 2.5) {
     controls.focus(new THREE.Vector3(player.mesh.position.x, 0, player.mesh.position.z));
   }
+  cutscene.update(dt);
   if (locOverrideUntil && t > locOverrideUntil) {
     locOverrideUntil = 0;
     setLocationFor(world.hexes.get(player.hexKey));

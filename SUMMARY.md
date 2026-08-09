@@ -57,6 +57,20 @@ paper sun in a dark aetherial papercraft cosmos. Everything is seeded
   aetherial slate-blue, patchy along its drifting light-bands, wobbling at
   its own slower/taller rate. Two rings of unwalkable fringe hexes fade
   each region's rim into the void (render-only, not in the hex map).
+- **Fog of war** (`buildWorld` fog section): every region starts unseen —
+  instances zero-scaled via per-area registries (`instanceGroups`,
+  `objectsByArea`), objects hidden. `built.revealArea(areaId, animated)`
+  pops a region in (staggered easeOutBack swell). Main reveals the start
+  region instantly; `discoverArea` reveals the rest. Fogged port hitboxes
+  are filtered out of the raycast in `main.js hexKeyAt`.
+- **Discovery cutscene** (`cutscene.js` + `ui.dialogue`): on first landfall
+  the camera glides to the region's body (pitch levels to 0.5, slow yaw
+  drift), `INTRO_LINES[biome.key]` advance by click, final click glides
+  home. `controls.onClick` routes to `cutscene.advance()` while active.
+- **Render-order contract**: the sea draws base (0) then ghost-sheet (1);
+  ANY transparent thing above the water needs renderOrder ≥ 2 or the sheet
+  overpaints it (bodyGroup children get 3 via a traverse; veils/lock fx 2;
+  labels 30).
 - **Leviathans**: two serpents loop the void between orbits; a third
   wheels around the Unlit Star's hidden crossing as its discovery hint.
 - **UI**: non-modular floating runic text; Twin-Tongue deciphering (runes
@@ -75,6 +89,7 @@ paper sun in a dark aetherial papercraft cosmos. Everything is seeded
 | `buildWorld.js` | All meshes/décor/animators + runtime API (updateFlags, releaseLock, bounceIsle, boingGate, wobbleBody) |
 | `bodies.js` | sculptBody: bespoke per-body geometry archetypes (tear-free position-hash displacement) |
 | `structures.js` | makeDolmenGate + makeLandmark (17 landmark kinds) |
+| `cutscene.js` | Discovery cutscene: camera glide + click-through dialogue |
 | `decorSets.js` | buildDecorLibrary: ~40 merged decor geometries, glow/tint flags |
 | `materials.js` | Water shader (layer options: lift/ghost/unify/wobble/fade), energy veil, canvas textures |
 | `player.js` | Click-to-sail BFS stepping, squashy hops, `startBlast(destKey, 'arc'|'line')` |

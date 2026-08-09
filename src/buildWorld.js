@@ -117,6 +117,7 @@ export function buildWorld(world, rng) {
   // soft rims: two rings of unwalkable ghost-hexes dissolve each region's
   // edge into the void instead of a hard border (visual only — never in the
   // hex map, so they can't be clicked or sailed)
+  const fringeInfo = {}; // mesh/base/byArea, captured for the fog of war
   {
     const fringe = [];
     const seen = new Set(world.hexes.keys());
@@ -169,6 +170,13 @@ export function buildWorld(world, rng) {
     fringeGeo.setAttribute('aFlow', new THREE.InstancedBufferAttribute(fFlow, 4));
     fringeGeo.setAttribute('aDepth', new THREE.InstancedBufferAttribute(fDepth, 1));
     group.add(fringeMesh);
+    fringeInfo.mesh = fringeMesh;
+    fringeInfo.base = fringeMesh.instanceMatrix.array.slice();
+    fringeInfo.byArea = new Map();
+    fringe.forEach((f, i) => {
+      if (!fringeInfo.byArea.has(f.area.id)) fringeInfo.byArea.set(f.area.id, []);
+      fringeInfo.byArea.get(f.area.id).push(i);
+    });
     animators.push((t) => {
       fringeMat.uniforms.uTime.value = t;
       fringeMat.uniforms.uBreath.value = waterMat.uniforms.uBreath.value;
@@ -236,6 +244,30 @@ export function buildWorld(world, rng) {
 
   const isleBaseMatrices = isleMesh.instanceMatrix.array.slice();
 
+  // ------------------------------------------------------------ fog of war
+  // Every region starts unseen: its instances scaled to nothing, its objects
+  // hidden — until revealArea() pops it into being. Only the void's own
+  // furniture (stars, belts, comets, curios, leviathans, secret-surge
+  // pillars) is visible from the start.
+  const objectsByArea = new Map(); // areaId -> Object3D[] toggled by reveal
+  const regFx = (areaId, obj) => {
+    if (!objectsByArea.has(areaId)) objectsByArea.set(areaId, []);
+    objectsByArea.get(areaId).push(obj);
+  };
+  const instanceGroups = []; // { mesh, base, byArea: Map<areaId, indices> }
+  const byAreaOf = (keys) => {
+    const m = new Map();
+    keys.forEach((k, i) => {
+      const id = world.hexes.get(k).areaId;
+      if (!m.has(id)) m.set(id, []);
+      m.get(id).push(i);
+    });
+    return m;
+  };
+  instanceGroups.push({ mesh: waterMesh, base: waterMesh.instanceMatrix.array.slice(), byArea: byAreaOf(waterKeys) });
+  instanceGroups.push({ mesh: isleMesh, base: isleBaseMatrices, byArea: byAreaOf(isleKeys) });
+  instanceGroups.push({ mesh: fringeInfo.mesh, base: fringeInfo.base, byArea: fringeInfo.byArea });
+
   // ------------------------------------------------------------ island decor
   // Each biome furnishes its shores from its own bespoke set (decorSets.js).
   // Landmark hexes are chosen first so each region's signature structure
@@ -279,7 +311,7 @@ export function buildWorld(world, rng) {
       const col = spec.glow
         ? tone(jitterColor(area.biome.decor.color, rng, 0.08), 0.95, 0.75)
         : tone(jitterColor(spec.tint ?? area.biome.island.side, rng, 0.1), 0.8, 0.9);
-      (decorPlacements[kind] ??= []).push({ m: DUMMY.matrix.clone(), c: col });
+      (decorPlacements[kind] ??= []).push({ m: DUMMY.matrix.clone(), c: col, a: area.id });
     }
   }
   for (const [kind, list] of Object.entries(decorPlacements)) {
@@ -288,11 +320,15 @@ export function buildWorld(world, rng) {
       ? new THREE.MeshBasicMaterial()
       : new THREE.MeshToonMaterial({ gradientMap });
     const mesh = new THREE.InstancedMesh(spec.geo, mat, list.length);
+    const byArea = new Map();
     list.forEach((it, i) => {
       mesh.setMatrixAt(i, it.m);
       mesh.setColorAt(i, it.c);
+      if (!byArea.has(it.a)) byArea.set(it.a, []);
+      byArea.get(it.a).push(i);
     });
     group.add(mesh);
+    instanceGroups.push({ mesh, base: mesh.instanceMatrix.array.slice(), byArea });
   }
 
   // ------------------------------------------------------------ landmarks
@@ -308,12 +344,14 @@ export function buildWorld(world, rng) {
     obj.position.set(p.x, h.elev, p.z);
     obj.rotation.y = rng.angle();
     group.add(obj);
+    regFx(areaId, obj);
     const label = makeLabel({
       title: lm.name, color: '#c9d4ef', scale: 16, startHidden: true,
     });
     label.sprite.material.opacity = 0.8;
     label.sprite.position.set(p.x, h.elev + 9.5, p.z);
     group.add(label.sprite);
+    regFx(areaId, label.sprite);
     labelsByLandmark.set(areaId, label);
   }
 
@@ -700,6 +738,7 @@ export function buildWorld(world, rng) {
         }
 
         // alignment surge: at peak tide a pillar of light marks each secret
+        // (deliberately NOT fogged — it is the hint that something is there)
         const pillar = new THREE.Mesh(
           new THREE.CylinderGeometry(1.8, 1.8, 220, 10, 1, true),
           new THREE.MeshBasicMaterial({
@@ -708,11 +747,19 @@ export function buildWorld(world, rng) {
           })
         );
         pillar.position.set(area.pos.x, 100, area.pos.z);
+        pillar.renderOrder = 3;
         group.add(pillar);
         secretFx.push({ pillar });
       }
     }
+    // transparent dressings (rings, halos, storm-bands, dust, glow discs)
+    // must draw above the sea's ghost-sheet (renderOrder 1); they sit far
+    // above the water, but without an order the sheet overpaints them
+    bodyGroup.traverse((o) => {
+      if (o.material?.transparent && o.renderOrder < 2) o.renderOrder = 3;
+    });
     group.add(bodyGroup);
+    regFx(area.id, bodyGroup);
 
     const label = makeLabel({
       title: b.area,
@@ -723,6 +770,7 @@ export function buildWorld(world, rng) {
     });
     label.sprite.position.set(area.pos.x, y + b.bodySize + 16, area.pos.z);
     group.add(label.sprite);
+    regFx(area.id, label.sprite);
     labelsByArea.set(area.id, label);
   }
 
@@ -772,6 +820,7 @@ export function buildWorld(world, rng) {
       });
       label.sprite.position.set(p.x, 12, p.z);
       group.add(label.sprite);
+      regFx(h.areaId, label.sprite);
       gateLabels.push(label);
 
       const hit = new THREE.Mesh(
@@ -781,10 +830,12 @@ export function buildWorld(world, rng) {
       hit.visible = false;
       hit.position.set(p.x, 4.5, p.z);
       hit.userData.hexKey = port.key;
+      hit.userData.areaId = h.areaId; // fogged ports are not clickable
       group.add(hit);
       portHitboxes.push(hit);
 
       group.add(g);
+      regFx(h.areaId, g);
       groupsForGate.push(g);
     }
     labelsByGate.set(gate.id, gateLabels);
@@ -807,6 +858,7 @@ export function buildWorld(world, rng) {
         })
       );
       cone.position.set(p.x, 4, p.z);
+      cone.renderOrder = 2;
       pillars.add(cone);
       animators.push((t, dt) => {
         cone.rotation.y += dt * 2.2;
@@ -814,6 +866,7 @@ export function buildWorld(world, rng) {
       });
     }
     group.add(pillars);
+    regFx(world.hexes.get(lock.wallKeys[0]).areaId, pillars);
 
     const stones = new Map();
     for (const kk of lock.keyKeys) {
@@ -826,14 +879,17 @@ export function buildWorld(world, rng) {
       stone.position.set(p.x, kh.elev + 1.6, p.z);
       stone.rotation.y = rng.angle();
       group.add(stone);
+      regFx(kh.areaId, stone);
       const glyphMat = new THREE.SpriteMaterial({
         map: makeGlyphTexture(lock.rune.ch, '#efe4ff'),
         transparent: true, opacity: 0.95, depthWrite: false, toneMapped: false,
       });
       const glyph = new THREE.Sprite(glyphMat);
       glyph.scale.setScalar(2.4);
+      glyph.renderOrder = 2;
       glyph.position.set(p.x, kh.elev + 4.6, p.z);
       group.add(glyph);
+      regFx(kh.areaId, glyph);
       const bob = rng.angle();
       animators.push((t) => {
         glyph.position.y = kh.elev + 4.6 + Math.sin(t * 1.6 + bob) * 0.35;
@@ -928,7 +984,9 @@ export function buildWorld(world, rng) {
       opacity: veil.opacity, depthWrite: false, blending: THREE.AdditiveBlending,
     });
     const pts = new THREE.Points(geo, mat);
+    pts.renderOrder = 2; // above the water sheets, which would overpaint them
     group.add(pts);
+    regFx(area.id, pts);
     const spd = veil.speed ?? 1;
     const style = veil.style;
     animators.push((t) => {
@@ -1304,6 +1362,42 @@ export function buildWorld(world, rng) {
     }
   }
 
+  // ---- fog-of-war reveal
+  // Instances grow in from nothing with a staggered elastic pop; objects
+  // simply appear (the body then jelly-wobbles via wobbleBody).
+  const revealedAreas = new Set();
+  const activeReveals = [];
+  const REVEAL_DUR = 0.9;
+  const REVEAL_STAGGER = 0.8;
+
+  function setAreaScale(areaId, sFn) {
+    for (const g2 of instanceGroups) {
+      const idx = g2.byArea.get(areaId);
+      if (!idx) continue;
+      const arr = g2.mesh.instanceMatrix.array;
+      for (const i of idx) {
+        const s = sFn(i);
+        const o = i * 16; // scale the 3x3 basis, keep the translation
+        for (let e = 0; e < 12; e++) arr[o + e] = g2.base[o + e] * s;
+      }
+      g2.mesh.instanceMatrix.needsUpdate = true;
+    }
+  }
+
+  function revealArea(areaId, animated = true) {
+    if (revealedAreas.has(areaId)) return;
+    revealedAreas.add(areaId);
+    for (const o of objectsByArea.get(areaId) ?? []) o.visible = true;
+    if (animated) activeReveals.push({ areaId, t: 0 });
+    else setAreaScale(areaId, () => 1);
+  }
+
+  // everything begins beneath the fog; main reveals the start region
+  for (const area of world.areas) {
+    setAreaScale(area.id, () => 0);
+    for (const o of objectsByArea.get(area.id) ?? []) o.visible = false;
+  }
+
   // ---- squash & bounce
   const isleBounces = [];
   const springs = [];
@@ -1327,6 +1421,22 @@ export function buildWorld(world, rng) {
     waterMat.uniforms.uBreath.value = breath;
     waterMatTop.uniforms.uTime.value = t;
     waterMatTop.uniforms.uBreath.value = breath;
+    for (let i = activeReveals.length - 1; i >= 0; i--) {
+      const r = activeReveals[i];
+      r.t += dt;
+      if (r.t >= REVEAL_DUR + REVEAL_STAGGER) {
+        setAreaScale(r.areaId, () => 1);
+        activeReveals.splice(i, 1);
+      } else {
+        setAreaScale(r.areaId, (ii) => {
+          const d = ((((ii * 2654435761) >>> 0) % 1000) / 1000) * REVEAL_STAGGER;
+          const u = THREE.MathUtils.clamp((r.t - d) / REVEAL_DUR, 0, 1);
+          if (u >= 1) return 1;
+          const q = u - 1; // easeOutBack: swell past full, settle
+          return 1 + 2.70158 * q * q * q + 1.70158 * q * q;
+        });
+      }
+    }
     for (const fn of animators) fn(t, dt);
     for (const fx of secretFx) {
       const surge = THREE.MathUtils.smoothstep(breath, 0.86, 1.0);
@@ -1371,6 +1481,6 @@ export function buildWorld(world, rng) {
     waterMesh, isleMesh, waterKeys, isleKeys, portHitboxes,
     labelsByArea, labelsByGate, labelsByLandmark,
     updateFlags, releaseLock, dimKeyStone,
-    bounceIsle, boingGate, wobbleBody,
+    bounceIsle, boingGate, wobbleBody, revealArea,
   };
 }

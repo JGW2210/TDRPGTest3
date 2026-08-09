@@ -72,6 +72,12 @@ any mount path.
   rings of unwalkable ghost-hexes dissolve each region's rim into the void.
   The movement grid lives in UI instead: a glowing outline on the hovered hex
   and a trail of dots marking the queued route.
+- **The fog and the first landfall** — only your home region is visible at
+  first; every other region hides beneath the fog of war. Step through a
+  gate and, as you land, the new region assembles out of the dark — tiles
+  swelling into place — while the camera glides to its astral body and the
+  cartographer's whisper delivers its arrival lines, advanced click by
+  click, before returning you to your wisp.
 - **The tide** — the sun breathes on a slow cycle. Waters brighten at high
   tide, and *faint tide-paths* into the outer dark only glimmer into view at
   the peak.
@@ -126,6 +132,7 @@ archipelago shapes, river routes, gate runes, lock positions).
 | `src/buildWorld.js` | Turns world data into instanced meshes + cosmos décor |
 | `src/bodies.js` | Sculpted astral-body archetypes (eye, maw, gas giant, husk…) |
 | `src/structures.js` | Dolmen waygates + per-region signature landmarks |
+| `src/cutscene.js` | Discovery cutscene: camera glide + click-through dialogue |
 | `src/decorSets.js` | Bespoke per-biome island decor geometry library |
 | `src/materials.js` | Water/veil shaders, canvas textures |
 | `src/player.js` | The Star-Pilgrim wisp: click-to-sail, BFS pathing, ripples |

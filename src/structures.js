@@ -128,6 +128,7 @@ export function makeDolmenGate({ rng, gradientMap, glyphTex, glowTex, animators 
     for (const face of [1, -1]) {
       const plate = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 1.3), plateMat);
       plate.position.set(side * 2.9, 3.25, face * 1.18);
+      plate.renderOrder = 2; // above the water sheets
       if (face < 0) plate.rotation.y = Math.PI;
       g.add(plate);
     }
@@ -146,6 +147,7 @@ export function makeDolmenGate({ rng, gradientMap, glyphTex, glowTex, animators 
   }));
   under.position.set(0, 3, 0);
   under.scale.setScalar(7.5);
+  under.renderOrder = 3;
   g.add(under);
 
   // two warning glyphs still slowly pacing their rounds
@@ -153,6 +155,7 @@ export function makeDolmenGate({ rng, gradientMap, glyphTex, glowTex, animators 
   for (let i = 0; i < 2; i++) {
     const s = new THREE.Sprite(plateMat.clone());
     s.scale.setScalar(1.4);
+    s.renderOrder = 3;
     g.add(s);
     orbiters.push(s);
   }
@@ -182,6 +185,7 @@ export function makeLandmark(kind, biome, rng, { gradientMap, glowTex, animators
       blending: THREE.AdditiveBlending, depthWrite: false,
     }));
     s.scale.setScalar(scale);
+    s.renderOrder = 3; // above the water sheets
     return s;
   };
   const glow = biome.decor.color;
@@ -428,6 +432,7 @@ export function makeLandmark(kind, biome, rng, { gradientMap, glowTex, animators
         })
       );
       thread.position.y = 2.5;
+      thread.renderOrder = 2;
       g.add(thread);
       animators.push((t) => { thread.material.opacity = 0.18 + 0.16 * Math.sin(t * 1.1); });
       break;
