@@ -1,4 +1,5 @@
-// Shader materials and generated canvas textures for the Ink & Starlight look.
+// Shader materials and generated canvas textures for the Paper-Craft Cutout
+// look: flat pastels, ink outlines, layered wiggly-cut paper waves.
 
 import * as THREE from 'three';
 import { RUNE_CHARS, HEX } from './config.js';
@@ -26,8 +27,18 @@ export function makeRuneTexture(rng, { count = 170, size = 1024 } = {}) {
   return tex;
 }
 
-// Astral water: per-instance color + flow vector; rune glyphs drift along the
-// current, edges glow, the whole sea breathes with the sun's tide.
+// Stepped shading ramp shared by all MeshToonMaterials.
+export function makeToonGradient() {
+  const data = new Uint8Array([150, 195, 230, 255]);
+  const tex = new THREE.DataTexture(data, 4, 1, THREE.RedFormat);
+  tex.minFilter = THREE.NearestFilter;
+  tex.magFilter = THREE.NearestFilter;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+// Astral water as cut paper: flat pastel base, two-tone wave stripes with
+// wiggly edges and ink lines, rune glyphs stamped like prints, ink hex border.
 // aFlow = (dirX, dirZ, speed, flags) where flags bits: 1=faint 2=leviathan 4=blocked.
 export function makeWaterMaterial(runeTex) {
   return new THREE.ShaderMaterial({
@@ -59,7 +70,7 @@ export function makeWaterMaterial(runeTex) {
         float blocked = step(3.5, flags);
         float rem = flags - blocked * 4.0;
         float levi = step(1.5, rem);
-        wp.y += sin(uTime * 0.5 + wp.x * 0.05 + wp.z * 0.045) * 0.06;
+        wp.y += sin(uTime * 0.5 + wp.x * 0.05 + wp.z * 0.045) * 0.03;
         wp.y += levi * sin(uTime * 1.35 + wp.x * 0.13 + wp.z * 0.11) * 0.55;
         vWorld = wp.xyz;
         gl_Position = projectionMatrix * viewMatrix * wp;
@@ -73,6 +84,7 @@ export function makeWaterMaterial(runeTex) {
       varying vec4 vFlow;
       varying vec3 vWorld;
       varying float vR;
+      const vec3 INK = vec3(0.21, 0.18, 0.31);
       void main() {
         vec2 dir = vFlow.xy;
         float sp = vFlow.z;
@@ -82,73 +94,44 @@ export function makeWaterMaterial(runeTex) {
         float levi = step(1.5, rem);
         float faint = rem - levi * 2.0;
 
-        vec2 uv = vWorld.xz * 0.035;
-        float t = uTime * sp;
-        float g1 = texture2D(uRunes, uv - dir * t * 0.020).a;
-        float g2 = texture2D(uRunes, uv * 1.9 + dir * t * 0.011 + 0.37).a;
-        float shimmer = 0.5 + 0.5 * sin(uTime * 0.7 + vWorld.x * 0.06 + vWorld.z * 0.05);
+        // layered wiggly-cut wave stripes drifting along the current
+        vec2 perp = vec2(-dir.y, dir.x);
+        float along = dot(vWorld.xz, dir);
+        float across = dot(vWorld.xz, perp);
+        float wig = sin(across * 0.35 + uTime * 0.4) * 0.9 + sin(across * 0.13) * 1.4;
+        float s = fract(along * 0.055 - uTime * sp * 0.05 + wig * 0.045);
 
-        vec3 deep = vColor * 0.16 + vec3(0.015, 0.02, 0.05);
-        vec3 col = mix(deep, vColor * 0.55, 0.35 + 0.35 * shimmer);
-        col += vColor * (g1 * 0.85 + g2 * 0.45) * (0.65 + 0.5 * uBreath);
+        vec3 base = vColor * (0.86 + 0.17 * step(0.5, s));
+        float dEdge = min(abs(s - 0.5), min(s, 1.0 - s));
+        float line = 1.0 - smoothstep(0.015, 0.05, dEdge);
+        vec3 col = mix(base, INK, line * 0.28);
 
-        float rim = smoothstep(0.7, 0.98, vR);
-        col += vColor * rim * (0.55 + 0.25 * uBreath);
+        // rune glyphs stamped like ink prints, drifting with the flow
+        float g1 = texture2D(uRunes, vWorld.xz * 0.03 - dir * uTime * sp * 0.006).a;
+        col = mix(col, INK, g1 * 0.16);
 
-        col += levi * vColor * 0.35 * (0.5 + 0.5 * sin(uTime * 1.35 + vWorld.x * 0.13));
-        col = mix(col, vec3(0.22, 0.2, 0.33) * (0.7 + 0.3 * sin(uTime * 7.0 + vWorld.x)), blocked * 0.85);
+        // cut-cardstock hex border
+        float border = smoothstep(0.86, 0.97, vR);
+        col = mix(col, INK, border * 0.38);
 
-        float alpha = mix(0.92, 0.1 + 0.5 * uBreath, faint);
-        alpha = mix(alpha, 0.75, blocked * 0.5);
+        col *= 0.94 + 0.10 * uBreath;
+        col += levi * vColor * 0.12 * (0.5 + 0.5 * sin(uTime * 1.35 + vWorld.x * 0.13));
+        col = mix(col, vec3(0.64, 0.62, 0.72), blocked * 0.7);
+
+        float alpha = mix(0.97, 0.15 + 0.55 * uBreath, faint);
+        alpha = mix(alpha, 0.88, blocked * 0.3);
         gl_FragColor = vec4(col, alpha);
       }
     `,
   });
 }
 
-export function makeSunMaterial() {
-  return new THREE.ShaderMaterial({
-    uniforms: {
-      uTime: { value: 0 },
-      uColA: { value: new THREE.Color(0xfff3c4) },
-      uColB: { value: new THREE.Color(0xff8c3a) },
-    },
-    vertexShader: /* glsl */ `
-      varying vec3 vNormalW;
-      varying vec3 vPosW;
-      void main() {
-        vNormalW = normalize(mat3(modelMatrix) * normal);
-        vec4 wp = modelMatrix * vec4(position, 1.0);
-        vPosW = wp.xyz;
-        gl_Position = projectionMatrix * viewMatrix * wp;
-      }
-    `,
-    fragmentShader: /* glsl */ `
-      uniform float uTime;
-      uniform vec3 uColA;
-      uniform vec3 uColB;
-      varying vec3 vNormalW;
-      varying vec3 vPosW;
-      void main() {
-        vec3 viewDir = normalize(cameraPosition - vPosW);
-        float fres = pow(1.0 - abs(dot(vNormalW, viewDir)), 1.6);
-        float gran = 0.5 + 0.5 * sin(vPosW.x * 0.8 + uTime * 0.7) * sin(vPosW.y * 0.9 - uTime * 0.5) * sin(vPosW.z * 0.85 + uTime * 0.6);
-        vec3 col = mix(uColA * 1.35, uColB * 1.2, fres);
-        col += uColB * gran * 0.25;
-        col *= 1.0 + 0.08 * sin(uTime * 0.5);
-        gl_FragColor = vec4(col, 1.0);
-      }
-    `,
-  });
-}
-
-// Swirling void-iris inside each warden gate ring.
+// Pastel pinwheel iris inside each gate port ring.
 export function makeSwirlMaterial(color) {
   return new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
     side: THREE.DoubleSide,
-    blending: THREE.AdditiveBlending,
     uniforms: {
       uTime: { value: 0 },
       uColor: { value: new THREE.Color(color) },
@@ -164,14 +147,17 @@ export function makeSwirlMaterial(color) {
       uniform float uTime;
       uniform vec3 uColor;
       varying vec2 vUv;
+      const vec3 INK = vec3(0.21, 0.18, 0.31);
       void main() {
         float r = length(vUv) * 2.0;
         if (r > 1.0) discard;
         float ang = atan(vUv.y, vUv.x);
-        float spiral = sin(ang * 3.0 - uTime * 1.6 + r * 9.0);
-        float glow = smoothstep(1.0, 0.15, r);
-        float core = smoothstep(0.35, 0.0, r);
-        vec3 col = uColor * (0.25 + 0.45 * spiral) * glow + uColor * core * 1.4;
+        float spiral = sin(ang * 4.0 - uTime * 1.2 + r * 6.0);
+        float blade = step(0.0, spiral);
+        vec3 col = mix(uColor * 0.85, uColor * 1.1, blade);
+        float line = 1.0 - smoothstep(0.0, 0.25, abs(spiral));
+        col = mix(col, INK, line * 0.3);
+        float glow = smoothstep(1.0, 0.3, r);
         gl_FragColor = vec4(col, glow * 0.85);
       }
     `,
@@ -188,6 +174,24 @@ export function makeGlowSpriteTexture(size = 128) {
   g.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, size, size);
+  return new THREE.CanvasTexture(c);
+}
+
+// Four-point doodle sparkle for the starfield.
+export function makeSparkleTexture(size = 64) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, size, size);
+  const m = size / 2, arm = size * 0.46, waist = size * 0.07;
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.moveTo(m, m - arm);
+  ctx.quadraticCurveTo(m + waist, m - waist, m + arm, m);
+  ctx.quadraticCurveTo(m + waist, m + waist, m, m + arm);
+  ctx.quadraticCurveTo(m - waist, m + waist, m - arm, m);
+  ctx.quadraticCurveTo(m - waist, m - waist, m, m - arm);
+  ctx.fill();
   return new THREE.CanvasTexture(c);
 }
 
@@ -217,33 +221,8 @@ export function makeGlyphTexture(ch, color = '#cfe0ff', size = 128) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.shadowColor = color;
-  ctx.shadowBlur = size * 0.16;
+  ctx.shadowBlur = size * 0.12;
   ctx.fillStyle = color;
   ctx.fillText(ch, size / 2, size / 2 + size * 0.03);
-  return new THREE.CanvasTexture(c);
-}
-
-// A pale almond eye for the Unblinking Shallows — it always faces you.
-export function makeEyeTexture(size = 128) {
-  const c = document.createElement('canvas');
-  c.width = c.height = size;
-  const ctx = c.getContext('2d');
-  ctx.clearRect(0, 0, size, size);
-  ctx.save();
-  ctx.translate(size / 2, size / 2);
-  ctx.scale(1, 0.55);
-  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, size * 0.4);
-  g.addColorStop(0, 'rgba(228,244,236,0.95)');
-  g.addColorStop(0.8, 'rgba(190,220,208,0.5)');
-  g.addColorStop(1, 'rgba(190,220,208,0)');
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.arc(0, 0, size * 0.4, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-  ctx.fillStyle = 'rgba(10,12,18,0.95)';
-  ctx.beginPath();
-  ctx.ellipse(size / 2, size / 2, size * 0.05, size * 0.16, 0, 0, Math.PI * 2);
-  ctx.fill();
   return new THREE.CanvasTexture(c);
 }

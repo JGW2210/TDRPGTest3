@@ -193,9 +193,3 @@ export function toRunes(text) {
 
 export const WORLD_ADJ = ['Shattered', 'Slumbering', 'Gilded', 'Silent', 'Wandering', 'Runebound', 'Umbral', 'Radiant', 'Drowned', 'Hollow'];
 export const WORLD_NOUN = ['Meridian', 'Reaches', 'Orrery', 'Expanse', 'Chorus', 'Tides', 'Firmament', 'Procession', 'Wheel'];
-
-// Eerie asides whispered by hover text in high-dread regions.
-export const DREAD_WHISPERS = [
-  'it watches', 'the water is listening', 'do not count the corners', 'something breathes below',
-  'the runes rearrange when unread', 'it remembers you', 'the tide tastes of iron', 'hush',
-];

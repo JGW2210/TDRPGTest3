@@ -1,5 +1,6 @@
-// The Star-Pilgrim wisp: click-to-sail, step-by-step hex movement with a hop,
-// ripple rings on the water, and an orbiting rune halo.
+// The Star-Pilgrim wisp: click-to-sail, step-by-step hex movement with a
+// squashy hop, ripple rings on the water, an orbiting rune halo — and
+// riverflight, the swift glide between a gate's two ports.
 
 import * as THREE from 'three';
 import { HEX } from './config.js';
@@ -8,6 +9,7 @@ import { findPath } from './pathfind.js';
 import { makeGlowSpriteTexture } from './materials.js';
 
 const STEP_TIME = 0.22;
+const FLIGHT_SPEED = 75; // world units per second
 
 export class Player {
   constructor(world) {
@@ -15,12 +17,13 @@ export class Player {
     this.hexKey = world.startKey;
     this.path = [];
     this.stepT = 0;
+    this.flight = null;
     this.onEnterHex = null; // cb(hexRecord)
 
     const group = new THREE.Group();
     const body = new THREE.Mesh(
       new THREE.ConeGeometry(0.85, 2.4, 6),
-      new THREE.MeshStandardMaterial({ color: 0x2a2f52, flatShading: true, emissive: 0x141a3a, emissiveIntensity: 0.8 })
+      new THREE.MeshStandardMaterial({ color: 0x4a4f7a, flatShading: true, emissive: 0x2a2f5c, emissiveIntensity: 0.6 })
     );
     body.position.y = 1.2;
     group.add(body);
@@ -56,6 +59,7 @@ export class Player {
     this.mesh = group;
     this.ripples = [];
     this._rippleGeo = new THREE.RingGeometry(0.5, 0.72, 24);
+    this._flightRippleT = 0;
     this._syncToHex();
   }
 
@@ -75,6 +79,7 @@ export class Player {
   }
 
   requestMove(targetKey) {
+    if (this.flight) return false;
     // route from the hex we'll stand on next, keeping any in-flight step
     const anchor = this.path.length ? this.path[0] : this.hexKey;
     const path = findPath(this.world.hexes, anchor, targetKey);
@@ -83,8 +88,22 @@ export class Player {
     return true;
   }
 
+  // Riverflight: swept along the water between a gate's two ports.
+  startFlight(pathKeys) {
+    if (pathKeys.length < 2) return;
+    const pts = pathKeys.map((k) => {
+      const p = this._hexPos(k);
+      p.y = 1.8;
+      return p;
+    });
+    const curve = new THREE.CatmullRomCurve3(pts);
+    this.flight = { curve, u: 0, len: curve.getLength(), destKey: pathKeys[pathKeys.length - 1] };
+    this.path = [];
+    this.stepT = 0;
+  }
+
   get isMoving() {
-    return this.path.length > 0;
+    return this.path.length > 0 || !!this.flight;
   }
 
   spawnRipple(scene, pos, color = 0x9fd8ff) {
@@ -119,8 +138,35 @@ export class Player {
       }
     }
 
+    if (this.flight) {
+      this.flight.u += (dt * FLIGHT_SPEED) / this.flight.len;
+      this._flightRippleT -= dt;
+      if (this.flight.u >= 1) {
+        this.hexKey = this.flight.destKey;
+        this.flight = null;
+        this._syncToHex();
+        this.mesh.scale.set(1, 1, 1);
+        const h = this.world.hexes.get(this.hexKey);
+        this.spawnRipple(scene, this.mesh.position);
+        if (this.onEnterHex) this.onEnterHex(h);
+      } else {
+        const p = this.flight.curve.getPoint(this.flight.u);
+        const p2 = this.flight.curve.getPoint(Math.min(1, this.flight.u + 0.02));
+        this.mesh.position.set(p.x, p.y + Math.sin(time * 9) * 0.15, p.z);
+        this.mesh.rotation.y = Math.atan2(p2.x - p.x, p2.z - p.z);
+        this.mesh.scale.set(0.85, 1.3, 0.85); // streaking stretch
+        if (this._flightRippleT <= 0) {
+          this._flightRippleT = 0.07;
+          this.spawnRipple(scene, p);
+        }
+      }
+      return;
+    }
+
     if (!this.path.length) {
       this.mesh.position.y = this._hexPos(this.hexKey).y + Math.sin(time * 1.7) * 0.1;
+      // relax any squash back to rest
+      this.mesh.scale.lerp(new THREE.Vector3(1, 1, 1), 1 - Math.exp(-dt * 10));
       return;
     }
 
@@ -139,6 +185,9 @@ export class Player {
       this.mesh.position.lerpVectors(from, to, t);
       this.mesh.position.y += Math.sin(t * Math.PI) * 0.9; // hop
       this.mesh.rotation.y = Math.atan2(to.x - from.x, to.z - from.z);
+      // squash & stretch through the hop
+      const s = Math.sin(t * Math.PI);
+      this.mesh.scale.set(1 - 0.12 * s, 1 + 0.28 * s, 1 - 0.12 * s);
     }
   }
 }

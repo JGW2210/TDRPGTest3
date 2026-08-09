@@ -3,7 +3,7 @@ html, body {
   padding: 0;
   height: 100%;
   overflow: hidden;
-  background: #070912;
+  background: #2e3158;
   cursor: crosshair;
 }
 
@@ -17,7 +17,7 @@ html, body {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  background: radial-gradient(ellipse at 50% 42%, transparent 52%, rgba(4, 6, 14, 0.55) 88%, rgba(2, 3, 8, 0.85) 100%);
+  background: radial-gradient(ellipse at 50% 42%, transparent 58%, rgba(30, 32, 62, 0.35) 88%, rgba(24, 26, 52, 0.55) 100%);
   z-index: 5;
 }
 
@@ -27,7 +27,7 @@ html, body {
   pointer-events: none;
   z-index: 10;
   font-family: 'Cormorant Garamond', 'Palatino Linotype', serif;
-  color: #e8dcc0;
+  color: #f4ecd8;
 }
 
 /* ---- top location line ---- */
@@ -41,9 +41,9 @@ html, body {
   font-size: 15px;
   letter-spacing: 0.32em;
   text-transform: uppercase;
-  color: #ffe3b0;
-  opacity: 0.88;
-  text-shadow: 0 0 12px rgba(255, 177, 77, 0.55), 0 0 34px rgba(127, 212, 255, 0.28);
+  color: #fff0cf;
+  opacity: 0.95;
+  text-shadow: 0 2px 0 rgba(43, 38, 74, 0.85), 0 0 14px rgba(255, 210, 140, 0.3);
   transition: opacity 0.6s ease;
   white-space: nowrap;
 }
@@ -66,11 +66,10 @@ html, body {
   font-weight: 500;
   letter-spacing: 0.42em;
   text-transform: uppercase;
-  color: #ffe9c4;
+  color: #fff4d9;
   text-shadow:
-    0 0 18px rgba(255, 177, 77, 0.65),
-    0 0 60px rgba(255, 140, 60, 0.35),
-    0 0 90px rgba(127, 212, 255, 0.3);
+    0 3px 0 rgba(43, 38, 74, 0.9),
+    0 0 22px rgba(255, 205, 130, 0.4);
 }
 
 #announce-sub {
@@ -78,9 +77,9 @@ html, body {
   font-size: 21px;
   font-style: italic;
   letter-spacing: 0.18em;
-  color: #9fd8ff;
-  opacity: 0.85;
-  text-shadow: 0 0 16px rgba(127, 212, 255, 0.6);
+  color: #cfe2ff;
+  opacity: 0.95;
+  text-shadow: 0 2px 0 rgba(43, 38, 74, 0.8);
 }
 
 /* ---- cursor hover label ---- */
@@ -90,13 +89,13 @@ html, body {
   font-size: 16px;
   font-style: italic;
   letter-spacing: 0.14em;
-  color: #cfe6ff;
+  color: #eaf2ff;
   opacity: 0;
   transition: opacity 0.25s ease;
-  text-shadow: 0 0 10px rgba(127, 212, 255, 0.7), 0 1px 3px rgba(0, 0, 0, 0.9);
+  text-shadow: 0 2px 0 rgba(43, 38, 74, 0.9);
   white-space: nowrap;
 }
-#hover.show { opacity: 0.92; }
+#hover.show { opacity: 0.95; }
 
 /* ---- bottom hint + seed ---- */
 #hint {
@@ -107,13 +106,13 @@ html, body {
   text-align: center;
   font-size: 15px;
   letter-spacing: 0.12em;
-  color: #8fa8c9;
-  opacity: 0.8;
+  color: #c2cbe8;
+  opacity: 0.9;
   transition: opacity 2.5s ease;
-  text-shadow: 0 0 8px rgba(80, 120, 200, 0.5);
+  text-shadow: 0 2px 0 rgba(43, 38, 74, 0.7);
 }
 #hint.faded { opacity: 0; }
-#hint b { color: #d6e6ff; font-weight: 600; }
+#hint b { color: #fff0cf; font-weight: 600; }
 
 #seedline {
   position: absolute;
@@ -121,6 +120,6 @@ html, body {
   right: 16px;
   font-size: 12px;
   letter-spacing: 0.2em;
-  color: #5a6b8c;
-  opacity: 0.75;
+  color: #9aa3cc;
+  opacity: 0.85;
 }

@@ -104,12 +104,67 @@ an inverse sun whose darkness breathes opposite the Hearthstar).
 
 ---
 
+# Round 2 — The Web, Fast Travel & the Paper Turn
+
+A second poll round reshaped the map's structure and its whole mood.
+
+## Poll 9 — Spider-web waterways
+
+- ☑ **Orb-Weaver's Wheel** — complete concentric ring-rivers (2-3 hexes wide)
+  at every orbit radius plus eight straight radial spokes sun-to-rim; areas
+  sit at spoke-ring crossings.
+- ☐ Dewdrop Web · ☐ Spiral Silk · ☐ Tangle Web.
+
+**Implemented:** ring bands are carved with wiggly hand-cut edges and
+alternate flow direction per ring; ring waters take the flavor of the nearest
+area, blending around the wheel. Spokes extend faintly past the rim to the
+three secrets. The old thin point-to-point bezier rivers are gone.
+
+## Poll 10 — Gate fast travel
+
+- ☑ **Riverflight** — each gate is a pair of port rings, one at each shore;
+  stepping into (or clicking) a port sweeps the wisp along the actual water
+  path between them at high speed, camera chasing, ripples streaking.
+- ☐ Blink Step · ☐ The Paper Ferry · ☐ Warden's Toll.
+
+**Implemented:** the flight follows a Catmull-Rom curve over the real hex
+path (BFS over the web), so it bends with the river. If a stormwall blocks
+the route the gate refuses until the lock is becalmed. First use of a gate
+stirs its Warden (boss hook); arrival port won't bounce you straight back.
+
+## Poll 11 — Papery restyle
+
+- ☑ **Paper-Craft Cutout** — flat pastels, ink outline shells (inverted-hull
+  on islands, planets, the sun, gate rings), layered wiggly-cut paper wave
+  stripes in the water shader with stamped ink runes, toon-stepped shading,
+  bloom nearly off, warm twilight-blue sky, doodle sparkle starfield, pastel
+  paper clouds, crayon comet trails, craft-paper sun with a spinning ray
+  crown.
+- ☐ Storybook Watercolor · ☐ Pop-Up Book · ☐ Origami Cosmos.
+
+## Poll 12 — Tone
+
+- ☑ **Squash & Bounce** — wisp squash-and-stretch on every hop and a
+  streaking stretch in riverflight; islands spring when landed on; port rings
+  boing on crossing; bodies jelly-wobble on first discovery.
+- ☐ Doodle Sky (partially absorbed: sparkle stars + crayon trails came with
+  the cutout style) · ☐ Confetti & Chimes · ☐ Spooky-Cute Fringe.
+
+**Tone consequence:** the Cosmic-Horror Fringe visuals (watching eyes,
+whisper glyphs, bruised palettes, dread hover-asides) were removed for a
+uniformly cheerful cosmos. The outer-ring biome *names* stay deliciously
+ominous — Ophthal, That Which Watches, is now merely a name.
+
+---
+
 ## Boss / combat hooks
 
-Stepping onto a gate hex currently fires the discovery/announcement path in
-`main.js` (`player.onEnterHex`). A combat scene should hook exactly there:
-each gate has a stable id, rune, and the two area ids it bridges — enough to
-pick a warden, a difficulty, and an arena palette.
+Entering a gate port fires `handleGate` in `main.js` before the riverflight
+begins. A combat scene should hook exactly there (the Warden's Toll poll
+option — fight once to bind the gate, then free fast travel — is the natural
+extension): each gate has a stable id, rune, its two port hex keys, and the
+two area ids it bridges — enough to pick a warden, a difficulty, and an arena
+palette.
 
 ## Roadmap (not in v1)
 

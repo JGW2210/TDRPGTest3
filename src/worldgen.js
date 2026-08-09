@@ -1,6 +1,7 @@
-// Procedural generation of the whole solar system on one global hex grid:
-// orrery-ring area layout, broken-archipelago stamping, astral rivers with
-// warden gates, stormwall rune-locks, leviathan rivers, and secret tide-paths.
+// Procedural generation of the solar system on one global hex grid, woven as
+// an Orb-Weaver's Wheel: complete concentric ring-rivers at every orbit plus
+// straight radial spokes sun-to-rim. Areas sit at spoke-ring crossings; gates
+// are PAIRS of ports (fast travel) with the web's rivers running between them.
 
 import {
   HEX, RINGS, SECRET_RADIUS, BIOMES, SECRET_BIOMES, GATE_RUNES,
@@ -26,83 +27,55 @@ export function generateWorld(seedStr) {
   const noise = makeNoise2D(rng.fork('noise'));
 
   const areas = [];
-  const hexes = new Map(); // key "q,r" -> hex record
+  const hexes = new Map();
   const gates = [];
   const edges = [];
   const locks = [];
   const leviathans = [];
 
   // ---------------------------------------------------------------- layout
-  function mkArea(biome, ring, pos, hexRadius) {
+  // Eight spokes; every non-sun area sits exactly where a spoke crosses a ring.
+  const SPOKES = 8;
+  const spokeBase = rng.angle();
+  const spokeAngles = Array.from({ length: SPOKES }, (_, i) => spokeBase + (i / SPOKES) * TAU);
+
+  function mkArea(biome, ring, pos, hexRadius, spoke = null) {
     const a = {
-      id: areas.length, biome, ring, pos, hexRadius,
+      id: areas.length, biome, ring, pos, hexRadius, spoke,
       hexKeys: [], secret: !!biome.secretHint,
-      dread: biome.dread ?? ring / 4,
+      angle: Math.atan2(pos.z, pos.x),
     };
     areas.push(a);
     return a;
   }
 
-  const sun = mkArea(BIOMES[0], 0, { x: 0, z: 0 }, 12 + rng.int(3));
+  const sun = mkArea(BIOMES[0], 0, { x: 0, z: 0 }, 11 + rng.int(3));
 
   const ringGroups = [[sun]];
   let biomeCursor = 1;
+  let stagger = rng.int(SPOKES);
   for (let ri = 0; ri < RINGS.length; ri++) {
     const spec = RINGS[ri];
-    const group = [];
     const slice = rng.shuffle(BIOMES.slice(biomeCursor, biomeCursor + spec.count));
     biomeCursor += spec.count;
-    const base = rng.angle();
+    const group = [];
     for (let i = 0; i < spec.count; i++) {
-      const ang = base + (i / spec.count) * TAU + rng.range(-0.16, 0.16) * (TAU / spec.count);
-      const rad = spec.radius * rng.range(0.94, 1.06);
-      const pos = { x: Math.cos(ang) * rad, z: Math.sin(ang) * rad };
-      group.push(mkArea(slice[i], ri + 1, pos, 10 + rng.int(4)));
+      const sp = (stagger + Math.round((i * SPOKES) / spec.count)) % SPOKES;
+      const ang = spokeAngles[sp];
+      const pos = { x: Math.cos(ang) * spec.radius, z: Math.sin(ang) * spec.radius };
+      group.push(mkArea(slice[i], ri + 1, pos, 9 + rng.int(3), sp));
     }
+    stagger += 1 + rng.int(3); // stagger crossings between rings
     ringGroups.push(group);
   }
 
-  const secretBase = rng.angle();
-  const secretsList = [];
-  for (let i = 0; i < SECRET_BIOMES.length; i++) {
-    const ang = secretBase + (i / SECRET_BIOMES.length) * TAU + rng.range(-0.3, 0.3);
+  const secretSpokes = rng.shuffle([...Array(SPOKES).keys()]).slice(0, SECRET_BIOMES.length);
+  const secretsList = SECRET_BIOMES.map((b, i) => {
+    const sp = secretSpokes[i];
     const rad = rng.range(SECRET_RADIUS[0], SECRET_RADIUS[1]);
-    const pos = { x: Math.cos(ang) * rad, z: Math.sin(ang) * rad };
-    secretsList.push(mkArea(SECRET_BIOMES[i], 5, pos, 6 + rng.int(2)));
-  }
-
-  // ---------------------------------------------------------------- edges
-  const edgeSet = new Set();
-  function addEdge(a, b, faint = false) {
-    const k = Math.min(a.id, b.id) + '-' + Math.max(a.id, b.id);
-    if (edgeSet.has(k)) return null;
-    edgeSet.add(k);
-    const e = { a: a.id, b: b.id, faint };
-    edges.push(e);
-    return e;
-  }
-  const distA = (a, b) => Math.hypot(a.pos.x - b.pos.x, a.pos.z - b.pos.z);
-
-  for (let ri = 1; ri < ringGroups.length; ri++) {
-    const inner = ringGroups[ri - 1];
-    for (const area of ringGroups[ri]) {
-      const sorted = inner.slice().sort((p, q) => distA(area, p) - distA(area, q));
-      addEdge(area, sorted[0]);
-      if (sorted[1] && rng.chance(0.3)) addEdge(area, sorted[1]);
-    }
-    const g = ringGroups[ri];
-    for (let i = 0; i < g.length; i++) {
-      if (g.length > 2 && !rng.chance(0.68)) continue;
-      addEdge(g[i], g[(i + 1) % g.length]);
-    }
-  }
-  const outerRing = ringGroups[ringGroups.length - 1];
-  const secretEdges = [];
-  for (const s of secretsList) {
-    const near = outerRing.slice().sort((p, q) => distA(s, p) - distA(s, q))[0];
-    const e = addEdge(s, near, true);
-    if (e) secretEdges.push({ edge: e, secret: s, from: near });
-  }
+    const pos = { x: Math.cos(spokeAngles[sp]) * rad, z: Math.sin(spokeAngles[sp]) * rad };
+    return mkArea(b, 5, pos, 6 + rng.int(2), sp);
+  });
 
   // ---------------------------------------------------------------- stamping
   function setHex(q, r, rec) {
@@ -170,8 +143,95 @@ export function generateWorld(seedStr) {
 
   for (const area of areas) stampArea(area);
 
-  // ---------------------------------------------------------------- rivers
+  // ---------------------------------------------------------------- the web
   const worldOf = (h) => Hx.toWorld(h.q, h.r, HEX);
+  const nearestArea = (pool, x, z) => {
+    let best = null, bd = Infinity;
+    for (const a of pool) {
+      const d = Math.hypot(a.pos.x - x, a.pos.z - z);
+      if (d < bd) { bd = d; best = a; }
+    }
+    return best;
+  };
+
+  // ring bands: one rhombus scan of the whole disc; wiggly edges for charm
+  const bandHalf = HEX * 1.9;
+  const maxR = RINGS[RINGS.length - 1].radius + bandHalf + HEX * 2;
+  const range = Math.ceil(maxR / (HEX * 0.85));
+  for (let q = -range; q <= range; q++) {
+    for (let r = Math.max(-range, -q - range); r <= Math.min(range, -q + range); r++) {
+      if (hexes.has(Hx.key(q, r))) continue;
+      const p = Hx.toWorld(q, r, HEX);
+      const wr = Math.hypot(p.x, p.z);
+      if (wr < 1 || wr > maxR) continue;
+      for (let ri = 0; ri < RINGS.length; ri++) {
+        const wig = (noise.fbm(p.x * 0.03, p.z * 0.03) - 0.5) * HEX * 2.4;
+        if (Math.abs(wr - RINGS[ri].radius + wig) > bandHalf) continue;
+        const sign = ri % 2 === 0 ? 1 : -1; // alternate flow direction per ring
+        const owner = nearestArea(ringGroups[ri + 1], p.x, p.z);
+        setHex(q, r, {
+          kind: 'water', areaId: owner.id, elev: 0,
+          flow: [(-p.z / wr) * sign, (p.x / wr) * sign],
+          faint: false, blocked: false, levi: false,
+          gateId: null, lockKey: null, river: true,
+        });
+        break;
+      }
+    }
+  }
+
+  // radial spokes sun-to-rim (plus faint extensions out to the secrets)
+  function carveSpokePath(ang, r0, r1, { faint = false, ownerPool = areas } = {}) {
+    const dirx = Math.cos(ang), dirz = Math.sin(ang);
+    const steps = Math.ceil((r1 - r0) / (HEX * 0.8));
+    const chain = [];
+    const seen = new Set();
+    let prev = null;
+    for (let i = 0; i <= steps; i++) {
+      const rr = r0 + ((r1 - r0) * i) / steps;
+      const hc = Hx.toHex(dirx * rr, dirz * rr, HEX);
+      const cells = prev ? Hx.line(prev.q, prev.r, hc.q, hc.r) : [hc];
+      prev = hc;
+      for (const cell of cells) {
+        const k = Hx.key(cell.q, cell.r);
+        if (seen.has(k)) continue;
+        seen.add(k);
+        const p = Hx.toWorld(cell.q, cell.r, HEX);
+        const owner = nearestArea(ownerPool, p.x, p.z);
+        setHex(cell.q, cell.r, {
+          kind: 'water', areaId: owner.id, elev: 0,
+          flow: [dirx, dirz], faint, blocked: false, levi: false,
+          gateId: null, lockKey: null, river: true,
+        });
+        chain.push(k);
+        if (rng.chance(0.45)) {
+          const d = Hx.DIRS[rng.int(6)];
+          setHex(cell.q + d[0], cell.r + d[1], {
+            kind: 'water', areaId: owner.id, elev: 0,
+            flow: [dirx, dirz], faint, blocked: false, levi: false,
+            gateId: null, lockKey: null, river: true,
+          });
+        }
+      }
+    }
+    return chain;
+  }
+
+  const rimR = RINGS[RINGS.length - 1].radius;
+  for (let s = 0; s < SPOKES; s++) {
+    carveSpokePath(spokeAngles[s], HEX * 4, rimR);
+  }
+  for (const sArea of secretsList) {
+    const rad = Math.hypot(sArea.pos.x, sArea.pos.z);
+    sArea.secretChain = carveSpokePath(spokeAngles[sArea.spoke], rimR, rad - HEX * 2, {
+      faint: true, ownerPool: [sArea],
+    });
+  }
+
+  // ---------------------------------------------------------------- gates
+  // A gate is a PAIR of ports: step into one, riverflight to the other.
+  const usedPorts = new Set();
+  const shuffledRunes = rng.shuffle(GATE_RUNES);
 
   function pickPort(area, toward) {
     const c = area.pos;
@@ -180,104 +240,60 @@ export function generateWorld(seedStr) {
     dirX /= dl; dirZ /= dl;
     let best = null, bs = -1e9;
     for (const k of area.hexKeys) {
+      if (usedPorts.has(k)) continue;
       const h = hexes.get(k);
+      if (h.gateId !== null) continue;
       const p = worldOf(h);
       const vx = p.x - c.x, vz = p.z - c.z;
       const L = Math.hypot(vx, vz) || 1;
       let sc = ((vx * dirX + vz * dirZ) / L) * 2 + L / (area.hexRadius * HEX * 1.8);
-      if (h.kind === 'water') sc += 0.08;
+      if (h.kind === 'water') sc += 0.3;
       if (sc > bs) { bs = sc; best = h; }
     }
     return best;
   }
 
-  let gateCursor = 0;
-  const shuffledRunes = rng.shuffle(GATE_RUNES);
-
-  function carveRiver(edge) {
-    const a = areas[edge.a], b = areas[edge.b];
-    const ha = pickPort(a, b.pos), hb = pickPort(b, a.pos);
-    if (!ha || !hb) return;
-    const pa = worldOf(ha), pb = worldOf(hb);
-    const mx = (pa.x + pb.x) / 2, mz = (pa.z + pb.z) / 2;
-    const dx = pb.x - pa.x, dz = pb.z - pa.z;
-    const len = Math.hypot(dx, dz) || 1;
-    const px = -dz / len, pz = dx / len;
-    const off = rng.range(-0.28, 0.28) * len;
-    const cx = mx + px * off, cz = mz + pz * off;
-
-    const nSeg = Math.max(6, Math.ceil((len / HEX) * 2));
-    const chain = [];
-    const chainSet = new Set();
-    let prev = { q: ha.q, r: ha.r };
-    const pushHex = (hq, hr) => {
-      const k = Hx.key(hq, hr);
-      if (!chainSet.has(k)) { chainSet.add(k); chain.push({ q: hq, r: hr }); }
+  const edgeSet = new Set();
+  function addGate(a, b) {
+    const ek = Math.min(a.id, b.id) + '-' + Math.max(a.id, b.id);
+    if (edgeSet.has(ek)) return;
+    const pa = pickPort(a, b.pos);
+    const pb = pickPort(b, a.pos);
+    if (!pa || !pb) return;
+    edgeSet.add(ek);
+    const rune = shuffledRunes[gates.length % shuffledRunes.length];
+    const gate = {
+      id: gates.length, rune,
+      name: `The Gate of ${rune.name}`,
+      a: a.id, b: b.id,
+      portA: Hx.key(pa.q, pa.r), portB: Hx.key(pb.q, pb.r),
     };
-    pushHex(prev.q, prev.r);
-    for (let i = 1; i <= nSeg; i++) {
-      const t = i / nSeg;
-      const it = 1 - t;
-      const bx = it * it * pa.x + 2 * it * t * cx + t * t * pb.x;
-      const bz = it * it * pa.z + 2 * it * t * cz + t * t * pb.z;
-      const hc = Hx.toHex(bx, bz, HEX);
-      if (hc.q === prev.q && hc.r === prev.r) continue;
-      for (const step of Hx.line(prev.q, prev.r, hc.q, hc.r)) pushHex(step.q, step.r);
-      prev = hc;
-    }
-
-    // fill river hexes (skips cells areas already own, so rivers merge into shores)
-    const half = Math.floor(chain.length / 2);
-    for (let i = 0; i < chain.length; i++) {
-      const { q, r } = chain[i];
-      const nxt = chain[Math.min(i + 1, chain.length - 1)];
-      const pHere = Hx.toWorld(q, r, HEX);
-      const pNext = Hx.toWorld(nxt.q, nxt.r, HEX);
-      let fx = pNext.x - pHere.x, fz = pNext.z - pHere.z;
-      const fl = Math.hypot(fx, fz) || 1;
-      fx /= fl; fz /= fl;
-      const owner = i < half ? a : b;
-      setHex(q, r, {
-        kind: 'water', areaId: owner.id, elev: 0,
-        flow: [fx, fz], faint: edge.faint, blocked: false, levi: false,
-        gateId: null, lockKey: null, river: true,
-      });
-      if (rng.chance(0.4)) {
-        const dir = Hx.DIRS[rng.int(6)];
-        setHex(q + dir[0], r + dir[1], {
-          kind: 'water', areaId: owner.id, elev: 0,
-          flow: [fx, fz], faint: edge.faint, blocked: false, levi: false,
-          gateId: null, lockKey: null, river: true,
-        });
-      }
-    }
-
-    // warden gate at the crossing's midpoint
-    const gh = chain[half];
-    const gateHex = hexes.get(Hx.key(gh.q, gh.r));
-    if (gateHex && gateHex.kind === 'water' && !gateHex.gateId) {
-      const rune = shuffledRunes[gateCursor % shuffledRunes.length];
-      const gate = {
-        id: gates.length, rune,
-        name: `The Gate of ${rune.name}`,
-        q: gh.q, r: gh.r,
-        between: [a.id, b.id], faint: !!edge.faint,
-      };
-      gateCursor++;
-      gates.push(gate);
-      gateHex.gateId = gate.id;
-    }
-    edge.chain = chain.map((c2) => Hx.key(c2.q, c2.r));
+    pa.gateId = gate.id;
+    pb.gateId = gate.id;
+    usedPorts.add(gate.portA);
+    usedPorts.add(gate.portB);
+    gates.push(gate);
+    edges.push({ a: a.id, b: b.id });
   }
 
-  for (const edge of edges) carveRiver(edge);
+  const ringEdges = [];
+  for (let ri = 1; ri < ringGroups.length; ri++) {
+    const g = ringGroups[ri].slice().sort((p, q2) => p.angle - q2.angle);
+    for (let i = 0; i < g.length; i++) {
+      const nb = g[(i + 1) % g.length];
+      addGate(g[i], nb);
+      ringEdges.push({ a: g[i], b: nb, ri: ri - 1 });
+    }
+    for (const area of ringGroups[ri]) {
+      addGate(area, nearestArea(ringGroups[ri - 1], area.pos.x, area.pos.z));
+    }
+  }
 
   // ---------------------------------------------------------------- locks
-  // Stormwalls: a few main rivers are sealed mid-stream; a rune-stone on a
-  // nearby island calms the passage when stepped on.
-  const lockableEdges = rng.shuffle(
-    edges.filter((e) => !e.faint && e.chain && e.chain.length > 10 && e.a !== sun.id && e.b !== sun.id)
-  ).slice(0, 3);
+  // Stormwalls: seal a few ring segments mid-way between two areas; a
+  // rune-stone on a nearby island calms the passage. (The web's redundancy
+  // means these are soft obstacles — detours exist, but so does curiosity.)
+  let gateCursor = gates.length;
 
   function nearestIsle(fromKey, maxSteps) {
     const from = hexes.get(fromKey);
@@ -304,15 +320,24 @@ export function generateWorld(seedStr) {
     return null;
   }
 
-  for (const edge of lockableEdges) {
-    const idx = Math.floor(edge.chain.length * 0.3);
+  for (const re of rng.shuffle(ringEdges).slice(0, 3)) {
+    // seal the ring a quarter-arc out from one area's harbor, so its
+    // rune-stone key is always on a nearby island
+    const ux = Math.cos(re.a.angle) * 0.75 + Math.cos(re.b.angle) * 0.25;
+    const uz = Math.sin(re.a.angle) * 0.75 + Math.sin(re.b.angle) * 0.25;
+    const midAng = Math.atan2(uz, ux);
+    const R = RINGS[re.ri].radius;
+    const center = Hx.toHex(Math.cos(midAng) * R, Math.sin(midAng) * R, HEX);
     const wallKeys = [];
-    for (let i = idx; i < Math.min(idx + 2, edge.chain.length); i++) {
-      const h = hexes.get(edge.chain[i]);
-      if (h && h.kind === 'water' && !h.gateId) wallKeys.push(edge.chain[i]);
+    for (let dq = -2; dq <= 2; dq++) {
+      for (let dr = Math.max(-2, -dq - 2); dr <= Math.min(2, -dq + 2); dr++) {
+        const k = Hx.key(center.q + dq, center.r + dr);
+        const h = hexes.get(k);
+        if (h && h.kind === 'water' && h.gateId === null) wallKeys.push(k);
+      }
     }
-    if (!wallKeys.length) continue;
-    const keyHex = nearestIsle(wallKeys[0], 16);
+    if (wallKeys.length < 3) continue;
+    const keyHex = nearestIsle(wallKeys[0], 50);
     if (!keyHex) continue;
     const rune = shuffledRunes[gateCursor % shuffledRunes.length];
     gateCursor++;
@@ -325,16 +350,13 @@ export function generateWorld(seedStr) {
     hexes.get(keyHex).lockKey = lock.id;
   }
 
-  // Rumor lock: the Hollow Moon's path stays sealed until three rumor-rune
-  // obelisks scattered across the main system are struck.
-  const rumorSecret = secretEdges.find((se) => se.secret.biome.secretHint === 'rumor');
-  if (rumorSecret && rumorSecret.edge.chain) {
+  // Rumor lock: the Hollow Moon's spoke extension stays sealed until three
+  // rumor-rune obelisks scattered across the main system are struck.
+  const rumorSecret = secretsList.find((s) => s.biome.secretHint === 'rumor');
+  if (rumorSecret && rumorSecret.secretChain?.length) {
     const rune = shuffledRunes[gateCursor % shuffledRunes.length];
     gateCursor++;
-    const wallKeys = rumorSecret.edge.chain.filter((k) => {
-      const h = hexes.get(k);
-      return h && h.faint;
-    });
+    const wallKeys = rumorSecret.secretChain.filter((k) => hexes.get(k)?.faint);
     const keyAreas = rng.shuffle(areas.filter((a) => !a.secret && a.ring >= 2)).slice(0, 3);
     const keyKeys = [];
     for (const ka of keyAreas) {
@@ -348,7 +370,7 @@ export function generateWorld(seedStr) {
       const lock = {
         id: locks.length, kind: 'rumor', rune,
         wallKeys, keyKeys, struck: new Set(), unlocked: false,
-        secretAreaId: rumorSecret.secret.id,
+        secretAreaId: rumorSecret.id,
       };
       locks.push(lock);
       for (const wk of wallKeys) hexes.get(wk).blocked = true;
@@ -357,27 +379,28 @@ export function generateWorld(seedStr) {
   }
 
   // ---------------------------------------------------------------- leviathans
-  // The two longest open rivers, plus the Unlit Star's hidden path, are living
-  // rivers — star-leviathans swimming beneath the hexes.
-  const longRivers = edges
-    .filter((e) => !e.faint && e.chain && e.chain.length > 14)
-    .sort((p, q) => q.chain.length - p.chain.length)
-    .slice(0, 2);
-  const leviSecret = secretEdges.find((se) => se.secret.biome.secretHint === 'levi');
-  const leviEdges = [...longRivers];
-  if (leviSecret && leviSecret.edge.chain) leviEdges.push(leviSecret.edge);
-
-  for (const edge of leviEdges) {
-    const pts = edge.chain.map((k) => {
+  // Two serpents endlessly circle the middle rings; a third swims the Unlit
+  // Star's hidden spoke, its glow marking the way.
+  for (const ri of [1, 2]) {
+    const pts = [];
+    const n = 48;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * TAU;
+      pts.push({ x: Math.cos(a) * RINGS[ri].radius, z: Math.sin(a) * RINGS[ri].radius });
+    }
+    leviathans.push({ id: leviathans.length, points: pts, loop: true, secret: false, reverse: ri % 2 === 1 });
+  }
+  const leviSecret = secretsList.find((s) => s.biome.secretHint === 'levi');
+  if (leviSecret && leviSecret.secretChain?.length > 6) {
+    const pts = leviSecret.secretChain.map((k) => {
       const h = hexes.get(k);
-      return Hx.toWorld(h.q, h.r, HEX);
+      return worldOf(h);
     });
-    if (pts.length < 8) continue;
-    for (const k of edge.chain) {
+    for (const k of leviSecret.secretChain) {
       const h = hexes.get(k);
       if (h && h.kind === 'water') h.levi = true;
     }
-    leviathans.push({ id: leviathans.length, points: pts, secret: !!edge.faint });
+    leviathans.push({ id: leviathans.length, points: pts, loop: false, secret: true, reverse: false });
   }
 
   // ---------------------------------------------------------------- connectivity

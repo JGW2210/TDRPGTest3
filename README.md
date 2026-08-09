@@ -1,10 +1,11 @@
 # TDRPGTest3 — Astral Reaches World Map
 
 A runic cosmic world map for a roguelike (Binding of Isaac-inspired) game:
-low-poly polygonal worlds orbiting a small sun, navigated hex-by-hex across
-archipelagos of **astral waters**. Built with three.js.
+polygonal worlds orbiting a small paper sun, navigated hex-by-hex across an
+**Orb-Weaver's Wheel** of astral waters — concentric ring-rivers and radial
+spokes, like a spider web spun across a solar system. Built with three.js.
 
-![style](https://img.shields.io/badge/style-Ink%20%26%20Starlight-2a2050)
+![style](https://img.shields.io/badge/style-Paper--Craft%20Cutout-f4e3c9)
 
 ## Run it
 
@@ -41,37 +42,45 @@ any mount path.
 
 ## What's in the world
 
-- **True Orrery Rings** — the Hearthstar's own archipelago at the heart, then
-  four orbital rings holding 14 more areas (15 total), difficulty rising with
-  distance. Faint orbit guide-lines sell the star-chart from the zoomed-out view.
-- **Astral waters** — every region has its own named water (the Heliotide, the
-  Quicksilver Race, the Lidless Calm…) with its own color, flow speed, and
-  visible current: rune-glyphs drift along the flow inside the shader. Waters
-  circulate around each astral body; rivers stream between areas.
+- **The Orb-Weaver's Wheel** — the Hearthstar's archipelago at the heart, then
+  four complete concentric ring-rivers (2-3 hexes wide) crossed by eight
+  radial spokes. The 14 outer areas sit exactly at spoke-ring crossings, so
+  every archipelago is a junction node; the whole web is walkable water.
+  Pencil-line orbit guides sell the spider web from the zoomed-out view.
+- **Riverflight gates** — every neighboring pair of areas is joined by a gate:
+  a PAIR of runic port-rings, one at each shore, with the web's river running
+  between them. Click a port (or sail onto it) and your wisp is swept along
+  the water in a swift streaking glide to the far port. First crossing stirs
+  the gate's named Warden (the boss-fight hook); stormwalls on the route
+  refuse the flight until becalmed.
+- **Astral waters** — every region has its own named water (the Heliotide,
+  the Quicksilver Race, the Lidless Calm…) rendered as layered wiggly-cut
+  paper waves with rune glyphs stamped like ink prints, drifting along each
+  hex's current. Waters circulate around bodies; rings alternate direction.
 - **The tide** — the sun breathes on a slow cycle. Waters brighten at high
   tide, and *faint tide-paths* into the outer dark only glimmer into view at
   the peak.
-- **Warden gates** — every river between two areas is noded by a runic
-  ring-portal named for an Elder Futhark rune (the Gate of Sowilo…). Stepping
-  onto a gate hex stirs its Warden — the boss-fight hook.
-- **Stormwall rune-locks** — some channels are sealed by crackling stormwalls;
-  find and step on the matching rune-stone to calm the passage.
-- **Star-leviathans** — the greatest rivers are alive: serpents swim beneath
-  the hexes (which ride their backs), and one swims the hidden path to a
-  secret stage.
-- **Three secret outer bodies**, far past the rim, each found differently:
+- **Stormwall rune-locks** — three ring passages are sealed by crackling
+  stormwalls near an area's harbor; step on the matching rune-stone to calm
+  them.
+- **Star-leviathans** — two serpents endlessly circle the middle rings, and a
+  glowing third swims the hidden spoke to a secret stage (its hexes ride on
+  its back).
+- **Three secret outer bodies**, far past the rim on extended spokes:
   the Weeping Comet (faint tide-path), the Hollow Moon (strike all three
   rumor-rune obelisks), the Unlit Star (follow the leviathan). At peak tide an
   *alignment surge* pillar of light briefly marks each secret.
-- **Cosmic-Horror Fringe** — outer rings go subtly wrong: tilted hexes,
-  bruised palettes, hovering islands, whispering water, and — in the
-  Unblinking Shallows — islands that watch you back.
+- **Paper-Craft Cutout look** — flat pastels, ink outline shells on every
+  island and body, a craft-paper sun with a spinning crown of rays, doodle
+  sparkle stars, pastel paper clouds, crayon comet trails, and a warm
+  twilight-blue sky instead of a black void.
+- **Squash & bounce** — the wisp squashes through every hop, islands spring
+  when you land, port rings boing as you pass through, and astral bodies
+  wobble like jelly when first discovered.
 - **Non-modular runic UI** — no panels; floating aetherial text only. Names
   appear in Elder Futhark and *decipher* letter-by-letter as your wisp
   translates the cosmos (Twin-Tongue). In-world 3D labels hang over bodies and
   gates, rune-only until discovered.
-- **A living sky** — asteroid belts turning between rings, comets with glowing
-  trails, drifting runestones, spinning glyphs, nebulae, and dust.
 
 Everything is procedurally generated from the seed (layout, biome placement,
 archipelago shapes, river routes, gate runes, lock positions).
