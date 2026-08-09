@@ -100,13 +100,24 @@ paper sun in a dark aetherial papercraft cosmos. Everything is seeded
 ## Dev workflow
 
 - `npm run dev` / `npm run build` (Vite, relative base for Pages).
-- Headless smoke tests: playwright-core + system chromium
-  (`--enable-unsafe-swiftshader --use-gl=angle --use-angle=swiftshader`),
-  drive the app via `window.__astral` (`{ world, player, controls }`) —
-  e.g. teleport with `player.hexKey = key; player._syncToHex()`, walk with
-  `player.requestMove(key)`, inspect `world.gates/locks/areas`.
-- NOTE: headless SwiftShader runs ~8fps and `dt` clamps at 0.05s, so walks
-  look slow in tests — frame-rate independent on real GPUs.
+- Headless smoke tests: `npm i --no-save playwright-core`, launch the
+  system chromium headless shell (under `/opt/pw-browsers/`) with
+  `--enable-unsafe-swiftshader --use-gl=angle --use-angle=swiftshader`,
+  serve `dist/` via `npx vite preview`, and drive the app through
+  `window.__astral` (`{ world, player, controls, built, cutscene }`):
+  - teleport: `player.hexKey = key; player._syncToHex()`; walk:
+    `player.requestMove(key)`; inspect `world.gates/locks/areas`.
+  - trigger a gate blast + discovery cutscene: teleport onto a port hex,
+    then `player.onEnterHex(world.hexes.get(key))`; after landing,
+    `cutscene.active` is true and `page.mouse.click(...)` advances the
+    dialogue (`controls.onClick` routes to `cutscene.advance()`).
+  - lift fog directly for visual checks: `built.revealArea(areaId, false)`.
+- NOTE: headless SwiftShader runs a few fps and `dt` clamps at 0.05s, so
+  sim time crawls (~0.2-0.4 s/s): blasts and camera glides take several
+  real seconds — poll with `waitForFunction`, not fixed waits. All of it
+  is frame-rate independent on real GPUs.
+- The only expected console error headless is the Google Fonts fetch
+  (no network in the sandbox).
 
 ## Gotchas
 
@@ -118,21 +129,38 @@ paper sun in a dark aetherial papercraft cosmos. Everything is seeded
 - Custom instanced attributes live on the GEOMETRY (shared by base water,
   ghost sheet); `instanceMatrix` lives on each MESH (shared by
   assignment). The fringe mesh clones the geometry for its own attributes.
-- `hex.elev` is mutated at build time (height spread) — build runs before
-  Player is constructed, and decor/keystones read it after.
+- `hex.elev` is mutated at build time (height spread + terrain profile) —
+  build runs before Player is constructed; decor, gates, keystones, and
+  landmarks read it after the isle loop.
 - Labels must keep `depthTest: false` + renderOrder, or they vanish under
   tiles.
+- FOG REGISTRATION IS MANDATORY: any new per-region visual must join the
+  fog of war — instanced tiles/decor via `instanceGroups` (mesh + base
+  matrices + byArea indices), one-off objects via `regFx(areaId, obj)` —
+  or it will float visible over undiscovered regions. Deliberately
+  unregistered: secret alignment pillars, leviathans, void debris/curios.
+- Per-region reveal state lives only in `area.discovered` (worldgen data)
+  + `revealedAreas` (renderer). There is no save/persistence yet — a
+  reload re-fogs everything except home.
+- `INTRO_LINES` in config.js is keyed by `biome.key` — a new biome without
+  an entry falls back to a generic arrival line in the cutscene.
+- The cutscene owns the camera by nulling `controls._focusTo` every frame
+  and lerping target/dist/pitch itself; anything else that wants camera
+  control must check `cutscene.active` (the sail-follow in main.js does).
 
 ## Roadmap (undone, in rough priority)
 
 1. Warden combat at gates (hook: `handleGate` in main.js — gate has id,
    rune, kind, both port keys, both area ids). Warden's Toll design in
-   DESIGN.md poll 10.
-2. Run structure: permadeath loop, run seeds, unlocks.
+   DESIGN.md poll 10. The Cutscene class (camera glide + click-through
+   dialogue) is reusable for a warden-appearance scene.
+2. Run structure: permadeath loop, run seeds, unlocks — should persist
+   `area.discovered` so the fog of war survives reloads within a run.
 3. Tide-gated hexes (flood/drain with breath); flavor-specific water rules.
 4. Full planetary revolution (rigid region groups; gates re-anchor).
 5. Dewdrop lakes / shops / shrines at points of interest.
-6. Sound: chimes for discovery, deciphering ticks, blast whoosh.
+6. Sound: chimes for discovery, deciphering ticks, blast whoosh,
+   cutscene dialogue murmurs.
 
 ## History
 
@@ -143,5 +171,10 @@ blast gates → vast seas → one-gate-per-ring + orbit blasts + layered
 living water + soft rims → Round 6 visual-identity pass (dolmen waygates
 facing orbit tangents, sculpted body archetypes, per-biome terrain/decor/
 veils/landmarks, 3/4/5/5 rings + asteroid waystations, Echo Verge / Silent
-Orchard / Maw Shallows). The first dev branch was merged to `main` via PR;
-Round 6 lives on `claude/game-visuals-world-design-0hk7so`.
+Orchard / Maw Shallows; PR #2) → Round 7 (fog of war with animated
+reveals, first-landfall discovery cutscenes with per-region dialogue,
+transparent render-order fix; PR #3).
+
+Dev branch convention: work happens on
+`claude/game-visuals-world-design-0hk7so`, PR'd to `main` and merged;
+after each merge the branch restarts fresh from `main` (same name).
