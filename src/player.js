@@ -86,15 +86,32 @@ export class Player {
     return true;
   }
 
-  // Gate blast: hurled across the void in a soaring arc between node islets.
-  startBlast(destKey) {
+  // Gate blast: hurled across the void between node islets. Same-ring
+  // crossings ride the orbit line ('arc'); outward crossings are a straight
+  // shot ('line').
+  startBlast(destKey, mode = 'line') {
     const from = this._hexPos(this.hexKey);
     const to = this._hexPos(destKey);
-    const dist = from.distanceTo(to);
+    let dist, arc = null;
+    if (mode === 'arc') {
+      const a0 = Math.atan2(from.z, from.x);
+      const a1 = Math.atan2(to.z, to.x);
+      let da = a1 - a0;
+      while (da > Math.PI) da -= Math.PI * 2;
+      while (da < -Math.PI) da += Math.PI * 2;
+      const r0 = Math.hypot(from.x, from.z);
+      const r1 = Math.hypot(to.x, to.z);
+      arc = { a0, da, r0, r1 };
+      dist = Math.abs(da) * ((r0 + r1) / 2);
+    } else {
+      dist = from.distanceTo(to);
+    }
     this.blast = {
-      from, to, destKey, t: 0,
-      dur: THREE.MathUtils.clamp(0.7 + dist / 260, 0.9, 2.4),
-      height: THREE.MathUtils.clamp(dist * 0.22, 16, 90),
+      from, to, destKey, t: 0, arc,
+      dur: THREE.MathUtils.clamp(0.7 + dist / 260, 0.9, 2.6),
+      height: arc
+        ? THREE.MathUtils.clamp(dist * 0.1, 10, 45)
+        : THREE.MathUtils.clamp(dist * 0.22, 16, 90),
     };
     this.path = [];
     this.stepT = 0;
@@ -147,8 +164,19 @@ export class Player {
         this.spawnRipple(scene, this.mesh.position);
         if (this.onEnterHex) this.onEnterHex(this.world.hexes.get(this.hexKey));
       } else {
-        const u = b.t * b.t * (3 - 2 * b.t); // ease through the arc
-        this.mesh.position.lerpVectors(b.from, b.to, u);
+        const u = b.t * b.t * (3 - 2 * b.t); // ease through the flight
+        if (b.arc) {
+          // follow the line of orbit around the sun
+          const ang = b.arc.a0 + b.arc.da * u;
+          const rad = b.arc.r0 + (b.arc.r1 - b.arc.r0) * u;
+          this.mesh.position.set(
+            Math.cos(ang) * rad,
+            b.from.y + (b.to.y - b.from.y) * u,
+            Math.sin(ang) * rad
+          );
+        } else {
+          this.mesh.position.lerpVectors(b.from, b.to, u);
+        }
         this.mesh.position.y += Math.sin(b.t * Math.PI) * b.height;
         this.mesh.rotation.y += dt * 7; // tumbling with style
         const s = Math.sin(b.t * Math.PI);

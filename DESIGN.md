@@ -210,6 +210,23 @@ Direct rework notes: the walkable web is gone.
 
 ---
 
+# Round 5 — One Passage Out, Orbit Blasts & the Living Sea
+
+- **One gate outward per ring** — each ring boundary now carries exactly one
+  randomly-placed radial gate (plus the three secret gates). Progression:
+  circle a ring through its same-ring gates, find THE way out.
+- **Blast trajectories by kind** — same-ring gates fly the wisp along the
+  line of orbit (angle-lerp around the sun at ring radius; ports are placed
+  tangentially so the arc hugs the orbit), while radial/secret gates are a
+  straight shot outward. Verified: orbit blasts hold ~253+ radius on a
+  260-radius ring where a chord would dip to ~130.
+- **Two-layer water** — the sea renders twice from shared instance data: a
+  glassy base and a thin ghost-sheet (+0.42, alpha ~0.28, faster drift)
+  floating above, each with two-frequency wobble on its own phase. The sea
+  moves like a volume.
+
+---
+
 ## Boss / combat hooks
 
 Entering a gate port fires `handleGate` in `main.js` before the riverflight

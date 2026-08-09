@@ -151,7 +151,7 @@ function handleGate(hex, hexKey) {
   }
   suppressGateKey = destKey;
   built.boingGate(gate.id);
-  player.startBlast(destKey);
+  player.startBlast(destKey, gate.kind === 'ring' ? 'arc' : 'line');
 }
 
 player.onEnterHex = (hex) => {

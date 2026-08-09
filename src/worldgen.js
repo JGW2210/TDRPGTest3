@@ -302,17 +302,28 @@ export function generateWorld(seedStr) {
     return null;
   }
 
+  // same-ring ports face along the orbit (tangentially), so ring blasts hug
+  // the line of orbit instead of cutting inward toward the neighbor's center
+  function orbitToward(fromArea, toArea) {
+    const rA = Math.hypot(fromArea.pos.x, fromArea.pos.z) || 1;
+    let da = toArea.angle - fromArea.angle;
+    while (da > Math.PI) da -= TAU;
+    while (da < -Math.PI) da += TAU;
+    const ang = fromArea.angle + Math.sign(da) * 0.45;
+    return { x: Math.cos(ang) * rA, z: Math.sin(ang) * rA };
+  }
+
   const edgeSet = new Set();
-  function addGate(a, b) {
+  function addGate(a, b, kind = 'ring') {
     const ek = Math.min(a.id, b.id) + '-' + Math.max(a.id, b.id);
     if (edgeSet.has(ek)) return;
-    const ka = placeNode(a, b.pos);
-    const kb = placeNode(b, a.pos);
+    const ka = placeNode(a, kind === 'ring' ? orbitToward(a, b) : b.pos);
+    const kb = placeNode(b, kind === 'ring' ? orbitToward(b, a) : a.pos);
     if (!ka || !kb) return;
     edgeSet.add(ek);
     const rune = shuffledRunes[gates.length % shuffledRunes.length];
     const gate = {
-      id: gates.length, rune,
+      id: gates.length, rune, kind,
       name: `The Gate of ${rune.name}`,
       a: a.id, b: b.id,
       portA: ka, portB: kb,
@@ -335,15 +346,16 @@ export function generateWorld(seedStr) {
   for (let ri = 1; ri < ringGroups.length; ri++) {
     const g = ringGroups[ri].slice().sort((p, q2) => p.angle - q2.angle);
     for (let i = 0; i < g.length; i++) {
-      if (g.length > 1) addGate(g[i], g[(i + 1) % g.length]);
+      if (g.length > 1) addGate(g[i], g[(i + 1) % g.length], 'ring');
     }
-    for (const area of ringGroups[ri]) {
-      addGate(area, nearestArea(ringGroups[ri - 1], area.pos.x, area.pos.z));
-    }
+    // exactly ONE passage outward per ring boundary, at a random crossing
+    const inner = rng.pick(ringGroups[ri - 1]);
+    const outer = nearestArea(ringGroups[ri], inner.pos.x, inner.pos.z);
+    addGate(inner, outer, 'radial');
   }
   for (const s of secretsList) {
     const outer = ringGroups[ringGroups.length - 1];
-    addGate(nearestArea(outer, s.pos.x, s.pos.z), s);
+    addGate(nearestArea(outer, s.pos.x, s.pos.z), s, 'radial');
   }
 
   // ---------------------------------------------------------------- locks

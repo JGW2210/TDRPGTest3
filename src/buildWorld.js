@@ -98,6 +98,14 @@ export function buildWorld(world, rng) {
   const flowAttr = waterGeo.getAttribute('aFlow');
   group.add(waterMesh);
 
+  // a thin ghost sheet floats above the glassy base, wobbling on its own
+  // phase — the sea reads as a volume, not a floor
+  const waterMatTop = makeWaterMaterial(runeTex, { lift: 0.42, ghost: 0.28, speedMul: 1.7 });
+  const waterTop = new THREE.InstancedMesh(waterGeo, waterMatTop, waterKeys.length);
+  waterTop.instanceMatrix = waterMesh.instanceMatrix;
+  waterTop.renderOrder = 1;
+  group.add(waterTop);
+
   // ------------------------------------------------------------ island hexes
   const isleGeo = new THREE.CylinderGeometry(HEX * 0.92, HEX * 1.08, 1, 6);
   const isleMat = new THREE.MeshToonMaterial({ gradientMap });
@@ -1159,6 +1167,8 @@ export function buildWorld(world, rng) {
   function animate(t, dt, breath) {
     waterMat.uniforms.uTime.value = t;
     waterMat.uniforms.uBreath.value = breath;
+    waterMatTop.uniforms.uTime.value = t;
+    waterMatTop.uniforms.uBreath.value = breath;
     for (const fn of animators) fn(t, dt);
     for (const fx of secretFx) {
       const surge = THREE.MathUtils.smoothstep(breath, 0.86, 1.0);

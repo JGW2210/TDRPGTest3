@@ -49,16 +49,20 @@ any mount path.
   circulating sea, with 3-5 grown islands of 10-30 hexes each (waters make up
   roughly 80-90% of the walkable tiles). Nothing connects regions on foot — between
   them is only void, faint pencil orbit-guides, belts, and serpents.
-- **Gate node blasts** — every neighboring pair of regions is joined by a
-  gate: a pair of 7-hex rocky node islets, one on each facing rim, crowned
-  with runic warden rings. Step into a node (or click it) and you're hurled
-  across the void in a soaring arc to its twin. First crossing stirs the
-  gate's named Warden (the boss-fight hook); stormbound nodes refuse the
-  blast until their rune-stone is struck.
+- **Gate node blasts** — regions on the same ring are chained by gates: pairs
+  of 7-hex rocky node islets crowned with runic warden rings. Same-ring
+  blasts ride the LINE OF ORBIT in a sweeping curve; each ring has exactly
+  ONE randomly-placed passage outward to the next ring, and those blasts are
+  a straight shot across the void. First crossing stirs the gate's named
+  Warden (the boss-fight hook); stormbound nodes refuse the blast until
+  their rune-stone is struck.
 - **Astral waters with depth** — every region has its own named water (the
   Heliotide, the Quicksilver Race, the Lidless Calm…). Hexes sink to
   different levels of the cosmic deep, near-borderless, with soft light-bands
   drifting along each current, faint rune-script, and rare starlike glints.
+  The sea is rendered twice — a glassy base tile plus a thin translucent
+  ghost-sheet floating above it, each wobbling on its own phase — so the
+  water reads as a restless volume, not a floor.
   The movement grid lives in UI instead: a glowing outline on the hovered hex
   and a trail of dots marking the queued route.
 - **The tide** — the sun breathes on a slow cycle. Waters brighten at high
