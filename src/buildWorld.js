@@ -1,15 +1,19 @@
-// Turns generated world data into the three.js scene, in Paper-Craft Cutout
-// style: pastel toon-shaded hexes with ink outline shells, a paper sun with
-// spinning rays, port-pair warden gates, leviathans, and a friendly cosmos.
+// Turns generated world data into the three.js scene, in dark-aetherial
+// papercraft style: toon-shaded hexes with ink outline shells, a paper sun
+// with spinning rays, sculpted astral bodies, dolmen waygates, per-region
+// landmarks and ambient veils, leviathans, and a deep runic cosmos.
 
 import * as THREE from 'three';
 import { HEX, RINGS } from './config.js';
 import * as Hx from './hexmath.js';
 import { makeNoise2D } from './rng.js';
 import {
-  makeRuneTexture, makeWaterMaterial, makeSwirlMaterial, makeToonGradient,
+  makeRuneTexture, makeWaterMaterial, makeToonGradient,
   makeGlowSpriteTexture, makeNebulaTexture, makeGlyphTexture, makeSparkleTexture,
 } from './materials.js';
+import { sculptBody } from './bodies.js';
+import { makeDolmenGate, makeLandmark } from './structures.js';
+import { buildDecorLibrary } from './decorSets.js';
 import { makeLabel } from './labels.js';
 
 const DUMMY = new THREE.Object3D();
@@ -117,6 +121,7 @@ export function buildWorld(world, rng) {
     const fringe = [];
     const seen = new Set(world.hexes.keys());
     for (const area of world.areas) {
+      if (area.asteroid) continue; // dry rock in the void — no watery rim
       let frontier = area.hexKeys;
       for (let ringI = 0; ringI < 2; ringI++) {
         const fadeLevel = ringI === 0 ? 0.6 : 0.87;
@@ -175,23 +180,45 @@ export function buildWorld(world, rng) {
   const isleMat = new THREE.MeshToonMaterial({ gradientMap });
   const isleMesh = new THREE.InstancedMesh(isleGeo, isleMat, isleKeys.length);
   const isleIndexByKey = new Map();
+  const terrainNoise = makeNoise2D(rng.fork('terrain'));
 
   isleKeys.forEach((k, i) => {
     const h = world.hexes.get(k);
     const area = world.areas[h.areaId];
     const p = Hx.toWorld(h.q, h.r, HEX);
-    // widen the height spread so shorelines, shelves, and crags all read
-    h.elev = Math.max(0.4, h.elev * (0.75 + rng.float() * 0.75));
+    // widen the height spread, then let the biome's terrain profile shape it
+    let e = Math.max(0.4, h.elev * (0.75 + rng.float() * 0.75));
+    if (!h.rock) {
+      switch (area.biome.terrain?.style) {
+        case 'terrace': e = 0.35 + Math.round(e / 0.5) * 0.5; break;        // stepped shelves
+        case 'dune': e = 0.4 + (e - 0.4) * 0.5; break;                       // low rolling flats
+        case 'crag': e *= rng.chance(0.16) ? 1.9 : 1.08; break;              // jagged stacks
+        case 'mesa': e = e > 0.95 ? 1.55 + (e - 0.95) * 0.25 : 0.55; break;  // flat-topped lofts
+      }
+    }
+    h.elev = Math.max(0.35, e);
     // a touch of hand-cut wonk on every island
     DUMMY.position.set(p.x, h.elev / 2, p.z);
     DUMMY.rotation.set((rng.float() - 0.5) * 0.05, 0, (rng.float() - 0.5) * 0.05);
     DUMMY.scale.set(1, h.elev, 1);
     DUMMY.updateMatrix();
     isleMesh.setMatrixAt(i, DUMMY.matrix);
-    // gate node islets are bare rock, unclaimed by any biome
-    const col = h.rock
-      ? tone(jitterColor(0x6e6e80, rng, 0.08), 0.5, 0.75)
-      : tone(jitterColor(area.biome.island.top, rng, 0.07), 0.82, 0.8);
+    let col;
+    if (h.rock) {
+      // gate node islets and asteroid reefs are bare rock, unclaimed by any biome
+      col = tone(jitterColor(0x6e6e80, rng, 0.08), 0.5, 0.75);
+    } else {
+      // two-tone tops mottle each island; shorelines catch the water's glow
+      const t2 = area.biome.island.top2 !== undefined
+        && terrainNoise.fbm(p.x * 0.055, p.z * 0.055, 2) > 0.52;
+      col = tone(jitterColor(t2 ? area.biome.island.top2 : area.biome.island.top, rng, 0.07), 0.82, 0.8);
+      let shore = false;
+      for (const d of Hx.DIRS) {
+        const nh = world.hexes.get(Hx.key(h.q + d[0], h.r + d[1]));
+        if (!nh || nh.kind === 'water') { shore = true; break; }
+      }
+      if (shore) col.lerp(new THREE.Color(area.biome.water.color), 0.16);
+    }
     isleMesh.setColorAt(i, col);
     isleIndexByKey.set(k, i);
   });
@@ -210,29 +237,31 @@ export function buildWorld(world, rng) {
   const isleBaseMatrices = isleMesh.instanceMatrix.array.slice();
 
   // ------------------------------------------------------------ island decor
-  const decorGeos = {
-    crystal: new THREE.IcosahedronGeometry(0.55, 0),
-    glass: new THREE.IcosahedronGeometry(0.55, 0),
-    ring: new THREE.TorusGeometry(0.55, 0.09, 6, 14),
-    shroom: new THREE.SphereGeometry(0.6, 7, 5),
-    spire: new THREE.ConeGeometry(0.45, 2.6, 5),
-    monolith: new THREE.BoxGeometry(0.55, 2.4, 0.4),
-    shard: new THREE.TetrahedronGeometry(0.7),
-  };
-  decorGeos.spire.translate(0, 1.3, 0);
-  decorGeos.monolith.translate(0, 1.2, 0);
-  decorGeos.crystal.translate(0, 0.7, 0);
-  decorGeos.glass.translate(0, 0.7, 0);
-  decorGeos.ring.translate(0, 1.1, 0);
-  decorGeos.shroom.translate(0, 0.75, 0);
-  decorGeos.shard.translate(0, 0.5, 0);
-  const GLOW_KINDS = new Set(['crystal', 'glass', 'ring', 'shroom']);
+  // Each biome furnishes its shores from its own bespoke set (decorSets.js).
+  // Landmark hexes are chosen first so each region's signature structure
+  // stands on clear ground.
+  const landmarkSpots = new Map(); // areaId -> hexKey
+  for (const area of world.areas) {
+    if (!area.biome.landmark || area.secret || area.asteroid) continue;
+    let bestK = null, be = -1;
+    for (const k of area.hexKeys) {
+      const h = world.hexes.get(k);
+      if (h.kind !== 'isle' || h.rock || h.gateId !== null || h.lockKey !== null) continue;
+      if (h.elev > be) { be = h.elev; bestK = k; }
+    }
+    if (bestK) landmarkSpots.set(area.id, bestK);
+  }
+  const landmarkKeys = new Set(landmarkSpots.values());
+
+  const decorLib = buildDecorLibrary();
   const decorPlacements = {};
 
   for (const k of isleKeys) {
     const h = world.hexes.get(k);
     const area = world.areas[h.areaId];
-    if (h.rock || !rng.chance(0.4)) continue;
+    if (landmarkKeys.has(k)) continue;
+    // asteroid reefs furnish their bare rock; gate islets stay bare
+    if ((h.rock && !area.asteroid) || !rng.chance(area.asteroid ? 0.3 : 0.4)) continue;
     const n = 1 + rng.int(2);
     for (let j = 0; j < n; j++) {
       const kind = rng.pick(area.biome.decor.kinds);
@@ -246,22 +275,46 @@ export function buildWorld(world, rng) {
       const s = 0.6 + rng.float() * 1.1;
       DUMMY.scale.set(s, s * (0.8 + rng.float() * 0.9), s);
       DUMMY.updateMatrix();
-      const col = GLOW_KINDS.has(kind)
+      const spec = decorLib[kind];
+      const col = spec.glow
         ? tone(jitterColor(area.biome.decor.color, rng, 0.08), 0.95, 0.75)
-        : tone(jitterColor(area.biome.island.side, rng, 0.1), 0.8, 0.9);
+        : tone(jitterColor(spec.tint ?? area.biome.island.side, rng, 0.1), 0.8, 0.9);
       (decorPlacements[kind] ??= []).push({ m: DUMMY.matrix.clone(), c: col });
     }
   }
   for (const [kind, list] of Object.entries(decorPlacements)) {
-    const mat = GLOW_KINDS.has(kind)
+    const spec = decorLib[kind];
+    const mat = spec.glow
       ? new THREE.MeshBasicMaterial()
       : new THREE.MeshToonMaterial({ gradientMap });
-    const mesh = new THREE.InstancedMesh(decorGeos[kind], mat, list.length);
+    const mesh = new THREE.InstancedMesh(spec.geo, mat, list.length);
     list.forEach((it, i) => {
       mesh.setMatrixAt(i, it.m);
       mesh.setColorAt(i, it.c);
     });
     group.add(mesh);
+  }
+
+  // ------------------------------------------------------------ landmarks
+  // One named signature structure per region; its name reads runic until the
+  // region is discovered.
+  const labelsByLandmark = new Map();
+  for (const [areaId, k] of landmarkSpots) {
+    const area = world.areas[areaId];
+    const lm = area.biome.landmark;
+    const h = world.hexes.get(k);
+    const p = Hx.toWorld(h.q, h.r, HEX);
+    const obj = makeLandmark(lm.kind, area.biome, rng, { gradientMap, glowTex, animators });
+    obj.position.set(p.x, h.elev, p.z);
+    obj.rotation.y = rng.angle();
+    group.add(obj);
+    const label = makeLabel({
+      title: lm.name, color: '#c9d4ef', scale: 16, startHidden: true,
+    });
+    label.sprite.material.opacity = 0.8;
+    label.sprite.position.set(p.x, h.elev + 9.5, p.z);
+    group.add(label.sprite);
+    labelsByLandmark.set(areaId, label);
   }
 
   // ------------------------------------------------------------ astral bodies
@@ -288,16 +341,19 @@ export function buildWorld(world, rng) {
         animators.push((t, dt) => { orbit.rotation.y -= dt * 0.35; });
         break;
       }
-      case 'sporelight': { // luminous spore caps freckling the surface
-        for (let i = 0; i < 7; i++) {
-          const dir = new THREE.Vector3().randomDirection();
-          const cap = new THREE.Mesh(
-            new THREE.SphereGeometry(0.5 + rng.float() * 0.5, 6, 5),
-            new THREE.MeshBasicMaterial({ color: 0xd6a5ff })
-          );
-          cap.position.copy(dir).multiplyScalar(s * 0.95);
-          planet.add(cap);
-        }
+      case 'echoverge': { // rings of answered light rippling outward
+        const ringMat = new THREE.MeshBasicMaterial({
+          color: 0xa8c4ff, transparent: true, opacity: 0,
+          blending: THREE.AdditiveBlending, depthWrite: false,
+        });
+        const echo = new THREE.Mesh(new THREE.TorusGeometry(s * 1.15, 0.12, 6, 32), ringMat);
+        echo.rotation.x = Math.PI / 2;
+        bodyGroup.add(echo);
+        animators.push((t) => {
+          const u = (t * 0.35) % 1;
+          echo.scale.setScalar(1 + u * 1.8);
+          ringMat.opacity = 0.5 * (1 - u);
+        });
         break;
       }
       case 'cinder': { // a molten fissure girdling the world
@@ -466,17 +522,21 @@ export function buildWorld(world, rng) {
         animators.push((t, dt) => { veil.rotation.y -= dt * 0.04; });
         break;
       }
-      case 'unblinking': { // one pale spot that, very rarely, winks
-        const spot = new THREE.Mesh(
-          new THREE.SphereGeometry(s * 0.28, 8, 6),
-          new THREE.MeshBasicMaterial({ color: 0xdff2ea })
-        );
-        spot.position.set(0, 0, s * 0.85);
-        planet.add(spot);
-        animators.push((t) => {
-          const wink = Math.pow(Math.max(0, Math.sin(t * 0.31)), 40);
-          spot.scale.y = 1 - wink * 0.9;
-        });
+      case 'silentorchard': { // pale petals shed into the dark, never landing
+        const n = 26;
+        const pos = new Float32Array(n * 3);
+        for (let i = 0; i < n; i++) {
+          const a = rng.angle();
+          const r = s * (1.2 + rng.float() * 1.1);
+          pos.set([Math.cos(a) * r, (rng.float() - 0.5) * s * 1.6, Math.sin(a) * r], i * 3);
+        }
+        const geo2 = new THREE.BufferGeometry();
+        geo2.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+        const petals = new THREE.Points(geo2, new THREE.PointsMaterial({
+          color: 0xe8d8c9, size: 0.55, transparent: true, opacity: 0.7, depthWrite: false,
+        }));
+        bodyGroup.add(petals);
+        animators.push((t, dt) => { petals.rotation.y += dt * 0.06; });
         break;
       }
     }
@@ -529,29 +589,34 @@ export function buildWorld(world, rng) {
         sun.scale.setScalar(pulse);
         corona.scale.setScalar(b.bodySize * (4.7 + Math.sin(t * 0.5) * 0.5));
       });
-    } else {
-      const geo = new THREE.IcosahedronGeometry(b.bodySize, 1);
-      const pos = geo.attributes.position;
-      const v = new THREE.Vector3();
-      for (let i = 0; i < pos.count; i++) {
-        v.fromBufferAttribute(pos, i);
-        v.multiplyScalar(1 + (rng.float() - 0.5) * 0.22);
-        pos.setXYZ(i, v.x, v.y, v.z);
+    } else if (b.bodyKind === 'rubble') {
+      // asteroid waystations get no world at all — just a slow knot of
+      // drifting stone where a planet ought to hang
+      const knot = new THREE.Group();
+      const nRocks = 5 + rng.int(4);
+      for (let i = 0; i < nRocks; i++) {
+        const rock = new THREE.Mesh(
+          new THREE.DodecahedronGeometry(0.6 + rng.float() * 1.2, 0),
+          new THREE.MeshToonMaterial({
+            color: tone(jitterColor(0x8a84a6, rng, 0.12), 0.7, 0.7), gradientMap,
+          })
+        );
+        const a = rng.angle();
+        const r = 1.5 + rng.float() * 4.5;
+        rock.position.set(Math.cos(a) * r, (rng.float() - 0.5) * 4, Math.sin(a) * r);
+        rock.rotation.set(rng.angle(), rng.angle(), rng.angle());
+        knot.add(rock);
       }
-      geo.computeVertexNormals();
-      const planet = new THREE.Mesh(geo, new THREE.MeshToonMaterial({
-        color: tone(new THREE.Color(b.bodyColor), 0.9, 0.85), gradientMap,
-      }));
+      bodyGroup.add(knot);
+      animators.push((t, dt) => { knot.rotation.y += dt * 0.08; });
+    } else {
+      const { planet, outline } = sculptBody(b, { rng, gradientMap, animators });
       bodyGroup.add(planet);
-      const outline = new THREE.Mesh(geo.clone(), new THREE.MeshBasicMaterial({
-        color: INK, side: THREE.BackSide,
-      }));
-      outline.scale.setScalar(1.07);
-      bodyGroup.add(outline);
+      if (outline) bodyGroup.add(outline);
       const spin = 0.02 + rng.float() * 0.05;
       animators.push((t, dt) => {
         planet.rotation.y += dt * spin;
-        outline.rotation.y = planet.rotation.y;
+        if (outline) outline.rotation.y = planet.rotation.y;
       });
 
       const halo = new THREE.Sprite(new THREE.SpriteMaterial({
@@ -597,10 +662,10 @@ export function buildWorld(world, rng) {
       if (area.secret) {
         if (b.key === 'hollowmoon') {
           animators.push((t) => {
-            // an empty paper bell with a gentle heartbeat
+            // an empty stone bell with a gentle heartbeat
             const beat = Math.pow(Math.max(0, Math.sin(t * 0.9)), 6);
             planet.scale.setScalar(1 + beat * 0.1);
-            outline.scale.setScalar(1.07 * (1 + beat * 0.1));
+            outline?.scale.setScalar(1.07 * (1 + beat * 0.1));
           });
         }
         if (b.key === 'weepingcomet') {
@@ -653,7 +718,7 @@ export function buildWorld(world, rng) {
       title: b.area,
       sub: b.body,
       color: glowHex(new THREE.Color(b.island.glow).lerp(new THREE.Color(0xffffff), 0.3).getHex()),
-      scale: area.secret ? 38 : 48,
+      scale: area.asteroid ? 28 : area.secret ? 38 : 48,
       startHidden: true,
     });
     label.sprite.position.set(area.pos.x, y + b.bodySize + 16, area.pos.z);
@@ -661,14 +726,15 @@ export function buildWorld(world, rng) {
     labelsByArea.set(area.id, label);
   }
 
-  // ------------------------------------------------------------ warden gates
-  // Each gate is a PAIR of port rings; riverflight runs between them.
-  const gateColor = 0xb89aff;
+  // ------------------------------------------------------------ dolmen waygates
+  // Each gate is a PAIR of ancient stone doorways — rough pillars, a cracked
+  // capstone, rubble, moss, and an energy field slung between the pillars.
   const labelsByGate = new Map();
   const gatePortGroups = new Map();
-  const portHitboxes = []; // invisible click targets over each port ring
+  const portHitboxes = []; // invisible click targets over each doorway
 
   for (const gate of world.gates) {
+    const glyphTex = makeGlyphTexture(gate.rune.ch, '#e6d9ff');
     const ports = [
       { key: gate.portA, otherKey: gate.portB },
       { key: gate.portB, otherKey: gate.portA },
@@ -680,56 +746,23 @@ export function buildWorld(world, rng) {
       const other = world.hexes.get(port.otherKey);
       const p = Hx.toWorld(h.q, h.r, HEX);
       const po = Hx.toWorld(other.q, other.r, HEX);
-      const g = new THREE.Group();
-      g.position.set(p.x, 0, p.z);
-      g.rotation.y = Math.atan2(po.x - p.x, po.z - p.z);
-
-      const ringMesh = new THREE.Mesh(
-        new THREE.TorusGeometry(3.4, 0.34, 8, 30),
-        new THREE.MeshToonMaterial({ color: gateColor, gradientMap })
-      );
-      ringMesh.position.y = 3.8;
-      g.add(ringMesh);
-      const ringOutline = new THREE.Mesh(
-        new THREE.TorusGeometry(3.4, 0.46, 8, 30),
-        new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide })
-      );
-      ringOutline.position.y = 3.8;
-      g.add(ringOutline);
-
-      const swirlMat = makeSwirlMaterial(gateColor);
-      const swirl = new THREE.Mesh(new THREE.CircleGeometry(3.0, 32), swirlMat);
-      swirl.position.y = 3.8;
-      g.add(swirl);
-      animators.push((t) => { swirlMat.uniforms.uTime.value = t; });
-
-      for (const side of [-1, 1]) {
-        const pylon = new THREE.Mesh(
-          new THREE.BoxGeometry(0.9, 5.2, 0.9),
-          new THREE.MeshToonMaterial({ color: 0x8a7ab8, gradientMap })
-        );
-        pylon.position.set(side * 5.2, 2.6, 0);
-        g.add(pylon);
+      const { group: g } = makeDolmenGate({ rng, gradientMap, glyphTex, glowTex, animators });
+      g.position.set(p.x, Math.max(0, h.elev - 0.25), p.z);
+      if (gate.kind === 'ring') {
+        // same-ring doorways open along the orbit's tangent (signed toward
+        // the twin) so the gate faces the arc the blast actually flies,
+        // not a chord cutting across the void
+        const aP = Math.atan2(p.z, p.x);
+        const aO = Math.atan2(po.z, po.x);
+        let da = aO - aP;
+        while (da > Math.PI) da -= Math.PI * 2;
+        while (da < -Math.PI) da += Math.PI * 2;
+        const sgn = da >= 0 ? 1 : -1;
+        g.rotation.y = Math.atan2(-Math.sin(aP) * sgn, Math.cos(aP) * sgn);
+      } else {
+        // radial and secret crossings are straight shots — face the twin
+        g.rotation.y = Math.atan2(po.x - p.x, po.z - p.z);
       }
-
-      // warning glyphs circling the ring — the world speaks
-      const glyphMat = new THREE.SpriteMaterial({
-        map: makeGlyphTexture(gate.rune.ch, '#e6d9ff'),
-        transparent: true, opacity: 0.9, depthWrite: false, toneMapped: false,
-      });
-      const glyphs = [];
-      for (let i = 0; i < 3; i++) {
-        const s = new THREE.Sprite(glyphMat);
-        s.scale.setScalar(1.6);
-        g.add(s);
-        glyphs.push(s);
-      }
-      animators.push((t) => {
-        glyphs.forEach((s, i) => {
-          const a = t * 0.7 + (i / 3) * Math.PI * 2;
-          s.position.set(Math.cos(a) * 4.6, 3.8 + Math.sin(t * 1.3 + i) * 0.5, Math.sin(a) * 1.2);
-        });
-      });
 
       const label = makeLabel({
         title: gate.name,
@@ -737,7 +770,7 @@ export function buildWorld(world, rng) {
         color: '#e6d9ff', subColor: '#b8c4e6',
         scale: 22, startHidden: true,
       });
-      label.sprite.position.set(p.x, 11, p.z);
+      label.sprite.position.set(p.x, 12, p.z);
       group.add(label.sprite);
       gateLabels.push(label);
 
@@ -865,6 +898,67 @@ export function buildWorld(world, rng) {
           eye.position.y = head.y + 0.6;
         }
       }
+    });
+  }
+
+  // ------------------------------------------------------------ ambient veils
+  // Each region carries its own little climate over the sea: embers rise,
+  // snow falls, fireflies wander, mists slide, dusk motes hang nearly still.
+  for (const area of world.areas) {
+    const veil = area.biome.veil;
+    if (!veil) continue;
+    const R = area.hexRadius * HEX * Hx.SQRT3 * 0.95;
+    const n = veil.count;
+    const H = 11;
+    const base = new Float32Array(n * 3);
+    const phase = new Float32Array(n);
+    const pos = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      const a = rng.angle();
+      const r = Math.sqrt(rng.float()) * R;
+      base[i * 3] = area.pos.x + Math.cos(a) * r;
+      base[i * 3 + 1] = 0.8 + rng.float() * H;
+      base[i * 3 + 2] = area.pos.z + Math.sin(a) * r;
+      phase[i] = rng.float() * 100;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const mat = new THREE.PointsMaterial({
+      color: veil.color, size: veil.size, transparent: true,
+      opacity: veil.opacity, depthWrite: false, blending: THREE.AdditiveBlending,
+    });
+    const pts = new THREE.Points(geo, mat);
+    group.add(pts);
+    const spd = veil.speed ?? 1;
+    const style = veil.style;
+    animators.push((t) => {
+      for (let i = 0; i < n; i++) {
+        const bx = base[i * 3], by = base[i * 3 + 1], bz = base[i * 3 + 2];
+        const ph = phase[i];
+        let x = bx, y = by, z = bz;
+        if (style === 'rise') {
+          y = 0.6 + ((by + t * 1.9 * spd + ph) % H);
+          x = bx + Math.sin(t * 0.7 + ph) * 0.8;
+        } else if (style === 'fall') {
+          y = 0.6 + (H - ((by + t * 2.3 * spd + ph) % H));
+          x = bx + Math.sin(t * 1.1 + ph) * 0.5;
+        } else if (style === 'drift') {
+          x = bx + Math.sin(t * 0.16 * spd + ph) * 9;
+          z = bz + Math.cos(t * 0.13 * spd + ph * 1.3) * 9;
+          y = by + Math.sin(t * 0.5 + ph) * 0.6;
+        } else if (style === 'firefly') {
+          x = bx + Math.sin(t * 0.6 * spd + ph) * 2.2;
+          z = bz + Math.sin(t * 0.5 * spd + ph * 1.7) * 2.2;
+          y = by + Math.sin(t * 0.9 + ph) * 1.1;
+        } else { // still
+          y = by + Math.sin(t * 0.4 + ph) * 0.3;
+        }
+        pos[i * 3] = x;
+        pos[i * 3 + 1] = y;
+        pos[i * 3 + 2] = z;
+      }
+      geo.attributes.position.needsUpdate = true;
+      if (style === 'firefly') mat.opacity = veil.opacity * (0.65 + 0.35 * Math.sin(t * 2.1));
     });
   }
 
@@ -1275,7 +1369,7 @@ export function buildWorld(world, rng) {
   return {
     group, animate,
     waterMesh, isleMesh, waterKeys, isleKeys, portHitboxes,
-    labelsByArea, labelsByGate,
+    labelsByArea, labelsByGate, labelsByLandmark,
     updateFlags, releaseLock, dimKeyStone,
     bounceIsle, boingGate, wobbleBody,
   };

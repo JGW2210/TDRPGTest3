@@ -44,18 +44,23 @@ any mount path.
 ## What's in the world
 
 - **Island regions in a vast orrery** — the Hearthstar's archipelago at the
-  heart, then four orbital rings holding 14 more regions, each an isolated
-  archipelago: an astral body nestled at the center, wrapped by a vast
-  circulating sea, with 3-5 grown islands of 10-30 hexes each (waters make up
-  roughly 80-90% of the walkable tiles). Nothing connects regions on foot — between
-  them is only void, faint pencil orbit-guides, belts, and serpents.
-- **Gate node blasts** — regions on the same ring are chained by gates: pairs
-  of 7-hex rocky node islets crowned with runic warden rings. Same-ring
-  blasts ride the LINE OF ORBIT in a sweeping curve; each ring has exactly
-  ONE randomly-placed passage outward to the next ring, and those blasts are
-  a straight shot across the void. First crossing stirs the gate's named
-  Warden (the boss-fight hook); stormbound nodes refuse the blast until
-  their rune-stone is struck.
+  heart, then four orbital rings (3/4/5/5) holding 17 more regions, each an
+  isolated archipelago: an astral body nestled at the center, wrapped by a
+  vast circulating sea, with 3-5 grown islands of 10-30 hexes each (waters
+  make up roughly 80-90% of the walkable tiles). Nothing connects regions on
+  foot — between them is only void, faint pencil orbit-guides, belts, and
+  serpents. Threaded between the outermost regions drift three **asteroid
+  waystations** — bare-rock reefs with no body and no sea, just stone,
+  rubble, and two doorways.
+- **Dolmen waygate blasts** — regions on the same ring are chained by gates:
+  pairs of 7-hex rocky node islets bearing ancient dolmen doorways — rough
+  mossy pillars, a cracked capstone, rubble, and a shimmering energy field
+  hung between the stones. Same-ring doorways face along the orbit's tangent
+  and their blasts ride the LINE OF ORBIT in a sweeping curve; each ring has
+  exactly ONE randomly-placed passage outward to the next ring, and those
+  gates face their twin for a straight shot across the void. First crossing
+  stirs the gate's named Warden (the boss-fight hook); stormbound nodes
+  refuse the blast until their rune-stone is struck.
 - **Astral waters with depth** — every region has its own named water (the
   Heliotide, the Quicksilver Race, the Lidless Calm…). Hexes sink to
   different levels of the cosmic deep, near-borderless, with soft light-bands
@@ -84,9 +89,19 @@ any mount path.
   against a deep indigo void, ink outline shells on every island and body, a
   craft-paper sun with a spinning crown of rays, sparkle stars, dark paper
   nebulae, and crayon comet trails.
-- **Bodies with character** — every astral body has a signature: Aeolith's
-  chime-ring of crystals, Horolith's counter-turning gear, Fulmen's shearing
-  storm-bands, Vesperine's bobbing lanterns, Ophthal's rare wink…
+- **Sculpted bodies with character** — every astral body is bespoke geometry
+  at its own scale: Thalassa an oblate ocean giant, Fulmen a banded tempest
+  colossus dwarfing the moons, Horolith a turned-brass machine world with its
+  counter-turning gear, Ophthal a lidless eye that very rarely blinks,
+  Fauces a fanged mouth slowly chewing, Resonar a world split into answering
+  halves, Cantus a hollow husk, Nihil a black-rayed inverse sun…
+- **Regions with their own dress** — each biome shapes its islands its own
+  way (terraces, dunes, crags, mesas) in two mottled tones with glowing
+  shorelines; furnishes them from a bespoke decor kit (chime-bells, cog
+  stacks, rust anchors, bone arches, eyestalks…); hangs its own weather over
+  the sea (rising embers, falling snow, wandering fireflies, sliding mists);
+  and keeps one named landmark — the First Hearth, the Stopped Clock, the
+  Lidless Idol, the Baleen Arch — runic until you set foot there.
 - **Named curios** — small drifting oddities with quiet name-tags scattered
   through the void: the Anchorless Bell, a Door to Nowhere, a Very Lost
   Teacup, the First Draft of a Star — plus fields of paper shards, torn
@@ -106,10 +121,13 @@ archipelago shapes, river routes, gate runes, lock positions).
 
 | File | Role |
 | --- | --- |
-| `src/config.js` | Biome/water/decor tables, ring layout, runic alphabets |
-| `src/worldgen.js` | Seeded generation: areas, hexes, rivers, gates, locks, leviathans |
+| `src/config.js` | Biome/water/terrain/veil/landmark tables, ring layout, runes |
+| `src/worldgen.js` | Seeded generation: areas, hexes, asteroids, gates, locks, leviathans |
 | `src/buildWorld.js` | Turns world data into instanced meshes + cosmos décor |
-| `src/materials.js` | Water/sun/gate shaders, canvas textures |
+| `src/bodies.js` | Sculpted astral-body archetypes (eye, maw, gas giant, husk…) |
+| `src/structures.js` | Dolmen waygates + per-region signature landmarks |
+| `src/decorSets.js` | Bespoke per-biome island decor geometry library |
+| `src/materials.js` | Water/veil shaders, canvas textures |
 | `src/player.js` | The Star-Pilgrim wisp: click-to-sail, BFS pathing, ripples |
 | `src/controls.js` | Left-drag glide / right-drag rotate / scroll zoom camera |
 | `src/ui.js`, `src/labels.js` | Floating runic text, Twin-Tongue deciphering |
