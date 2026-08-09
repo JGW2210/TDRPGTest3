@@ -16,6 +16,17 @@ npm run dev
 Open the printed URL (default `http://localhost:5173`). Append `?seed=ANYTHING`
 for a different cosmos, or press **R** in-game.
 
+## Deployment (GitHub Pages)
+
+Pushes to `main` or `claude/tdrpgtest3-world-map-skpoyn` run
+`.github/workflows/deploy.yml`, which builds the site and publishes it to
+GitHub Pages at `https://<user>.github.io/TDRPGTest3/`.
+
+One-time setup if the first run can't enable Pages by itself:
+repo **Settings → Pages → Source: GitHub Actions**, then re-run the workflow
+(or push again). The Vite config uses a relative `base`, so the build works at
+any mount path.
+
 ## Controls
 
 | Input | Action |
