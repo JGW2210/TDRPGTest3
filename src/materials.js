@@ -2,7 +2,7 @@
 // look: flat pastels, ink outlines, layered wiggly-cut paper waves.
 
 import * as THREE from 'three';
-import { RUNE_CHARS, HEX } from './config.js';
+import { RUNE_CHARS } from './config.js';
 
 export function makeRuneTexture(rng, { count = 170, size = 1024 } = {}) {
   const c = document.createElement('canvas');
@@ -37,9 +37,11 @@ export function makeToonGradient() {
   return tex;
 }
 
-// Astral water as cut paper: flat pastel base, two-tone wave stripes with
-// wiggly edges and ink lines, rune glyphs stamped like prints, ink hex border.
+// Astral water: a dark aetherial sea. Near-borderless hexes at varying
+// depths, soft light-bands drifting with the current, large luminance
+// blotches, faint rune-script, and rare starlike glints.
 // aFlow = (dirX, dirZ, speed, flags) where flags bits: 1=faint 2=leviathan 4=blocked.
+// aDepth = 0 (shallow) .. 1 (deep).
 export function makeWaterMaterial(runeTex) {
   return new THREE.ShaderMaterial({
     transparent: true,
@@ -52,15 +54,16 @@ export function makeWaterMaterial(runeTex) {
     vertexShader: /* glsl */ `
       attribute vec3 aColor;
       attribute vec4 aFlow;
+      attribute float aDepth;
       varying vec3 vColor;
       varying vec4 vFlow;
       varying vec3 vWorld;
-      varying float vR;
+      varying float vDepth;
       uniform float uTime;
       void main() {
         vColor = aColor;
         vFlow = aFlow;
-        vR = length(position.xz) / ${(HEX * 0.98).toFixed(3)};
+        vDepth = aDepth;
         vec4 wp = vec4(position, 1.0);
         #ifdef USE_INSTANCING
           wp = instanceMatrix * wp;
@@ -70,7 +73,7 @@ export function makeWaterMaterial(runeTex) {
         float blocked = step(3.5, flags);
         float rem = flags - blocked * 4.0;
         float levi = step(1.5, rem);
-        wp.y += sin(uTime * 0.5 + wp.x * 0.05 + wp.z * 0.045) * 0.03;
+        wp.y += sin(uTime * 0.5 + wp.x * 0.05 + wp.z * 0.045) * 0.04;
         wp.y += levi * sin(uTime * 1.35 + wp.x * 0.13 + wp.z * 0.11) * 0.55;
         vWorld = wp.xyz;
         gl_Position = projectionMatrix * viewMatrix * wp;
@@ -83,8 +86,8 @@ export function makeWaterMaterial(runeTex) {
       varying vec3 vColor;
       varying vec4 vFlow;
       varying vec3 vWorld;
-      varying float vR;
-      const vec3 INK = vec3(0.21, 0.18, 0.31);
+      varying float vDepth;
+      const vec3 VOID = vec3(0.045, 0.05, 0.11);
       void main() {
         vec2 dir = vFlow.xy;
         float sp = vFlow.z;
@@ -94,32 +97,35 @@ export function makeWaterMaterial(runeTex) {
         float levi = step(1.5, rem);
         float faint = rem - levi * 2.0;
 
-        // layered wiggly-cut wave stripes drifting along the current
+        // soft light-bands drifting with the current — watery, not liney
         vec2 perp = vec2(-dir.y, dir.x);
         float along = dot(vWorld.xz, dir);
         float across = dot(vWorld.xz, perp);
-        float wig = sin(across * 0.35 + uTime * 0.4) * 0.9 + sin(across * 0.13) * 1.4;
-        float s = fract(along * 0.055 - uTime * sp * 0.05 + wig * 0.045);
+        float wig = sin(across * 0.22 + uTime * 0.3) * 1.2 + sin(across * 0.09) * 1.8;
+        float bands = 0.5 + 0.5 * sin(along * 0.11 - uTime * sp * 0.35 + wig * 0.35);
 
-        vec3 base = vColor * (0.86 + 0.17 * step(0.5, s));
-        float dEdge = min(abs(s - 0.5), min(s, 1.0 - s));
-        float line = 1.0 - smoothstep(0.015, 0.05, dEdge);
-        vec3 col = mix(base, INK, line * 0.28);
+        // large drifting luminance blotches — the cosmic deep
+        float blotch = texture2D(uRunes, vWorld.xz * 0.004 + vec2(uTime * 0.002, -uTime * 0.0015)).a;
 
-        // rune glyphs stamped like ink prints, drifting with the flow
+        vec3 col = mix(VOID, vColor, 0.42 + 0.3 * bands);
+        col = mix(col, VOID, vDepth * 0.5);
+        col *= 0.82 + 0.34 * blotch;
+
+        // faint rune-script adrift in the water
         float g1 = texture2D(uRunes, vWorld.xz * 0.03 - dir * uTime * sp * 0.006).a;
-        col = mix(col, INK, g1 * 0.16);
+        col += vColor * g1 * 0.15 * (0.55 + 0.45 * uBreath);
 
-        // cut-cardstock hex border
-        float border = smoothstep(0.86, 0.97, vR);
-        col = mix(col, INK, border * 0.38);
+        // rare starlike glints on the surface
+        float g2 = texture2D(uRunes, vWorld.xz * 0.11 + dir * uTime * sp * 0.004 + 0.31).a;
+        float glint = pow(g2, 6.0) * max(0.0, sin(uTime * 1.7 + vWorld.x * 0.5 + vWorld.z * 0.4));
+        col += vec3(0.75, 0.85, 1.0) * glint * 0.45;
 
-        col *= 0.94 + 0.10 * uBreath;
-        col += levi * vColor * 0.12 * (0.5 + 0.5 * sin(uTime * 1.35 + vWorld.x * 0.13));
-        col = mix(col, vec3(0.64, 0.62, 0.72), blocked * 0.7);
+        col *= 0.92 + 0.12 * uBreath;
+        col += levi * vColor * 0.14 * (0.5 + 0.5 * sin(uTime * 1.35 + vWorld.x * 0.13));
+        col = mix(col, vec3(0.30, 0.28, 0.40), blocked * 0.75);
 
-        float alpha = mix(0.97, 0.15 + 0.55 * uBreath, faint);
-        alpha = mix(alpha, 0.88, blocked * 0.3);
+        float alpha = mix(0.94, 0.12 + 0.5 * uBreath, faint);
+        alpha = mix(alpha, 0.85, blocked * 0.3);
         gl_FragColor = vec4(col, alpha);
       }
     `,

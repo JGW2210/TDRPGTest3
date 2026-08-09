@@ -3,7 +3,7 @@ html, body {
   padding: 0;
   height: 100%;
   overflow: hidden;
-  background: #2e3158;
+  background: #14172e;
   cursor: crosshair;
 }
 
@@ -17,7 +17,7 @@ html, body {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  background: radial-gradient(ellipse at 50% 42%, transparent 58%, rgba(30, 32, 62, 0.35) 88%, rgba(24, 26, 52, 0.55) 100%);
+  background: radial-gradient(ellipse at 50% 42%, transparent 55%, rgba(12, 14, 30, 0.45) 88%, rgba(8, 9, 22, 0.7) 100%);
   z-index: 5;
 }
 

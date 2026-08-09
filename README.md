@@ -5,7 +5,7 @@ polygonal worlds orbiting a small paper sun, navigated hex-by-hex across an
 **Orb-Weaver's Wheel** of astral waters — concentric ring-rivers and radial
 spokes, like a spider web spun across a solar system. Built with three.js.
 
-![style](https://img.shields.io/badge/style-Paper--Craft%20Cutout-f4e3c9)
+![style](https://img.shields.io/badge/style-Dark%20Aetherial%20Papercraft-2a2050)
 
 ## Run it
 
@@ -53,10 +53,12 @@ any mount path.
   the water in a swift streaking glide to the far port. First crossing stirs
   the gate's named Warden (the boss-fight hook); stormwalls on the route
   refuse the flight until becalmed.
-- **Astral waters** — every region has its own named water (the Heliotide,
-  the Quicksilver Race, the Lidless Calm…) rendered as layered wiggly-cut
-  paper waves with rune glyphs stamped like ink prints, drifting along each
-  hex's current. Waters circulate around bodies; rings alternate direction.
+- **Astral waters with depth** — every region has its own named water (the
+  Heliotide, the Quicksilver Race, the Lidless Calm…). Hexes sink to
+  different levels of the cosmic deep, near-borderless, with soft light-bands
+  drifting along each current, faint rune-script, and rare starlike glints.
+  The movement grid lives in UI instead: a glowing outline on the hovered hex
+  and a trail of dots marking the queued route.
 - **The tide** — the sun breathes on a slow cycle. Waters brighten at high
   tide, and *faint tide-paths* into the outer dark only glimmer into view at
   the peak.
@@ -70,10 +72,17 @@ any mount path.
   the Weeping Comet (faint tide-path), the Hollow Moon (strike all three
   rumor-rune obelisks), the Unlit Star (follow the leviathan). At peak tide an
   *alignment surge* pillar of light briefly marks each secret.
-- **Paper-Craft Cutout look** — flat pastels, ink outline shells on every
-  island and body, a craft-paper sun with a spinning crown of rays, doodle
-  sparkle stars, pastel paper clouds, crayon comet trails, and a warm
-  twilight-blue sky instead of a black void.
+- **Dark aetherial papercraft look** — muted toned-down hues glowing softly
+  against a deep indigo void, ink outline shells on every island and body, a
+  craft-paper sun with a spinning crown of rays, sparkle stars, dark paper
+  nebulae, and crayon comet trails.
+- **Bodies with character** — every astral body has a signature: Aeolith's
+  chime-ring of crystals, Horolith's counter-turning gear, Fulmen's shearing
+  storm-bands, Vesperine's bobbing lanterns, Ophthal's rare wink…
+- **Named curios** — small drifting oddities with quiet name-tags scattered
+  through the void: the Anchorless Bell, a Door to Nowhere, a Very Lost
+  Teacup, the First Draft of a Star — plus fields of paper shards, torn
+  strips, and stray moonlets.
 - **Squash & bounce** — the wisp squashes through every hop, islands spring
   when you land, port rings boing as you pass through, and astral bodies
   wobble like jelly when first discovered.

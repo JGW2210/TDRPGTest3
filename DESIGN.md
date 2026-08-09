@@ -157,6 +157,32 @@ ominous — Ophthal, That Which Watches, is now merely a name.
 
 ---
 
+# Round 3 — Depth & the Dark Aetherial Pass
+
+Direct art-direction notes (no poll this round): pull the world back toward a
+dark cosmic mood while keeping the papery charm.
+
+- **Hex depth** — water hexes sink to per-hex depths (seeded noise), darker
+  the deeper; island heights spread wider so shorelines, shelves, and crags
+  read at a glance.
+- **Watery, not stripey** — the water shader trades hard paper stripes and
+  ink hex borders for soft drifting light-bands, large luminance blotches,
+  faint rune-script, and rare starlike glints. Rivers are near-borderless.
+- **Movement grid as UI** — a pulsing outline marks the hovered hex and a
+  dotted trail marks the queued route; the sea itself carries no grid.
+- **Muted palette** — saturation and lightness pulled down across water,
+  islands, decor, and debris (`tone()` in buildWorld); deep indigo sky,
+  dark paper nebulae, dimmer dust and guides; bloom as a gentle accent.
+- **Body character** — each astral body gets a signature feature (chime
+  crystals, molten fissure, brass gear, storm-bands, lanterns, bone crown,
+  shadow veil, a rare wink…).
+- **Named curios & more debris** — eight labeled drifting oddities plus
+  instanced fields of paper shards, torn strips, and moonlets.
+- **Label layering** — all name sprites render with depth-test off and a high
+  render order, so names are always readable above the tiles.
+
+---
+
 ## Boss / combat hooks
 
 Entering a gate port fires `handleGate` in `main.js` before the riverflight

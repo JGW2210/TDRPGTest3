@@ -8,7 +8,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
-import { toRunes } from './config.js';
+import { HEX, toRunes } from './config.js';
 import * as Hx from './hexmath.js';
 import { Rng } from './rng.js';
 import { generateWorld } from './worldgen.js';
@@ -26,11 +26,11 @@ const seed = params.get('seed') || 'AETHERION';
 const world = generateWorld(seed);
 const buildRng = new Rng(seed + ':build');
 
-const BG = 0x2e3158; // warm deep twilight-blue
+const BG = 0x14172e; // dark cosmic indigo with a papery warmth
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(BG);
-scene.fog = new THREE.FogExp2(BG, 0.0004);
+scene.fog = new THREE.FogExp2(BG, 0.00045);
 
 const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.5, 7000);
 
@@ -38,21 +38,21 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+renderer.toneMappingExposure = 1.0;
 document.getElementById('app').appendChild(renderer.domElement);
 
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.3, 0.4, 0.85);
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.5, 0.45, 0.72);
 composer.addPass(bloom);
 
-// paper-craft lighting: bright and even, one warm key from the hearthstar
-scene.add(new THREE.AmbientLight(0xdfe2ff, 0.8));
-scene.add(new THREE.HemisphereLight(0xfff2dd, 0x8a90c9, 0.5));
-const sunLight = new THREE.PointLight(0xffe3b0, 1.3, 0, 0);
+// dark-aetherial lighting: a dim even wash, one warm key from the hearthstar
+scene.add(new THREE.AmbientLight(0xb8c2ee, 0.5));
+scene.add(new THREE.HemisphereLight(0xd8d2ff, 0x10121f, 0.35));
+const sunLight = new THREE.PointLight(0xffd9a8, 1.5, 0, 0);
 sunLight.position.set(0, 40, 0);
 scene.add(sunLight);
-const rim = new THREE.DirectionalLight(0xfff6e6, 0.7);
+const rim = new THREE.DirectionalLight(0xdfe4ff, 0.45);
 rim.position.set(300, 500, 200);
 scene.add(rim);
 
@@ -167,6 +167,54 @@ player.onEnterHex = (hex) => {
   if (hex.gateId !== null && k !== suppressGateKey) handleGate(hex, k);
 };
 
+// ---------------------------------------------------------------- movement UI
+// The water is near-borderless, so the grid lives in UI: a glowing outline on
+// the hovered hex, and a trail of dots marking the queued route.
+const hexPts = [];
+for (let i = 0; i <= 6; i++) {
+  const a = Math.PI / 6 + (i * Math.PI) / 3;
+  hexPts.push(new THREE.Vector3(Math.cos(a) * HEX * 0.95, 0, Math.sin(a) * HEX * 0.95));
+}
+const hoverMarker = new THREE.Line(
+  new THREE.BufferGeometry().setFromPoints(hexPts),
+  new THREE.LineBasicMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0.9, depthTest: false })
+);
+hoverMarker.renderOrder = 20;
+hoverMarker.visible = false;
+scene.add(hoverMarker);
+
+const PATH_MAX = 200;
+const pathDots = new THREE.InstancedMesh(
+  new THREE.CircleGeometry(0.55, 8).rotateX(-Math.PI / 2),
+  new THREE.MeshBasicMaterial({
+    color: 0x9fd8ff, transparent: true, opacity: 0.65, depthTest: false,
+    blending: THREE.AdditiveBlending,
+  }),
+  PATH_MAX
+);
+pathDots.renderOrder = 19;
+pathDots.count = 0;
+scene.add(pathDots);
+const dotDummy = new THREE.Object3D();
+let lastPathSig = '';
+
+function refreshPathDots() {
+  const path = player.path;
+  const sig = path.length ? path[0] + ':' + path.length : '';
+  if (sig === lastPathSig) return;
+  lastPathSig = sig;
+  const n = Math.min(path.length, PATH_MAX);
+  for (let i = 0; i < n; i++) {
+    const h = world.hexes.get(path[i]);
+    const p = Hx.toWorld(h.q, h.r, HEX);
+    dotDummy.position.set(p.x, (h.kind === 'isle' ? h.elev : 0) + 0.45, p.z);
+    dotDummy.updateMatrix();
+    pathDots.setMatrixAt(i, dotDummy.matrix);
+  }
+  pathDots.count = n;
+  if (n) pathDots.instanceMatrix.needsUpdate = true;
+}
+
 // ---------------------------------------------------------------- picking
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
@@ -203,8 +251,15 @@ addEventListener('pointermove', (e) => {
   if (hoverCooldown > 0) return;
   hoverCooldown = 0.08;
   const key = hexKeyAt(e.clientX, e.clientY);
-  if (!key) { ui.hideHover(); return; }
+  if (!key) {
+    ui.hideHover();
+    hoverMarker.visible = false;
+    return;
+  }
   const hex = world.hexes.get(key);
+  const hp = Hx.toWorld(hex.q, hex.r, HEX);
+  hoverMarker.position.set(hp.x, (hex.kind === 'isle' ? hex.elev : 0) + 0.2, hp.z);
+  hoverMarker.visible = true;
   const area = areaOf(hex);
   const b = area.biome;
   let text;
@@ -270,6 +325,8 @@ function frame() {
   built.animate(t, dt, breath);
   player.update(dt, scene, t);
   updateLabels(dt);
+  refreshPathDots();
+  hoverMarker.material.opacity = 0.55 + 0.35 * Math.sin(t * 4);
 
   // gentle follow while sailing or flying, unless the player is steering
   if (player.isMoving && performance.now() / 1000 - controls.lastPanTime > 2.5) {

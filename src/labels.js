@@ -37,10 +37,12 @@ export function makeLabel({ title, sub = '', color = '#ffe3b0', subColor = '#9fd
   drawLabel(ctx, w, h, discovered ? title : runic, discovered ? sub : '', color, subColor);
   tex.needsUpdate = true;
 
+  // depthTest off + high renderOrder: name text always reads above the tiles
   const mat = new THREE.SpriteMaterial({
-    map: tex, transparent: true, depthWrite: false, toneMapped: false,
+    map: tex, transparent: true, depthWrite: false, depthTest: false, toneMapped: false,
   });
   const sprite = new THREE.Sprite(mat);
+  sprite.renderOrder = 30;
   sprite.scale.set(scale, scale * (h / w), 1);
   sprite.userData.baseScale = scale;
 
