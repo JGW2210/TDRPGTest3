@@ -842,7 +842,7 @@ export function buildWorld(world, rng) {
     const pos = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) {
       const a = rng.angle();
-      const r = 60 + rng.float() * 1250;
+      const r = 60 + rng.float() * 1550;
       pos.set([Math.cos(a) * r, (rng.float() - 0.5) * 80, Math.sin(a) * r], i * 3);
     }
     const geo = new THREE.BufferGeometry();
@@ -873,9 +873,9 @@ export function buildWorld(world, rng) {
   // asteroid belts between the orbital rings — the orrery's slow clockwork
   {
     const beltSpecs = [
-      { r: 290, n: 150, speed: 0.004 },
-      { r: 490, n: 180, speed: 0.003 },
-      { r: 690, n: 160, speed: 0.002 },
+      { r: 395, n: 170, speed: 0.004 },
+      { r: 665, n: 200, speed: 0.003 },
+      { r: 935, n: 180, speed: 0.002 },
     ];
     const rockGeo = new THREE.DodecahedronGeometry(1, 0);
     for (const spec of beltSpecs) {
@@ -926,7 +926,7 @@ export function buildWorld(world, rng) {
       }));
       group.add(trail);
 
-      const a = 800 + rng.float() * 450;
+      const a = 1000 + rng.float() * 600;
       const b2 = a * (0.4 + rng.float() * 0.4);
       const speed = 0.02 + rng.float() * 0.03;
       const phase = rng.angle();
@@ -962,7 +962,7 @@ export function buildWorld(world, rng) {
     const mesh = new THREE.InstancedMesh(geo, new THREE.MeshToonMaterial({ gradientMap }), n);
     for (let i = 0; i < n; i++) {
       const a = rng.angle();
-      const r = 80 + rng.float() * 1150;
+      const r = 80 + rng.float() * 1450;
       DUMMY.position.set(Math.cos(a) * r, -20 + rng.float() * 85, Math.sin(a) * r);
       DUMMY.rotation.set(rng.angle(), rng.angle(), rng.angle());
       DUMMY.scale.setScalar(0.6 + rng.float() * 1.6);
@@ -986,7 +986,7 @@ export function buildWorld(world, rng) {
     for (let i = 0; i < 40; i++) {
       const s = new THREE.Sprite(glyphMats[rng.int(8)]);
       const a = rng.angle();
-      const r = 100 + rng.float() * 1150;
+      const r = 100 + rng.float() * 1450;
       s.position.set(Math.cos(a) * r, 8 + rng.float() * 75, Math.sin(a) * r);
       s.scale.setScalar(5 + rng.float() * 9);
       group.add(s);
@@ -1009,7 +1009,7 @@ export function buildWorld(world, rng) {
       const mesh = new THREE.InstancedMesh(f.geo, new THREE.MeshToonMaterial({ gradientMap }), f.n);
       for (let i = 0; i < f.n; i++) {
         const a = rng.angle();
-        const r = 90 + rng.float() * 1150;
+        const r = 90 + rng.float() * 1450;
         DUMMY.position.set(Math.cos(a) * r, -30 + rng.float() * 110, Math.sin(a) * r);
         DUMMY.rotation.set(rng.angle(), rng.angle(), rng.angle());
         DUMMY.scale.setScalar(0.4 + rng.float() * 1.4);
@@ -1096,7 +1096,7 @@ export function buildWorld(world, rng) {
     curios.forEach(([name, make], i) => {
       const obj = make();
       const a = (i / curios.length) * Math.PI * 2 + rng.angle() * 0.2;
-      const r = 160 + rng.float() * 900;
+      const r = 200 + rng.float() * 1150;
       obj.position.set(Math.cos(a) * r, 10 + rng.float() * 42, Math.sin(a) * r);
       group.add(obj);
       const bobPhase = rng.angle();

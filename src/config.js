@@ -6,13 +6,13 @@
 export const HEX = 3; // hex radius in world units
 
 export const RINGS = [
-  { radius: 190, count: 3 },
-  { radius: 390, count: 4 },
-  { radius: 590, count: 4 },
-  { radius: 790, count: 3 },
+  { radius: 260, count: 3 },
+  { radius: 530, count: 4 },
+  { radius: 800, count: 4 },
+  { radius: 1070, count: 3 },
 ];
 
-export const SECRET_RADIUS = [1080, 1230];
+export const SECRET_RADIUS = [1380, 1540];
 
 export const BIOMES = [
   {

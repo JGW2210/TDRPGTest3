@@ -13,6 +13,7 @@ import { Rng, makeNoise2D } from './rng.js';
 import * as Hx from './hexmath.js';
 
 const TAU = Math.PI * 2;
+const THREE_CLAMP = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
 export function generateWorld(seedStr) {
   const rng = new Rng(seedStr);
@@ -84,17 +85,20 @@ export function generateWorld(seedStr) {
     const c = area.pos;
     const ch = Hx.toHex(c.x, c.z, HEX);
     const clear = area.biome.bodyKind === 'sun' ? 4 : 3;
-    // capped so facing regions' gate islets can never bridge the void between
-    const maxDist = clear + 9;
 
-    const nIslands = area.secret ? 2 : 2 + (rng.chance(0.65) ? 1 : 0);
+    const nIslands = area.secret ? 3 : 3 + rng.int(3);
     const islandSizes = [];
     for (let i = 0; i < nIslands; i++) {
-      islandSizes.push(area.biome.bodyKind === 'sun' ? 18 + rng.int(13) : 10 + rng.int(21));
+      islandSizes.push(area.secret ? 10 + rng.int(11) : 10 + rng.int(21));
     }
     const isleTotal = islandSizes.reduce((s2, v) => s2 + v, 0);
-    const waterFrac = rng.range(0.4, 0.6);
+    // vast seas: islands are sparse marks on a wide water field
+    const waterFrac = rng.range(0.8, 0.9);
     const walkableTarget = Math.round(isleTotal / (1 - waterFrac));
+    // size the region to its sea, capped so facing regions' gate islets can
+    // never bridge the void between
+    const maxDist = clear + THREE_CLAMP(Math.ceil(Math.sqrt(walkableTarget / 2.1)), 9, 15);
+    area.hexRadius = maxDist;
 
     // --- connected blob, seeded from the ring that circles the body
     const cells = new Set();
@@ -116,7 +120,7 @@ export function generateWorld(seedStr) {
     }
 
     let growGuard = 0;
-    while (cells.size < walkableTarget && frontier.length && growGuard++ < 30000) {
+    while (cells.size < walkableTarget && frontier.length && growGuard++ < 80000) {
       const fi = rng.int(frontier.length);
       const [fq, fr] = frontier[fi];
       const dir = Hx.DIRS[rng.int(6)];
@@ -141,7 +145,7 @@ export function generateWorld(seedStr) {
     const seeds = [];
     for (let isl = 0; isl < nIslands; isl++) {
       let seed = null;
-      for (let tries = 0; tries < 60 && !seed; tries++) {
+      for (let tries = 0; tries < 140 && !seed; tries++) {
         const cand = cellArr[rng.int(cellArr.length)];
         const d = distFromCenter(cand[0], cand[1]);
         if (d < clear + 3) continue;
@@ -402,7 +406,7 @@ export function generateWorld(seedStr) {
   // ---------------------------------------------------------------- leviathans
   // Serpents of the open void: two circle between the orbits, and one wheels
   // tightly around the hidden crossing to the Unlit Star, marking the way.
-  for (const [radius, reverse] of [[290, false], [490, true]]) {
+  for (const [radius, reverse] of [[395, false], [665, true]]) {
     const pts = [];
     for (let i = 0; i < 48; i++) {
       const a = (i / 48) * TAU;

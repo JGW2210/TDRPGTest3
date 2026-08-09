@@ -188,11 +188,12 @@ dark cosmic mood while keeping the papery charm.
 Direct rework notes: the walkable web is gone.
 
 - **Region anatomy** — each region grows a connected water blob seeded from
-  the ring that nestles its astral body, then 2-3 islands of 10-30 hexes grow
+  the ring that nestles its astral body, then 3-5 islands of 10-30 hexes grow
   inside the blob (kept a hex apart), with island-level base heights and
-  lower shorelines. Waters land at roughly 40-60% of walkable tiles. Regions
-  were re-spaced onto wider orbits (190/390/590/790; secrets past 1080) so
-  nothing can touch across the void.
+  lower shorelines. Waters land at roughly 80-90% of walkable tiles — vast
+  seas with sparse island marks. Regions were re-spaced onto wider orbits
+  (260/530/800/1070; secrets past 1380) so nothing can touch across the
+  void.
 - **No rivers** — ring-rivers and spokes are removed entirely. Between
   regions there is only void; clicking another region reports that the
   currents do not reach.

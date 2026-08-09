@@ -29,9 +29,9 @@ const BG = 0x14172e; // dark cosmic indigo with a papery warmth
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(BG);
-scene.fog = new THREE.FogExp2(BG, 0.00036);
+scene.fog = new THREE.FogExp2(BG, 0.00026);
 
-const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.5, 7000);
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.5, 9000);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));

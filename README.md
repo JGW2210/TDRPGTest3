@@ -45,9 +45,9 @@ any mount path.
 
 - **Island regions in a vast orrery** — the Hearthstar's archipelago at the
   heart, then four orbital rings holding 14 more regions, each an isolated
-  archipelago: an astral body nestled at the center, wrapped by circulating
-  waters, with 2-3 grown islands of 10-30 hexes each (waters make up roughly
-  40-60% of the walkable tiles). Nothing connects regions on foot — between
+  archipelago: an astral body nestled at the center, wrapped by a vast
+  circulating sea, with 3-5 grown islands of 10-30 hexes each (waters make up
+  roughly 80-90% of the walkable tiles). Nothing connects regions on foot — between
   them is only void, faint pencil orbit-guides, belts, and serpents.
 - **Gate node blasts** — every neighboring pair of regions is joined by a
   gate: a pair of 7-hex rocky node islets, one on each facing rim, crowned
