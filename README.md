@@ -1,9 +1,10 @@
 # TDRPGTest3 — Astral Reaches World Map
 
 A runic cosmic world map for a roguelike (Binding of Isaac-inspired) game:
-polygonal worlds orbiting a small paper sun, navigated hex-by-hex across an
-**Orb-Weaver's Wheel** of astral waters — concentric ring-rivers and radial
-spokes, like a spider web spun across a solar system. Built with three.js.
+polygonal worlds orbiting a small paper sun, each an **isolated archipelago**
+adrift in the void — big grown islands around an astral body, wrapped in
+deep astral waters — linked only by **gate nodes** that blast the traveler
+across the dark. Built with three.js.
 
 ![style](https://img.shields.io/badge/style-Dark%20Aetherial%20Papercraft-2a2050)
 
@@ -42,17 +43,18 @@ any mount path.
 
 ## What's in the world
 
-- **The Orb-Weaver's Wheel** — the Hearthstar's archipelago at the heart, then
-  four complete concentric ring-rivers (2-3 hexes wide) crossed by eight
-  radial spokes. The 14 outer areas sit exactly at spoke-ring crossings, so
-  every archipelago is a junction node; the whole web is walkable water.
-  Pencil-line orbit guides sell the spider web from the zoomed-out view.
-- **Riverflight gates** — every neighboring pair of areas is joined by a gate:
-  a PAIR of runic port-rings, one at each shore, with the web's river running
-  between them. Click a port (or sail onto it) and your wisp is swept along
-  the water in a swift streaking glide to the far port. First crossing stirs
-  the gate's named Warden (the boss-fight hook); stormwalls on the route
-  refuse the flight until becalmed.
+- **Island regions in a vast orrery** — the Hearthstar's archipelago at the
+  heart, then four orbital rings holding 14 more regions, each an isolated
+  archipelago: an astral body nestled at the center, wrapped by circulating
+  waters, with 2-3 grown islands of 10-30 hexes each (waters make up roughly
+  40-60% of the walkable tiles). Nothing connects regions on foot — between
+  them is only void, faint pencil orbit-guides, belts, and serpents.
+- **Gate node blasts** — every neighboring pair of regions is joined by a
+  gate: a pair of 7-hex rocky node islets, one on each facing rim, crowned
+  with runic warden rings. Step into a node (or click it) and you're hurled
+  across the void in a soaring arc to its twin. First crossing stirs the
+  gate's named Warden (the boss-fight hook); stormbound nodes refuse the
+  blast until their rune-stone is struck.
 - **Astral waters with depth** — every region has its own named water (the
   Heliotide, the Quicksilver Race, the Lidless Calm…). Hexes sink to
   different levels of the cosmic deep, near-borderless, with soft light-bands

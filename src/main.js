@@ -17,7 +17,6 @@ import { AstralControls } from './controls.js';
 import { Player } from './player.js';
 import { ui } from './ui.js';
 import { updateLabels } from './labels.js';
-import { findPath } from './pathfind.js';
 
 // ---------------------------------------------------------------- setup
 const params = new URLSearchParams(location.search);
@@ -30,7 +29,7 @@ const BG = 0x14172e; // dark cosmic indigo with a papery warmth
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(BG);
-scene.fog = new THREE.FogExp2(BG, 0.00045);
+scene.fog = new THREE.FogExp2(BG, 0.00036);
 
 const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.5, 7000);
 
@@ -139,21 +138,20 @@ function handleLockStrike(hex) {
 function handleGate(hex, hexKey) {
   const gate = world.gates[hex.gateId];
   const destKey = gate.portA === hexKey ? gate.portB : gate.portA;
-  const fp = findPath(world.hexes, hexKey, destKey);
-  if (!fp) {
-    flashLocation('ᚺ ✦ a stormwall chokes the crossing ✦ seek its rune-stone');
+  if (world.hexes.get(destKey)?.blocked) {
+    flashLocation('ᚺ ✦ the far node is stormbound ✦ seek its rune-stone');
     return;
   }
   if (!announcedGates.has(gate.id)) {
     announcedGates.add(gate.id);
     for (const l of built.labelsByGate.get(gate.id) ?? []) l.decipher();
-    ui.announce(gate.name, `${gate.rune.ch} ᛫ the warden stirs, and the river carries you`);
+    ui.announce(gate.name, `${gate.rune.ch} ᛫ the warden stirs — the void takes you`);
   } else {
-    flashLocation(`✦ riding ${gate.name.replace(/^The /, 'the ')} ✦`, 2200);
+    flashLocation(`✦ cast through ${gate.name.replace(/^The /, 'the ')} ✦`, 2200);
   }
   suppressGateKey = destKey;
   built.boingGate(gate.id);
-  player.startFlight(fp);
+  player.startBlast(destKey);
 }
 
 player.onEnterHex = (hex) => {
@@ -266,7 +264,7 @@ addEventListener('pointermove', (e) => {
   if (hex.gateId !== null) {
     const gate = world.gates[hex.gateId];
     text = announcedGates.has(gate.id)
-      ? `${gate.name} ${gate.rune.ch} ᛫ step through to ride`
+      ? `${gate.name} ${gate.rune.ch} ᛫ step in to be cast across`
       : toRunes(gate.name) + ' ' + gate.rune.ch;
   } else if (hex.blocked) {
     text = 'a stormwall rages';
@@ -328,9 +326,10 @@ function frame() {
   refreshPathDots();
   hoverMarker.material.opacity = 0.55 + 0.35 * Math.sin(t * 4);
 
-  // gentle follow while sailing or flying, unless the player is steering
+  // gentle follow while sailing or mid-blast, unless the player is steering
+  // (follow the ground shadow of the arc, not the arc's height)
   if (player.isMoving && performance.now() / 1000 - controls.lastPanTime > 2.5) {
-    controls.focus(player.mesh.position);
+    controls.focus(new THREE.Vector3(player.mesh.position.x, 0, player.mesh.position.z));
   }
   if (locOverrideUntil && t > locOverrideUntil) {
     locOverrideUntil = 0;

@@ -1,6 +1,6 @@
 // The Star-Pilgrim wisp: click-to-sail, step-by-step hex movement with a
-// squashy hop, ripple rings on the water, an orbiting rune halo — and
-// riverflight, the swift glide between a gate's two ports.
+// squashy hop, ripple rings on the water, an orbiting rune halo — and the
+// gate blast, a soaring arc between a gate's two node islets.
 
 import * as THREE from 'three';
 import { HEX } from './config.js';
@@ -9,7 +9,6 @@ import { findPath } from './pathfind.js';
 import { makeGlowSpriteTexture } from './materials.js';
 
 const STEP_TIME = 0.22;
-const FLIGHT_SPEED = 75; // world units per second
 
 export class Player {
   constructor(world) {
@@ -17,7 +16,7 @@ export class Player {
     this.hexKey = world.startKey;
     this.path = [];
     this.stepT = 0;
-    this.flight = null;
+    this.blast = null;
     this.onEnterHex = null; // cb(hexRecord)
 
     const group = new THREE.Group();
@@ -59,7 +58,6 @@ export class Player {
     this.mesh = group;
     this.ripples = [];
     this._rippleGeo = new THREE.RingGeometry(0.5, 0.72, 24);
-    this._flightRippleT = 0;
     this._syncToHex();
   }
 
@@ -79,7 +77,7 @@ export class Player {
   }
 
   requestMove(targetKey) {
-    if (this.flight) return false;
+    if (this.blast) return false;
     // route from the hex we'll stand on next, keeping any in-flight step
     const anchor = this.path.length ? this.path[0] : this.hexKey;
     const path = findPath(this.world.hexes, anchor, targetKey);
@@ -88,22 +86,22 @@ export class Player {
     return true;
   }
 
-  // Riverflight: swept along the water between a gate's two ports.
-  startFlight(pathKeys) {
-    if (pathKeys.length < 2) return;
-    const pts = pathKeys.map((k) => {
-      const p = this._hexPos(k);
-      p.y = 1.8;
-      return p;
-    });
-    const curve = new THREE.CatmullRomCurve3(pts);
-    this.flight = { curve, u: 0, len: curve.getLength(), destKey: pathKeys[pathKeys.length - 1] };
+  // Gate blast: hurled across the void in a soaring arc between node islets.
+  startBlast(destKey) {
+    const from = this._hexPos(this.hexKey);
+    const to = this._hexPos(destKey);
+    const dist = from.distanceTo(to);
+    this.blast = {
+      from, to, destKey, t: 0,
+      dur: THREE.MathUtils.clamp(0.7 + dist / 260, 0.9, 2.4),
+      height: THREE.MathUtils.clamp(dist * 0.22, 16, 90),
+    };
     this.path = [];
     this.stepT = 0;
   }
 
   get isMoving() {
-    return this.path.length > 0 || !!this.flight;
+    return this.path.length > 0 || !!this.blast;
   }
 
   spawnRipple(scene, pos, color = 0x9fd8ff) {
@@ -138,27 +136,23 @@ export class Player {
       }
     }
 
-    if (this.flight) {
-      this.flight.u += (dt * FLIGHT_SPEED) / this.flight.len;
-      this._flightRippleT -= dt;
-      if (this.flight.u >= 1) {
-        this.hexKey = this.flight.destKey;
-        this.flight = null;
+    if (this.blast) {
+      const b = this.blast;
+      b.t += dt / b.dur;
+      if (b.t >= 1) {
+        this.hexKey = b.destKey;
+        this.blast = null;
         this._syncToHex();
         this.mesh.scale.set(1, 1, 1);
-        const h = this.world.hexes.get(this.hexKey);
         this.spawnRipple(scene, this.mesh.position);
-        if (this.onEnterHex) this.onEnterHex(h);
+        if (this.onEnterHex) this.onEnterHex(this.world.hexes.get(this.hexKey));
       } else {
-        const p = this.flight.curve.getPoint(this.flight.u);
-        const p2 = this.flight.curve.getPoint(Math.min(1, this.flight.u + 0.02));
-        this.mesh.position.set(p.x, p.y + Math.sin(time * 9) * 0.15, p.z);
-        this.mesh.rotation.y = Math.atan2(p2.x - p.x, p2.z - p.z);
-        this.mesh.scale.set(0.85, 1.3, 0.85); // streaking stretch
-        if (this._flightRippleT <= 0) {
-          this._flightRippleT = 0.07;
-          this.spawnRipple(scene, p);
-        }
+        const u = b.t * b.t * (3 - 2 * b.t); // ease through the arc
+        this.mesh.position.lerpVectors(b.from, b.to, u);
+        this.mesh.position.y += Math.sin(b.t * Math.PI) * b.height;
+        this.mesh.rotation.y += dt * 7; // tumbling with style
+        const s = Math.sin(b.t * Math.PI);
+        this.mesh.scale.set(1 - 0.2 * s, 1 + 0.5 * s, 1 - 0.2 * s);
       }
       return;
     }

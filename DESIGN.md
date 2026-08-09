@@ -183,6 +183,32 @@ dark cosmic mood while keeping the papery charm.
 
 ---
 
+# Round 4 — Island Regions & Gate Node Blasts
+
+Direct rework notes: the walkable web is gone.
+
+- **Region anatomy** — each region grows a connected water blob seeded from
+  the ring that nestles its astral body, then 2-3 islands of 10-30 hexes grow
+  inside the blob (kept a hex apart), with island-level base heights and
+  lower shorelines. Waters land at roughly 40-60% of walkable tiles. Regions
+  were re-spaced onto wider orbits (190/390/590/790; secrets past 1080) so
+  nothing can touch across the void.
+- **No rivers** — ring-rivers and spokes are removed entirely. Between
+  regions there is only void; clicking another region reports that the
+  currents do not reach.
+- **Gate nodes** — each neighboring pair of regions gets a gate: two 7-hex
+  bare-rock islets (biome-less gray), one hanging off each facing rim,
+  attached to their region by a paved line of hexes. The warden ring stands
+  on the center rock; entering it BLASTS the wisp to the twin node in a
+  soaring eased arc (~1-2.4s by distance) with a tumble and squash. No
+  force-walking, no river path.
+- **Locks** — stormwalls now seal three departure nodes (becalmed by a
+  rune-stone on a nearby island); the Hollow Moon's outer node carries the
+  three-rune rumor seal. A leviathan wheels tightly around the Unlit Star's
+  hidden crossing; two greater serpents circle the void between orbits.
+
+---
+
 ## Boss / combat hooks
 
 Entering a gate port fires `handleGate` in `main.js` before the riverflight

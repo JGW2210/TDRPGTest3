@@ -116,7 +116,11 @@ export function buildWorld(world, rng) {
     DUMMY.scale.set(1, h.elev, 1);
     DUMMY.updateMatrix();
     isleMesh.setMatrixAt(i, DUMMY.matrix);
-    isleMesh.setColorAt(i, tone(jitterColor(area.biome.island.top, rng, 0.07), 0.82, 0.8));
+    // gate node islets are bare rock, unclaimed by any biome
+    const col = h.rock
+      ? tone(jitterColor(0x6e6e80, rng, 0.08), 0.5, 0.75)
+      : tone(jitterColor(area.biome.island.top, rng, 0.07), 0.82, 0.8);
+    isleMesh.setColorAt(i, col);
     isleIndexByKey.set(k, i);
   });
   group.add(isleMesh);
@@ -156,7 +160,7 @@ export function buildWorld(world, rng) {
   for (const k of isleKeys) {
     const h = world.hexes.get(k);
     const area = world.areas[h.areaId];
-    if (!rng.chance(0.4)) continue;
+    if (h.rock || !rng.chance(0.4)) continue;
     const n = 1 + rng.int(2);
     for (let j = 0; j < n; j++) {
       const kind = rng.pick(area.biome.decor.kinds);
@@ -657,7 +661,7 @@ export function buildWorld(world, rng) {
 
       const label = makeLabel({
         title: gate.name,
-        sub: `${gate.rune.ch} ᛫ step through to ride`,
+        sub: `${gate.rune.ch} ᛫ step in ᛫ be cast across`,
         color: '#e6d9ff', subColor: '#b8c4e6',
         scale: 22, startHidden: true,
       });
@@ -838,7 +842,7 @@ export function buildWorld(world, rng) {
     const pos = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) {
       const a = rng.angle();
-      const r = 60 + rng.float() * 1050;
+      const r = 60 + rng.float() * 1250;
       pos.set([Math.cos(a) * r, (rng.float() - 0.5) * 80, Math.sin(a) * r], i * 3);
     }
     const geo = new THREE.BufferGeometry();
@@ -869,9 +873,9 @@ export function buildWorld(world, rng) {
   // asteroid belts between the orbital rings — the orrery's slow clockwork
   {
     const beltSpecs = [
-      { r: 215, n: 140, speed: 0.004 },
-      { r: 348, n: 170, speed: 0.003 },
-      { r: 487, n: 150, speed: 0.002 },
+      { r: 290, n: 150, speed: 0.004 },
+      { r: 490, n: 180, speed: 0.003 },
+      { r: 690, n: 160, speed: 0.002 },
     ];
     const rockGeo = new THREE.DodecahedronGeometry(1, 0);
     for (const spec of beltSpecs) {
@@ -922,7 +926,7 @@ export function buildWorld(world, rng) {
       }));
       group.add(trail);
 
-      const a = 650 + rng.float() * 420;
+      const a = 800 + rng.float() * 450;
       const b2 = a * (0.4 + rng.float() * 0.4);
       const speed = 0.02 + rng.float() * 0.03;
       const phase = rng.angle();
@@ -958,7 +962,7 @@ export function buildWorld(world, rng) {
     const mesh = new THREE.InstancedMesh(geo, new THREE.MeshToonMaterial({ gradientMap }), n);
     for (let i = 0; i < n; i++) {
       const a = rng.angle();
-      const r = 80 + rng.float() * 950;
+      const r = 80 + rng.float() * 1150;
       DUMMY.position.set(Math.cos(a) * r, -20 + rng.float() * 85, Math.sin(a) * r);
       DUMMY.rotation.set(rng.angle(), rng.angle(), rng.angle());
       DUMMY.scale.setScalar(0.6 + rng.float() * 1.6);
@@ -982,7 +986,7 @@ export function buildWorld(world, rng) {
     for (let i = 0; i < 40; i++) {
       const s = new THREE.Sprite(glyphMats[rng.int(8)]);
       const a = rng.angle();
-      const r = 100 + rng.float() * 950;
+      const r = 100 + rng.float() * 1150;
       s.position.set(Math.cos(a) * r, 8 + rng.float() * 75, Math.sin(a) * r);
       s.scale.setScalar(5 + rng.float() * 9);
       group.add(s);
@@ -1005,7 +1009,7 @@ export function buildWorld(world, rng) {
       const mesh = new THREE.InstancedMesh(f.geo, new THREE.MeshToonMaterial({ gradientMap }), f.n);
       for (let i = 0; i < f.n; i++) {
         const a = rng.angle();
-        const r = 90 + rng.float() * 940;
+        const r = 90 + rng.float() * 1150;
         DUMMY.position.set(Math.cos(a) * r, -30 + rng.float() * 110, Math.sin(a) * r);
         DUMMY.rotation.set(rng.angle(), rng.angle(), rng.angle());
         DUMMY.scale.setScalar(0.4 + rng.float() * 1.4);
@@ -1092,7 +1096,7 @@ export function buildWorld(world, rng) {
     curios.forEach(([name, make], i) => {
       const obj = make();
       const a = (i / curios.length) * Math.PI * 2 + rng.angle() * 0.2;
-      const r = 140 + rng.float() * 720;
+      const r = 160 + rng.float() * 900;
       obj.position.set(Math.cos(a) * r, 10 + rng.float() * 42, Math.sin(a) * r);
       group.add(obj);
       const bobPhase = rng.angle();
