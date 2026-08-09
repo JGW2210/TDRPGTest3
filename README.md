@@ -60,9 +60,11 @@ any mount path.
   Heliotide, the Quicksilver Race, the Lidless Calm…). Hexes sink to
   different levels of the cosmic deep, near-borderless, with soft light-bands
   drifting along each current, faint rune-script, and rare starlike glints.
-  The sea is rendered twice — a glassy base tile plus a thin translucent
-  ghost-sheet floating above it, each wobbling on its own phase — so the
-  water reads as a restless volume, not a floor.
+  The sea is rendered twice — a near-opaque glassy base in each region's own
+  color, plus a translucent ghost-sheet above it in one shared aetherial
+  slate-blue, patchy along its light-bands and wobbling at its own slower,
+  taller rate — so the water reads as a restless volume, not a floor. Two
+  rings of unwalkable ghost-hexes dissolve each region's rim into the void.
   The movement grid lives in UI instead: a glowing outline on the hovered hex
   and a trail of dots marking the queued route.
 - **The tide** — the sun breathes on a slow cycle. Waters brighten at high

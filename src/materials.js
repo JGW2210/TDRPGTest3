@@ -44,7 +44,12 @@ export function makeToonGradient() {
 // (lift + ghost), each wobbling on its own phase so the sea feels alive.
 // aFlow = (dirX, dirZ, speed, flags) where flags bits: 1=faint 2=leviathan 4=blocked.
 // aDepth = 0 (shallow) .. 1 (deep).
-export function makeWaterMaterial(runeTex, { lift = 0, ghost = 1, speedMul = 1 } = {}) {
+export function makeWaterMaterial(runeTex, {
+  lift = 0, ghost = 1, speedMul = 1,
+  unify = 0, unifyColor = 0x9fd8ff,
+  wobbleRate = 1, wobbleAmp = 1, phase = 0,
+  fade = 0,
+} = {}) {
   return new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
@@ -55,6 +60,12 @@ export function makeWaterMaterial(runeTex, { lift = 0, ghost = 1, speedMul = 1 }
       uLift: { value: lift },
       uGhost: { value: ghost },
       uSpeedMul: { value: speedMul },
+      uUnify: { value: unify },
+      uUnifyColor: { value: new THREE.Color(unifyColor) },
+      uWobbleRate: { value: wobbleRate },
+      uWobbleAmp: { value: wobbleAmp },
+      uPhase: { value: phase },
+      uFade: { value: fade },
     },
     vertexShader: /* glsl */ `
       attribute vec3 aColor;
@@ -66,7 +77,9 @@ export function makeWaterMaterial(runeTex, { lift = 0, ghost = 1, speedMul = 1 }
       varying float vDepth;
       uniform float uTime;
       uniform float uLift;
-      uniform float uSpeedMul;
+      uniform float uWobbleRate;
+      uniform float uWobbleAmp;
+      uniform float uPhase;
       void main() {
         vColor = aColor;
         vFlow = aFlow;
@@ -80,10 +93,11 @@ export function makeWaterMaterial(runeTex, { lift = 0, ghost = 1, speedMul = 1 }
         float blocked = step(3.5, flags);
         float rem = flags - blocked * 4.0;
         float levi = step(1.5, rem);
-        // transient chop: two wobble frequencies, phased per position
+        // transient chop: two wobble frequencies, each layer on its own
+        // rate, height, and phase
         wp.y += uLift;
-        wp.y += sin(uTime * 0.9 * uSpeedMul + wp.x * 0.21 + wp.z * 0.17) * 0.11 * uSpeedMul;
-        wp.y += sin(uTime * 0.5 + wp.x * 0.05 + wp.z * 0.045) * 0.06;
+        wp.y += sin(uTime * 0.9 * uWobbleRate + uPhase + wp.x * 0.21 + wp.z * 0.17) * 0.1 * uWobbleAmp;
+        wp.y += sin(uTime * 0.5 * uWobbleRate + uPhase * 1.7 + wp.x * 0.05 + wp.z * 0.045) * 0.06 * uWobbleAmp;
         wp.y += levi * sin(uTime * 1.35 + wp.x * 0.13 + wp.z * 0.11) * 0.55;
         vWorld = wp.xyz;
         gl_Position = projectionMatrix * viewMatrix * wp;
@@ -95,6 +109,9 @@ export function makeWaterMaterial(runeTex, { lift = 0, ghost = 1, speedMul = 1 }
       uniform sampler2D uRunes;
       uniform float uGhost;
       uniform float uSpeedMul;
+      uniform float uUnify;
+      uniform vec3 uUnifyColor;
+      uniform float uFade;
       varying vec3 vColor;
       varying vec4 vFlow;
       varying vec3 vWorld;
@@ -109,6 +126,9 @@ export function makeWaterMaterial(runeTex, { lift = 0, ghost = 1, speedMul = 1 }
         float levi = step(1.5, rem);
         float faint = rem - levi * 2.0;
 
+        // the ghost sheet forgets its region: one shared aetherial hue
+        vec3 tint = mix(vColor, uUnifyColor, uUnify);
+
         // soft light-bands drifting with the current — watery, not liney
         vec2 perp = vec2(-dir.y, dir.x);
         float along = dot(vWorld.xz, dir);
@@ -119,13 +139,13 @@ export function makeWaterMaterial(runeTex, { lift = 0, ghost = 1, speedMul = 1 }
         // large drifting luminance blotches — the cosmic deep
         float blotch = texture2D(uRunes, vWorld.xz * 0.004 + vec2(uTime * 0.002, -uTime * 0.0015)).a;
 
-        vec3 col = mix(VOID, vColor, 0.42 + 0.3 * bands);
-        col = mix(col, VOID, vDepth * 0.5);
+        vec3 col = mix(VOID, tint, 0.42 + 0.3 * bands);
+        col = mix(col, VOID, vDepth * 0.5 * (1.0 - uUnify));
         col *= 0.82 + 0.34 * blotch;
 
         // faint rune-script adrift in the water
         float g1 = texture2D(uRunes, vWorld.xz * 0.03 - dir * uTime * sp * 0.006).a;
-        col += vColor * g1 * 0.15 * (0.55 + 0.45 * uBreath);
+        col += tint * g1 * 0.15 * (0.55 + 0.45 * uBreath);
 
         // rare starlike glints on the surface
         float g2 = texture2D(uRunes, vWorld.xz * 0.11 + dir * uTime * sp * 0.004 + 0.31).a;
@@ -136,11 +156,16 @@ export function makeWaterMaterial(runeTex, { lift = 0, ghost = 1, speedMul = 1 }
         col *= 1.0 + (1.0 - uGhost) * 0.35 * bands;
 
         col *= 0.92 + 0.12 * uBreath;
-        col += levi * vColor * 0.14 * (0.5 + 0.5 * sin(uTime * 1.35 + vWorld.x * 0.13));
+        col += levi * tint * 0.14 * (0.5 + 0.5 * sin(uTime * 1.35 + vWorld.x * 0.13));
         col = mix(col, vec3(0.30, 0.28, 0.40), blocked * 0.75);
 
-        float alpha = mix(0.95, 0.12 + 0.5 * uBreath, faint);
+        float alpha = mix(0.985, 0.12 + 0.5 * uBreath, faint);
         alpha = mix(alpha, 0.85, blocked * 0.3);
+        // fringe hexes dissolve into the void with distance (vDepth = fade)
+        alpha *= mix(1.0, clamp(1.0 - vDepth, 0.0, 1.0), uFade);
+        // the ghost sheet is patchy: solid on band crests, sheer in troughs,
+        // so the glassy base and its region color show through beneath
+        alpha *= 1.0 - (1.0 - uGhost) * (1.0 - bands) * 0.9;
         gl_FragColor = vec4(col, alpha * uGhost);
       }
     `,

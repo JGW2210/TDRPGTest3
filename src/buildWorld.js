@@ -100,11 +100,75 @@ export function buildWorld(world, rng) {
 
   // a thin ghost sheet floats above the glassy base, wobbling on its own
   // phase — the sea reads as a volume, not a floor
-  const waterMatTop = makeWaterMaterial(runeTex, { lift: 0.42, ghost: 0.28, speedMul: 1.7 });
+  const waterMatTop = makeWaterMaterial(runeTex, {
+    lift: 0.52, ghost: 0.32, speedMul: 1.7,
+    unify: 0.8, unifyColor: 0x6f9cd4,
+    wobbleRate: 0.55, wobbleAmp: 2.1, phase: 2.3,
+  });
   const waterTop = new THREE.InstancedMesh(waterGeo, waterMatTop, waterKeys.length);
   waterTop.instanceMatrix = waterMesh.instanceMatrix;
   waterTop.renderOrder = 1;
   group.add(waterTop);
+
+  // soft rims: two rings of unwalkable ghost-hexes dissolve each region's
+  // edge into the void instead of a hard border (visual only — never in the
+  // hex map, so they can't be clicked or sailed)
+  {
+    const fringe = [];
+    const seen = new Set(world.hexes.keys());
+    for (const area of world.areas) {
+      let frontier = area.hexKeys;
+      for (let ringI = 0; ringI < 2; ringI++) {
+        const fadeLevel = ringI === 0 ? 0.6 : 0.87;
+        const next = [];
+        for (const k of frontier) {
+          const { q, r } = Hx.parseKey(k);
+          for (const d of Hx.DIRS) {
+            const nk = Hx.key(q + d[0], r + d[1]);
+            if (seen.has(nk)) continue;
+            seen.add(nk);
+            next.push(nk);
+            fringe.push({ q: q + d[0], r: r + d[1], fade: fadeLevel, area });
+          }
+        }
+        frontier = next;
+      }
+    }
+
+    const fringeGeo = waterGeo.clone();
+    const fColor = new Float32Array(fringe.length * 3);
+    const fFlow = new Float32Array(fringe.length * 4);
+    const fDepth = new Float32Array(fringe.length);
+    const fringeMat = makeWaterMaterial(runeTex, { fade: 1 });
+    const fringeMesh = new THREE.InstancedMesh(fringeGeo, fringeMat, fringe.length);
+    fringe.forEach((f, i) => {
+      const p = Hx.toWorld(f.q, f.r, HEX);
+      DUMMY.position.set(p.x, -0.18 - f.fade * 0.5, p.z);
+      DUMMY.rotation.set(0, 0, 0);
+      DUMMY.scale.set(1, 1, 1);
+      DUMMY.updateMatrix();
+      fringeMesh.setMatrixAt(i, DUMMY.matrix);
+      const c = tone(jitterColor(f.area.biome.water.color, rng, 0.05), 0.8, 0.45);
+      fColor[i * 3] = c.r;
+      fColor[i * 3 + 1] = c.g;
+      fColor[i * 3 + 2] = c.b;
+      const vx = p.x - f.area.pos.x, vz = p.z - f.area.pos.z;
+      const vl = Math.hypot(vx, vz) || 1;
+      fFlow[i * 4] = -vz / vl;
+      fFlow[i * 4 + 1] = vx / vl;
+      fFlow[i * 4 + 2] = f.area.biome.water.speed * 0.7;
+      fFlow[i * 4 + 3] = 0;
+      fDepth[i] = f.fade;
+    });
+    fringeGeo.setAttribute('aColor', new THREE.InstancedBufferAttribute(fColor, 3));
+    fringeGeo.setAttribute('aFlow', new THREE.InstancedBufferAttribute(fFlow, 4));
+    fringeGeo.setAttribute('aDepth', new THREE.InstancedBufferAttribute(fDepth, 1));
+    group.add(fringeMesh);
+    animators.push((t) => {
+      fringeMat.uniforms.uTime.value = t;
+      fringeMat.uniforms.uBreath.value = waterMat.uniforms.uBreath.value;
+    });
+  }
 
   // ------------------------------------------------------------ island hexes
   const isleGeo = new THREE.CylinderGeometry(HEX * 0.92, HEX * 1.08, 1, 6);

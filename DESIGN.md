@@ -221,9 +221,14 @@ Direct rework notes: the walkable web is gone.
   straight shot outward. Verified: orbit blasts hold ~253+ radius on a
   260-radius ring where a chord would dip to ~130.
 - **Two-layer water** — the sea renders twice from shared instance data: a
-  glassy base and a thin ghost-sheet (+0.42, alpha ~0.28, faster drift)
-  floating above, each with two-frequency wobble on its own phase. The sea
-  moves like a volume.
+  near-opaque glassy base keeping each region's color, and a ghost-sheet
+  (+0.52) above it unified to one aetherial slate-blue, patchy along its
+  light-bands (solid crests, sheer troughs) and wobbling at its own slower,
+  taller rate and phase. The sea moves like a volume.
+- **Soft rims** — two rings of unwalkable fringe hexes extend past each
+  region's edge, sinking and fading with distance, so regions dissolve into
+  the void instead of ending at a hard border. They live only in the
+  renderer — never in the hex map — so they cannot be clicked or sailed.
 
 ---
 
