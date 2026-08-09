@@ -12,7 +12,10 @@ import {
   makeGlowSpriteTexture, makeNebulaTexture, makeGlyphTexture, makeSparkleTexture,
 } from './materials.js';
 import { sculptBody } from './bodies.js';
-import { makeDolmenGate, makeLandmark, makeShrineStone, makeAltar, makeHerald } from './structures.js';
+import {
+  makeDolmenGate, makeLandmark, makeAltar, makeHerald, makeChomper,
+  makeSpringboard, makeMarketStall, makeBoonPedestal, makeHermit,
+} from './structures.js';
 import { buildDecorLibrary } from './decorSets.js';
 import { makeLabel } from './labels.js';
 
@@ -269,8 +272,33 @@ export function buildWorld(world, rng) {
     return m;
   };
   instanceGroups.push({ mesh: waterMesh, base: waterMesh.instanceMatrix.array.slice(), byArea: byAreaOf(waterKeys) });
-  instanceGroups.push({ mesh: isleMesh, base: isleBaseMatrices, byArea: byAreaOf(isleKeys) });
+  // hidden shrine-chain rocks are pulled OUT of the area fog groups — they
+  // reveal by chain (lodestone), not by region discovery
+  const byAreaIsles = byAreaOf(isleKeys);
+  const chainHiddenIdx = new Map(); // chainId -> isle instance indices (node order irrelevant here)
+  isleKeys.forEach((k, i) => {
+    const h = world.hexes.get(k);
+    if (!h.hiddenChain) return;
+    const arr = byAreaIsles.get(h.areaId);
+    const j = arr ? arr.indexOf(i) : -1;
+    if (j >= 0) arr.splice(j, 1);
+    if (!chainHiddenIdx.has(h.chainId)) chainHiddenIdx.set(h.chainId, []);
+    chainHiddenIdx.get(h.chainId).push(i);
+  });
+  instanceGroups.push({ mesh: isleMesh, base: isleBaseMatrices, byArea: byAreaIsles });
   instanceGroups.push({ mesh: fringeInfo.mesh, base: fringeInfo.base, byArea: fringeInfo.byArea });
+
+  function setIsleIndices(indices, sFn) {
+    const arr = isleMesh.instanceMatrix.array;
+    for (const i of indices) {
+      const s = sFn(i);
+      const o = i * 16;
+      for (let e = 0; e < 12; e++) arr[o + e] = isleBaseMatrices[o + e] * s;
+    }
+    isleMesh.instanceMatrix.needsUpdate = true;
+  }
+  // hidden chains sleep beneath the dark until their lodestone wakes them
+  for (const idx of chainHiddenIdx.values()) setIsleIndices(idx, () => 0);
 
   // ------------------------------------------------------------ island decor
   // Each biome furnishes its shores from its own bespoke set (decorSets.js).
@@ -1094,52 +1122,31 @@ export function buildWorld(world, rng) {
     return (t + s.phase) % s.period < s.erupt;
   }
 
-  // maw blooms: snapping shore-flora with a visible rhythm
+  // chompers: the land-trap atlas — each biome's own snapping shape
+  // (flytraps, clamshells, gear-presses, bone-jaws, lures, tooth-maws),
+  // driven through makeChomper's setOpen by the same snap cycle
   const mawFx = new Map(); // hexKey -> hazard spec
   for (const [k, h] of world.hexes) {
     if (h.hazard?.kind !== 'maw') continue;
     const spec = h.hazard;
     const area = world.areas[h.areaId];
     const p = Hx.toWorld(h.q, h.r, HEX);
-    const g = new THREE.Group();
-    const jawMat = new THREE.MeshToonMaterial({
-      color: tone(jitterColor(area.biome.island.side, rng, 0.08), 0.9, 1.15), gradientMap,
-    });
-    const toothMat = new THREE.MeshToonMaterial({ color: 0xf2ead2, gradientMap });
-    const mkJaw = (up) => {
-      const jaw = new THREE.Group();
-      const lip = new THREE.Mesh(new THREE.CylinderGeometry(1.25, 1.45, 0.5, 7), jawMat);
-      jaw.add(lip);
-      for (let i = 0; i < 5; i++) {
-        const a = (i / 5) * Math.PI * 2 + 0.4;
-        const tooth = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.8, 4), toothMat);
-        tooth.position.set(Math.cos(a) * 0.95, up ? 0.5 : -0.5, Math.sin(a) * 0.95);
-        if (!up) tooth.rotation.x = Math.PI;
-        jaw.add(tooth);
-      }
-      return jaw;
-    };
-    const lower = mkJaw(true);
-    lower.position.y = 0.3;
-    const hinge = new THREE.Group();
-    const upper = mkJaw(false);
-    upper.position.set(0, 0.55, 1.0);
-    hinge.add(upper);
-    hinge.position.set(0, 0.55, -1.0);
-    g.add(lower, hinge);
+    const tint = tone(
+      jitterColor(spec.tint ?? area.biome.island.side, rng, 0.07), 0.9, 1.05
+    ).getHex();
+    const { group: g, setOpen } = makeChomper(spec.trap ?? 'toothmaw', { tint, gradientMap, rng });
     g.position.set(p.x, h.elev, p.z);
-    g.rotation.y = rng.angle();
     group.add(g);
     regFx(h.areaId, g);
     animators.push((t) => {
       const u = (t + spec.phase) % spec.period;
       const snapFrom = spec.period - spec.snap;
-      let open = 0.95;
+      let open = 1;
       if (u > snapFrom) {
         const su = (u - snapFrom) / spec.snap;
-        open = 0.95 * Math.pow(Math.abs(su * 2 - 1), 1.4);
+        open = Math.pow(Math.abs(su * 2 - 1), 1.4);
       }
-      hinge.rotation.x = -open;
+      setOpen(open);
     });
     mawFx.set(k, spec);
   }
@@ -1185,22 +1192,14 @@ export function buildWorld(world, rng) {
   }
 
   // ------------------------------------------------------------ astral shrines
-  // The stone circle in the sea, the light-beam to the sky, the platform's
-  // arrival disc and its silent altar.
+  // The platform's arrival disc, belly-glow, and silent altar. The old stone
+  // circles and beams are gone — access is by rock-hop chain (below).
   const shrineFx = new Map();
   for (const s of world.shrines) {
-    const sh = world.hexes.get(s.stoneKey);
-    const sp = Hx.toWorld(sh.q, sh.r, HEX);
-    const stone = makeShrineStone({ rng, gradientMap, glowTex, animators });
-    stone.position.set(sp.x, sh.elev, sp.z);
-    group.add(stone);
-    regFx(s.areaId, stone);
-
     const ph = world.hexes.get(s.padKey);
     const pp = Hx.toWorld(ph.q, ph.r, HEX);
     const padTop = ph.baseY + ph.elev;
 
-    // arrival disc on the platform
     const pad = new THREE.Mesh(
       new THREE.CircleGeometry(1.6, 24).rotateX(-Math.PI / 2),
       new THREE.MeshBasicMaterial({
@@ -1213,27 +1212,6 @@ export function buildWorld(world, rng) {
     group.add(pad);
     regFx(s.areaId, pad);
 
-    // the thin beam that betrays the platform overhead
-    const a2 = new THREE.Vector3(sp.x, sh.elev + 1, sp.z);
-    const b2 = new THREE.Vector3(pp.x, ph.baseY - 1.5, pp.z);
-    const len = a2.distanceTo(b2);
-    const beam = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.6, 1.3, len, 8, 1, true),
-      new THREE.MeshBasicMaterial({
-        color: 0xb9a6ff, transparent: true, opacity: 0.09,
-        blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
-      })
-    );
-    beam.position.copy(a2).add(b2).multiplyScalar(0.5);
-    beam.quaternion.setFromUnitVectors(
-      new THREE.Vector3(0, 1, 0),
-      b2.clone().sub(a2).normalize()
-    );
-    beam.renderOrder = 2;
-    group.add(beam);
-    regFx(s.areaId, beam);
-
-    // soft glow under the platform's belly
     const under = new THREE.Sprite(new THREE.SpriteMaterial({
       map: glowTex, color: 0x8a76e6, transparent: true, opacity: 0.22,
       blending: THREE.AdditiveBlending, depthWrite: false,
@@ -1253,7 +1231,6 @@ export function buildWorld(world, rng) {
 
     const bph = rng.angle();
     animators.push((t) => {
-      beam.material.opacity = 0.06 + 0.05 * Math.sin(t * 1.1 + bph);
       pad.material.opacity = 0.26 + 0.16 * Math.sin(t * 1.9 + bph);
     });
     shrineFx.set(s.id, { altar });
@@ -1265,6 +1242,267 @@ export function buildWorld(world, rng) {
     fx.altar.claim();
     burstAt(fx.altar.group.position.clone().add(new THREE.Vector3(0, 3.6, 0)), 0xff9ab8, 9);
   }
+
+  // ------------------------------------------------------------ rock-hop chains
+  // Springboards, hop-rock under-glows, gift markets, hermits and their
+  // curios, and — for shrine chains — the starlit lodestone and the staggered
+  // rock-by-rock reveal it triggers.
+  const chainFx = new Map(); // chainId -> { hiddenObjs, lode, boon }
+  const chainReveals = []; // { indices (node order), t }
+  for (const chain of world.chains) {
+    const fx = { hiddenObjs: [] };
+    const reg = (h, obj) => {
+      // hidden-chain dressing appears with the reveal, not with the region
+      if (chain.hidden) {
+        obj.visible = false;
+        fx.hiddenObjs.push(obj);
+      } else {
+        regFx(h.areaId, obj);
+      }
+    };
+
+    // launch springboard, facing the first hop
+    const lh = world.hexes.get(chain.nodes[0]);
+    const lp = Hx.toWorld(lh.q, lh.r, HEX);
+    const h1 = world.hexes.get(chain.nodes[1]);
+    const p1 = Hx.toWorld(h1.q, h1.r, HEX);
+    const board = makeSpringboard({ rng, gradientMap, glowTex });
+    board.position.set(lp.x, lh.elev, lp.z);
+    board.rotation.y = Math.atan2(p1.x - lp.x, p1.z - lp.z) - Math.PI / 2;
+    group.add(board);
+    reg(lh, board);
+
+    // a soft ember under every hop rock
+    for (const nk of chain.nodes.slice(1, -1)) {
+      const nh = world.hexes.get(nk);
+      const np = Hx.toWorld(nh.q, nh.r, HEX);
+      const ember = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: glowTex, color: 0xb9a6ff, transparent: true, opacity: 0.22,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      }));
+      ember.position.set(np.x, (nh.baseY || 0) - 1.2, np.z);
+      ember.scale.setScalar(4.5);
+      ember.renderOrder = 3;
+      group.add(ember);
+      reg(nh, ember);
+    }
+
+    if (chain.kind === 'market') {
+      // the Curio Peddler's stall on a quiet islet cell, the boon beside it
+      const stallKey = chain.destKeys.find((k) => k !== chain.dockKey && k !== chain.boonKey);
+      const sh = world.hexes.get(stallKey ?? chain.destKeys[0]);
+      const sp = Hx.toWorld(sh.q, sh.r, HEX);
+      const stall = makeMarketStall({ rng, gradientMap, glowTex, animators });
+      stall.position.set(sp.x, (sh.baseY || 0) + sh.elev, sp.z);
+      group.add(stall);
+      reg(sh, stall);
+      const bh = world.hexes.get(chain.boonKey);
+      const bp = Hx.toWorld(bh.q, bh.r, HEX);
+      const boon = makeBoonPedestal({ rng, gradientMap, glowTex, animators });
+      boon.group.position.set(bp.x, (bh.baseY || 0) + bh.elev, bp.z);
+      group.add(boon.group);
+      reg(bh, boon.group);
+      fx.boon = boon;
+    } else if (chain.kind === 'event') {
+      // a hermit and its tiny astral curio wheeling overhead
+      const bh = world.hexes.get(chain.boonKey);
+      const bp = Hx.toWorld(bh.q, bh.r, HEX);
+      const hermit = makeHermit({ rng, gradientMap, glowTex, animators });
+      hermit.position.set(bp.x, (bh.baseY || 0) + bh.elev, bp.z);
+      group.add(hermit);
+      reg(bh, hermit);
+      const ch = world.hexes.get(chain.destKeys[0]);
+      const cp = Hx.toWorld(ch.q, ch.r, HEX);
+      const curio = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(1.6, 0),
+        new THREE.MeshToonMaterial({ color: tone(jitterColor(0x8a84a6, rng, 0.15), 0.8, 0.7), gradientMap })
+      );
+      const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: glowTex, color: 0x9aa0bd, transparent: true, opacity: 0.3,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      }));
+      halo.scale.setScalar(6);
+      halo.renderOrder = 3;
+      const curioGroup = new THREE.Group();
+      curioGroup.add(curio, halo);
+      curioGroup.position.set(cp.x, (ch.baseY || 0) + 7, cp.z);
+      group.add(curioGroup);
+      reg(ch, curioGroup);
+      animators.push((t, dt) => { curio.rotation.y += dt * 0.3; curio.rotation.x += dt * 0.11; });
+    }
+
+    // the starlit lodestone waiting on the far rim (shrine chains)
+    if (chain.lodeKey) {
+      const kh = world.hexes.get(chain.lodeKey);
+      const kp = Hx.toWorld(kh.q, kh.r, HEX);
+      const lode = new THREE.Group();
+      const stone = new THREE.Mesh(
+        new THREE.OctahedronGeometry(0.62, 0),
+        new THREE.MeshToonMaterial({ color: 0x38305c, gradientMap, emissive: 0x6a5cc2, emissiveIntensity: 0.35 })
+      );
+      stone.scale.set(0.9, 1.5, 0.9);
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(1.05, 0.06, 6, 20),
+        new THREE.MeshBasicMaterial({ color: 0xb9a6ff, transparent: true, opacity: 0.6 })
+      );
+      ring.renderOrder = 2;
+      const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: glowTex, color: 0x8a76e6, transparent: true, opacity: 0.4,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      }));
+      glow.scale.setScalar(4.5);
+      glow.renderOrder = 3;
+      lode.add(stone, ring, glow);
+      lode.position.set(kp.x, kh.elev + 1.7, kp.z);
+      group.add(lode);
+      regFx(kh.areaId, lode); // the lodestone itself shows with the region
+      const ph2 = rng.angle();
+      animators.push((t, dt) => {
+        if (lode.userData.claimed) return;
+        ring.rotation.x = t * 0.9 + ph2;
+        ring.rotation.y = t * 0.6;
+        lode.position.y = kh.elev + 1.7 + Math.sin(t * 1.5 + ph2) * 0.25;
+        glow.material.opacity = 0.3 + 0.18 * Math.sin(t * 3.1 + ph2);
+      });
+      fx.lode = lode;
+    }
+    chainFx.set(chain.id, fx);
+  }
+
+  function revealChain(chainId, animated = true) {
+    const chain = world.chains[chainId];
+    const fx = chainFx.get(chainId);
+    if (!chain || !fx) return;
+    for (const o of fx.hiddenObjs) o.visible = true;
+    // order the hidden instances by their place along the chain
+    const ordered = [];
+    for (const nk of chain.nodes) {
+      const i = isleIndexByKey.get(nk);
+      if (i !== undefined && (chainHiddenIdx.get(chainId) ?? []).includes(i)) ordered.push(i);
+    }
+    if (animated) chainReveals.push({ indices: ordered, t: 0 });
+    else setIsleIndices(ordered, () => 1);
+  }
+
+  function claimLodestone(chainId, onDone) {
+    const chain = world.chains[chainId];
+    const fx = chainFx.get(chainId);
+    if (!chain || !fx?.lode || fx.lode.userData.claimed) { onDone?.(); return; }
+    fx.lode.userData.claimed = true;
+    const lh = world.hexes.get(chain.nodes[0]);
+    const lp = Hx.toWorld(lh.q, lh.r, HEX);
+    shardFlights.push({
+      obj: fx.lode,
+      from: fx.lode.position.clone(),
+      to: new THREE.Vector3(lp.x, lh.elev + 2.5, lp.z),
+      t: 0, dur: 2.1, onDone,
+    });
+  }
+
+  function claimBoon(chainId) {
+    const fx = chainFx.get(chainId);
+    if (fx?.boon) {
+      fx.boon.claim();
+      burstAt(fx.boon.group.position.clone().add(new THREE.Vector3(0, 1.9, 0)), 0xffd9a8, 7);
+    }
+  }
+
+  // ------------------------------------------------------------ the merchant
+  // A fourth serpent with a gift-stall howdah lashed to its back. It roams a
+  // wide void circle until main sends it to coil alongside a region's rim.
+  const merchant = (() => {
+    const segMat = new THREE.MeshToonMaterial({
+      color: 0x9a86c9, gradientMap, emissive: 0x4a3a80, emissiveIntensity: 0.35,
+    });
+    const nSeg = 16;
+    const segs = [];
+    for (let i = 0; i < nSeg; i++) {
+      const radius = i === 0 ? 1.5 : 1.3 * (1 - i / nSeg) + 0.3;
+      const seg = new THREE.Mesh(new THREE.IcosahedronGeometry(radius, 0), segMat);
+      group.add(seg);
+      segs.push(seg);
+    }
+    const howdah = new THREE.Group();
+    const hut = new THREE.Mesh(
+      new THREE.BoxGeometry(1.7, 1.2, 1.4),
+      new THREE.MeshToonMaterial({ color: 0x8c6e4a, gradientMap })
+    );
+    hut.position.y = 1.6;
+    const roof = new THREE.Mesh(
+      new THREE.ConeGeometry(1.5, 0.9, 4),
+      new THREE.MeshToonMaterial({ color: 0xb8506a, gradientMap })
+    );
+    roof.position.y = 2.6;
+    roof.rotation.y = Math.PI / 4;
+    const lamp = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: glowTex, color: 0xffd9a8, transparent: true, opacity: 0.75,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    }));
+    lamp.position.set(0, 2.1, 1.0);
+    lamp.scale.setScalar(2.4);
+    lamp.renderOrder = 3;
+    howdah.add(hut, roof, lamp);
+    group.add(howdah);
+
+    const ROAM_R = 470;
+    const state = {
+      mode: 'roam', angle: rng.angle(), target: null, onArrive: null,
+      head: null, trail: [],
+    };
+    state.head = new THREE.Vector3(Math.cos(state.angle) * ROAM_R, -1.2, Math.sin(state.angle) * ROAM_R);
+    for (let i = 0; i < nSeg * 3; i++) state.trail.push(state.head.clone());
+
+    animators.push((t, dt) => {
+      let desired;
+      if (state.mode === 'roam') {
+        state.angle += dt * 0.018;
+        desired = new THREE.Vector3(Math.cos(state.angle) * ROAM_R, -1.2, Math.sin(state.angle) * ROAM_R);
+      } else {
+        desired = state.target;
+      }
+      const dir = desired.clone().sub(state.head);
+      const dist = dir.length();
+      if (dist > 0.1) {
+        state.head.addScaledVector(dir.normalize(), Math.min(dist, dt * 34));
+      }
+      if (state.mode === 'goto' && dist < 6) {
+        state.mode = 'parked';
+        state.onArrive?.();
+        state.onArrive = null;
+      }
+      if (state.mode === 'return' && dist < 12) {
+        state.mode = 'roam';
+        state.angle = Math.atan2(state.head.z, state.head.x);
+      }
+      // sample the trail as the head moves
+      if (state.trail[0].distanceTo(state.head) > 1.1) {
+        state.trail.unshift(state.head.clone());
+        if (state.trail.length > nSeg * 3 + 4) state.trail.pop();
+      }
+      for (let i = 0; i < nSeg; i++) {
+        const p = state.trail[Math.min(i * 2, state.trail.length - 1)];
+        segs[i].position.set(p.x, p.y + Math.sin(t * 2 + i * 0.55) * 0.6, p.z);
+      }
+      const back = state.trail[Math.min(2, state.trail.length - 1)];
+      howdah.position.set(back.x, back.y + 1.1 + Math.sin(t * 2 + 0.55) * 0.6, back.z);
+      const ahead = state.trail[0];
+      howdah.rotation.y = Math.atan2(ahead.x - back.x, ahead.z - back.z);
+    });
+
+    return {
+      state,
+      sendTo(x, z, onArrive) {
+        state.target = new THREE.Vector3(x, -1.2, z);
+        state.mode = 'goto';
+        state.onArrive = onArrive;
+      },
+      depart() {
+        const a = Math.atan2(state.head.z, state.head.x);
+        state.target = new THREE.Vector3(Math.cos(a) * ROAM_R, -1.2, Math.sin(a) * ROAM_R);
+        state.mode = 'return';
+      },
+    };
+  })();
 
   // ------------------------------------------------------------ leviathans
   for (const levi of world.leviathans) {
@@ -1777,6 +2015,26 @@ export function buildWorld(world, rng) {
     stormMat.uniforms.uFade.value = stormState.fade;
     if (stormState.fade < 0.015) stormMesh.visible = false;
 
+    // revealed chains surface rock by rock, launch-side first
+    for (let i = chainReveals.length - 1; i >= 0; i--) {
+      const r = chainReveals[i];
+      r.t += dt;
+      const total = r.indices.length * 0.32 + 0.75;
+      if (r.t >= total) {
+        setIsleIndices(r.indices, () => 1);
+        chainReveals.splice(i, 1);
+      } else {
+        const idxPos = new Map(r.indices.map((v, j) => [v, j]));
+        setIsleIndices(r.indices, (ii) => {
+          const u = THREE.MathUtils.clamp((r.t - (idxPos.get(ii) ?? 0) * 0.32) / 0.75, 0, 1);
+          if (u >= 1) return 1;
+          if (u <= 0) return 0.001;
+          const q = u - 1; // easeOutBack: surface past full, settle
+          return 1 + 2.70158 * q * q * q + 1.70158 * q * q;
+        });
+      }
+    }
+
     // claimed shards streak home to their lintels
     for (let i = shardFlights.length - 1; i >= 0; i--) {
       const f = shardFlights[i];
@@ -1869,9 +2127,10 @@ export function buildWorld(world, rng) {
   return {
     group, animate,
     waterMesh, isleMesh, waterKeys, isleKeys, portHitboxes,
-    labelsByArea, labelsByGate, labelsByLandmark,
+    labelsByArea, labelsByGate, labelsByLandmark, landmarkSpots,
     igniteGate, claimShard, setStormFrontier,
     triggerSnare, geyserErupting, mawSnapping, claimAltar,
+    revealChain, claimLodestone, claimBoon, merchant, burstAt,
     bounceIsle, boingGate, wobbleBody, revealArea,
   };
 }

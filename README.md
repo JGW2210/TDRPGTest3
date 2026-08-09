@@ -90,17 +90,34 @@ any mount path.
   dissolves the maelstrom entirely and bares the secret deep.
 - **Three papercraft hearts, halved** — trapped hexes cost half a heart:
   one-shot **snare runes** on the isles, telegraphed **void geysers** in the
-  waters, snapping **maw blooms** on the shores, and (from ring 2 out)
-  wandering **storm strikes** — all denser and quicker with every ring.
-  Lose the last half and the wisp gutters out: rogue death, and a brand-new
-  cosmos grows from a fresh seed. Shrine altars grant heart containers,
-  stray **heart-sprites** drift over discovered seas to mend you, and each
-  asteroid waystation keeps a **healing spring** (one heart, once per visit).
-- **Astral shrines** — floating challenge platforms hung high off the rims
-  of regions from ring 1 outward, each betrayed by a thin beam of light
-  dropping to a 7-hex teleportation stone islet in the sea. Step onto the
-  stone circle and it hurls the wisp skyward; a silent altar waits on top
-  (its trial arrives with the combat pass), bearing a heart container.
+  waters, and (from ring 2 out) wandering **storm strikes** — all denser
+  and quicker with every ring. The **chompers** come from a trap atlas,
+  each biome snapping in its own shape: tooth-maws in the Maw Shallows,
+  Venus flytraps in the bramble and spore mires, giant clams on the
+  drowned shores, gear-presses on the Cog Strand, buried bone-jaws,
+  lure-lanterns that bite — sparse in the first rings, thick in the deep
+  ones. Lose the last half and the wisp gutters out: rogue death, and a
+  brand-new cosmos grows from a fresh seed. A **ward-charm** (gift of
+  markets, hermits, or fallen stars) eats one hit in your stead.
+- **Rock-hop chains** — many regions grow a chain of floating rocks off
+  their rim: a cracked **springboard stone** on the shore, a few isolated
+  hop-rocks bowing over the void, and a small orbiting islet at the end —
+  the **Curio Peddler's gift market** (one free boon per run) or a
+  **hermit of the void** squatting by its astral curio, with two lines of
+  talk and a gift for first-time callers. Hops launch ONLY from the
+  chain's own stones: click any rock and the wisp leaps stone to stone.
+- **Astral shrines** — floating platforms hung high off region rims, each
+  bearing a silent altar with a heart container (+1 max heart; trials
+  arrive with the combat pass). Their old teleporters are gone: claim the
+  **starlit lodestone** perched on the far rim and the drowned rocks heave
+  up one by one into a helix of hop-stones spiralling up to the platform.
+- **Wandering kindnesses & pressures** — stray **heart-sprites** drift
+  over discovered seas; **falling stars** crash-light a hex for a minute
+  (reach it for a mend or a charm); the **merchant leviathan** surfaces
+  along a rim with a howdah full of gifts; the cartographer posts a
+  **bounty** per ring, worth a boon at any market; and while a stormfront
+  still stands it occasionally **surges** into the frontier ring. Each
+  asteroid waystation keeps a **healing spring** (one heart, per visit).
 - **The tide** — the sun breathes on a slow cycle. Waters brighten at high
   tide, and *faint tide-paths* into the outer dark only glimmer into view at
   the peak.
@@ -148,10 +165,10 @@ archipelago shapes, gate runes, shard perches, hazards, shrine platforms).
 | File | Role |
 | --- | --- |
 | `src/config.js` | Biome/water/terrain/veil/landmark tables, ring layout, storm boundaries, runes |
-| `src/worldgen.js` | Seeded generation: areas, hexes, asteroids, gates, storm wards, hazards, shrines, leviathans |
-| `src/buildWorld.js` | Turns world data into instanced meshes + stormfront, hazards, shrines, cosmos décor |
+| `src/worldgen.js` | Seeded generation: areas, hexes, asteroids, gates, storm wards, hazards, shrines, rock-hop chains, leviathans |
+| `src/buildWorld.js` | Turns world data into instanced meshes + stormfront, traps, chains, markets, merchant, cosmos décor |
 | `src/bodies.js` | Sculpted astral-body archetypes (eye, maw, gas giant, husk…) |
-| `src/structures.js` | Dolmen waygates, shrine stones & altars, storm heralds, landmarks |
+| `src/structures.js` | Dolmen waygates, chomper trap atlas, springboards, market stalls, hermits, altars, heralds, landmarks |
 | `src/cutscene.js` | Discovery cutscene: camera glide + click-through dialogue |
 | `src/decorSets.js` | Bespoke per-biome island decor geometry library |
 | `src/materials.js` | Water/veil shaders, canvas textures |

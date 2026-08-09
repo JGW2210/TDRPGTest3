@@ -35,6 +35,20 @@ export const ui = {
     box.innerHTML = html;
   },
 
+  // ward-charm indicator beside the hearts
+  renderCharm(n) {
+    const c = el('charm');
+    c.textContent = n > 0 ? 'ᛉ' : '';
+    c.classList.toggle('show', n > 0);
+  },
+
+  // the cartographer's standing errand, under the location line
+  setBounty(text) {
+    const b = el('bounty');
+    b.textContent = text;
+    b.classList.toggle('show', !!text);
+  },
+
   hurt() {
     const v = el('hurtflash');
     v.classList.remove('show');
