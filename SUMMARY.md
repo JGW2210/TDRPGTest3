@@ -5,20 +5,23 @@ Context for picking up work on this repo. Read this first, then `DESIGN.md`
 
 ## What this is
 
-A procedural world map for a roguelike (Binding of Isaac-inspired) game,
-built with three.js + Vite. A wisp navigates hex archipelagos orbiting a
-paper sun in a dark aetherial papercraft cosmos. Everything is seeded
-(`?seed=`, default `AETHERION`). Live at
+A procedural roguelike (Binding of Isaac-inspired), built with three.js +
+Vite. A paper-cutout HOODED MAGICIAN (Round 11 — formerly a wisp) navigates
+hex archipelagos orbiting a paper sun in a dark aetherial papercraft
+cosmos, duels paper beasts in zoomed combat dioramas, and collects from a
+512-piece item pool gated by persistent meta progression. Everything
+world-shaped is seeded (`?seed=`, default `AETHERION`). Live at
 `https://jgw2210.github.io/TDRPGTest3/` — auto-deployed by
 `.github/workflows/deploy.yml` on pushes to `main` (and the dev branch).
 
 ## Current world anatomy (the important state)
 
 - **24 areas**: sun + 4 orbital rings (3/4/5/5 regions at radii
-  260/530/800/1070) + 3 bare-rock ASTEROID WAYSTATIONS threaded between
-  ring-4 neighbors + 3 secret bodies past 1380. Layout on 8 staggered spoke
-  angles. Each region is an ISOLATED archipelago — no walkable connection
-  between regions, only void.
+  350/700/1050/1400 — WIDENED in Round 11 to fit the warden causeways) + 3
+  bare-rock ASTEROID WAYSTATIONS threaded between ring-4 neighbors + 3
+  secret bodies past 1700. Layout on 8 staggered spoke angles. Each region
+  is an ISOLATED archipelago — no walkable connection between regions, only
+  void.
 - **Region generation** (`worldgen.js generateRegion`): a connected water
   blob grows from a ring nestling the astral body; 3-5 islands of 10-30
   hexes grow inside it (a hex apart, island-level base heights, lower
@@ -27,6 +30,23 @@ paper sun in a dark aetherial papercraft cosmos. Everything is seeded
   Asteroid areas (`generateAsteroidRegion`, `area.asteroid`) are one
   connected knot of ~10-18 rock hexes; each keeps a glowing HEALING SPRING
   (`hex.spring` — one heart, once per visit, re-armed on area re-entry).
+- **WARDEN CAUSEWAYS (Round 11)** — each ring boundary's ascension gate no
+  longer perches 2-4 hexes off the rim: `worldgen placeBossNode` reaches a
+  ~20-tile causeway straight out toward the next ring (spine via `Hx.line`,
+  1-2 flank cells per row, a 3-wide ARENA flat at rows 8-13, the dolmen's
+  7-hex islet + stormheart perch at the far end). A fortified THRESHOLD
+  boss-gate (`makeThresholdGate`, ward-lattice barred) stands at row 2;
+  every cell beyond it starts `blocked`. Cells carry `hex.causeway` (set at
+  claim), `hex.causewayGate`/`hex.thresholdGate` (gate id), `hex.bossArena`.
+  `world.wardens[]` = {id, boundary, gateId, areaId, arenaKey,
+  thresholdKeys, blockedKeys, defeated}. Stepping on a threshold cell
+  (`handleThreshold` in main) pans the camera to the arena, bursts light,
+  reveals the warden's paper figure + name splash + intro lines
+  (`WARDENS[boundary]` in config), then starts boss combat. Victory
+  (`wardenFalls`) unblocks the causeway, drops the lattice
+  (`built.openThreshold`), bumps meta, and plays the defeat cutscene. THE
+  SHARD/ASCENSION FLOW IS UNCHANGED beyond that — the warden merely stands
+  between the region and the shard perch.
 - **Gates** = pairs of 7-hex bare-rock node islets on facing rims bearing
   DOLMEN WAYGATES (`structures.js`). Entering (or clicking — invisible
   hitboxes) one fires a BEAM OF LIGHT along the flight path with an ORB
@@ -45,8 +65,8 @@ paper sun in a dark aetherial papercraft cosmos. Everything is seeded
 - **STORM + ONE-WAY ASCENSION (Round 8, reshaped Round 10)** — A vast
   MAELSTROM SHEET (`makeStormMaterial`, ring mesh at renderOrder 5) seals
   everything beyond the frontier ring; inner calm radii per frontier live
-  in `STORM_BOUNDARIES` (145/400/668/938 — chosen to clear region rims +
-  gate islets; re-check if orbits change). Boundary radial gates are GRAND
+  in `STORM_BOUNDARIES` (222/572/922/1272 since Round 11 — chosen to clear
+  region rims + WARDEN CAUSEWAYS; re-check if orbits change). Boundary radial gates are GRAND
   ASCENSION GATES (`makeDolmenGate({grand:true})` — 1.6× scale, violet
   stone, a crowned CRYSTAL SOCKET, `setCrystal('empty'|'filled'|'spent')`).
   They start DARK under a ward (`world.wards[]`). Claiming the STORMHEART
@@ -182,6 +202,48 @@ paper sun in a dark aetherial papercraft cosmos. Everything is seeded
 - **Heart-sprites** — runtime-only (main.js `updateHeartDrops`): up to 3
   drifting hearts over discovered non-asteroid seas, heal half on catch,
   fade after 90s.
+- **COMBAT (Round 11, `combat.js`)** — a papercraft DIORAMA floats over the
+  encounter hex (torn disc + cut peaks in the biome's colors, camera drops
+  to over-the-shoulder; the combat OWNS the camera + keyboard + clicks).
+  Two 3x3 boards: on the player board row 0 faces the foe, row 2 the
+  camera; on the enemy board row 0 is the back rank. Turns fill initiative
+  meters at each side's SPEED. Player attack: 'target' (WASD cursor,
+  `PATTERNS[run.stats.pattern]` footprint preview, foresight ghosts) →
+  'spell' (type a `SPELL_WORDS` tier word against a per-ring clock; typos
+  cost 0.18s; timeout fizzles to 0.45x) → 'bar' (Undertale sweep; perfect
+  1.6x + shatters lane-hexes) → resolve (dodgers advance their patrol ONE
+  step on commit — predictable; imbues roll burn/freeze/slow). Enemy turn:
+  a strike timeline — danger squares TRACK the player in amber (reveal lead
+  grows with sight), LOCK red, bite after a react window (0.8s ring 0 →
+  0.3s deep, + dodge stat). Melee = 1 square, ranged = 2 squares rolling
+  toward the camera, wardens add sweep/cross. Control-hex debuffs: reverse,
+  scramble (reshuffles every 1.5s), lanelock (perfect strike clears).
+  RELIC on Q (12 relics, kill-charged). `combat.debugWin()` +
+  `combat.debugState()` for tests.
+- **ROAMERS (Round 11, runtime-only in main)** — up to ~22 paper beasts
+  drift through discovered regions (≤3 per region, ring ≥ ringReached, spawn
+  cadence ~7s; never on special/trigger hexes — `roamerHexOk`). Sharing a
+  tile starts combat; an ELDER (16%, ring ≥ 1) sits still and challenges by
+  dialogue choice (`ui.choice`) when adjacent. The BESTIARY (enemies.js)
+  keys one archetype per biome: painter silhouette + patrol
+  (`PATROLS`) + dodge temperament + ranged weight + debuff kit (ring ≥ 3, or
+  elite ring ≥ 2). `makeEnemy` seasons hp/spd by ring + dread.
+- **ITEMS + META (Round 11)** — `items.js`: 512-piece pool (200 common /
+  150 rare, last 3 per line "cracked" with trade-offs / 100 super-rare
+  playstyle benders incl. patterns + imbues + overworld movement / 50
+  hand-cut legendaries with flags / 12 relics). `run.mods` accumulates
+  effects; `computeStats(run)` derives `run.stats` (atk, spd, sight,
+  foresight, spellTime, barWidth, dodge, crit, luck, stepSpeed →
+  `player.speedMul`, hopRange → spring hops, hazardGuard, imbues, thorns,
+  shield, lifesteal, relicRate, pattern, flags). Drops (`rollDrop`) are
+  ALWAYS OPTIONAL (ui.itemCard take/leave; gambler flag rerolls one
+  refusal); luck tilts tiers, `tierBoost` floors them (wardens 2, elders 1,
+  transmute +1); taken ids leave the run's pool. `meta.js` persists in
+  localStorage (THE ONLY SURVIVOR OF DEATH): kills, wardens, bestRing,
+  itemsTaken, perfectBars, swiftCasts + achievements; super-rares unlock at
+  15 kills or warden 1, legendaries at warden 1 or 40 kills, weird pieces
+  behind `item.unlock = 'ach:*'`. Wardens offer a RELIC before their item
+  (starts charged; voltsparks refill; `run.relic = {def, charge}`).
 - **Per-biome identity** (config fields → renderers): `bodyShape` →
   sculpted archetypes in `bodies.js`; `terrain.style` + `island.top2` +
   shoreline water-glow tint in the isle loop; `veil` → per-region particle
@@ -211,18 +273,23 @@ paper sun in a dark aetherial papercraft cosmos. Everything is seeded
 
 | File | Role |
 | --- | --- |
-| `config.js` | HEX size, RINGS radii, STORM + STORM_BOUNDARIES, SHARD_LINES (arming) + WARD_LINES (launch), TRAPS atlas, HERMITS, LODE_LINES, biome tables, ASTEROID_BIOMES, TELEPORT_BIOMES, STILLMOON_CRYSTALS, runes |
-| `worldgen.js` | Seeded gen: layout (+ teleport concourses in ring gaps) → regions (+ teleporter hex) → stillmoons → gates → storm wards → shrines (baseY platform + hidden helix chain + lodestone) → attachment chains (markets/hermits) → springs → spring stones → start hex → hazards (trap atlas) |
-| `buildWorld.js` | All meshes/décor/animators + runtime API (igniteGate, claimShard, setStormFrontier, setGateCrystal, setTrackTarget, triggerSnare, geyserErupting, mawSnapping, claimAltar, revealChain, claimLodestone, claimBoon, merchant, burstAt, landmarkSpots, bounceIsle, boingGate, wobbleBody, revealArea) |
+| `config.js` | HEX size, RINGS radii, STORM + STORM_BOUNDARIES, SHARD_LINES (arming) + WARD_LINES (launch), WARDENS (Round 11: names/tints/intro+defeat lines), SPELL_WORDS tiers, TRAPS atlas, HERMITS, LODE_LINES, biome tables, ASTEROID_BIOMES, TELEPORT_BIOMES, STILLMOON_CRYSTALS, runes |
+| `worldgen.js` | Seeded gen: layout (+ teleport concourses in ring gaps) → regions (+ teleporter hex) → gates (boundary gates via `placeBossNode` warden causeways) → storm wards → wardens → stillmoons → shrines (baseY platform + hidden helix chain + lodestone) → attachment chains (markets/hermits) → springs → spring stones → start hex → hazards (trap atlas) |
+| `buildWorld.js` | All meshes/décor/animators + runtime API (igniteGate, claimShard, setStormFrontier, setGateCrystal, setTrackTarget, triggerSnare, geyserErupting, mawSnapping, claimAltar, revealChain, claimLodestone, claimBoon, merchant, burstAt, landmarkSpots, bounceIsle, boingGate, wobbleBody, revealArea, openThreshold) |
 | `bodies.js` | sculptBody: bespoke per-body geometry archetypes |
-| `structures.js` | makeDolmenGate (startLit/ignite; grand + setCrystal for ascension gates), makeTemple (Parthenon hut + teleport stone), makeStillmoonBody, makeChomper (6 trap archetypes, setOpen), makeSpringboard, makeMarketStall, makeBoonPedestal, makeHermit, makeAltar, makeLandmark, makeHerald + makeShrineStone (both retired, unused) |
-| `cutscene.js` | Camera glide + click-through dialogue (discovery + gate arming) |
+| `structures.js` | makeDolmenGate (startLit/ignite; grand + setCrystal for ascension gates), makeThresholdGate (Round 11 boss-gate + ward-lattice, open()), makeTemple (Parthenon hut + teleport stone), makeStillmoonBody, makeChomper (6 trap archetypes, setOpen), makeSpringboard, makeMarketStall, makeBoonPedestal, makeHermit, makeAltar, makeLandmark, makeHerald + makeShrineStone (both retired, unused) |
+| `sprites.js` | Round 11 paper-cutout atelier: drawMagician, ~18 creature silhouette painters, drawWarden (4 regalia), item card sprites (tier frame + glyph + tint), `makePaperFigure` billboard helper, canvas caches |
+| `combat.js` | The combat engine: diorama stage, speed meters, target→spell→bar attack, telegraphed strike timelines, control-hex debuffs, statuses, relics, PATTERNS |
+| `enemies.js` | BESTIARY (per-biome archetypes + PATROLS), makeEnemy (ring/dread seasoning, elites), makeWardenEnemy |
+| `items.js` | The 512-piece pool (generated tables + 50 hand-cut legendaries + 12 relics), computeStats/applyItem, rollDrop/rollRelic with unlock gating |
+| `meta.js` | localStorage meta: counters + ~15 achievements, onAward hook |
+| `cutscene.js` | Camera glide + click-through dialogue (discovery + gate arming + warden defeat) |
 | `decorSets.js` | buildDecorLibrary: ~40 merged decor geometries |
 | `materials.js` | Water shader, energy veil (uIgnite), storm sheet shader, canvas textures |
-| `player.js` | Click-to-sail BFS stepping, `startBlast(destKey, 'arc'\|'line'\|'hop', {durMul})`, `blastPointAt(t)` path sampler, baseY-aware heights |
-| `controls.js` | mode 'locked' (either-drag rotate, capped zoom, no pan) \| 'free' (LMB glide), RMB rotate, wheel zoom (max 3600), smooth cap reel-in |
-| `main.js` | Wiring: run state (hearts/charm/voucher/death/ringReached), beam flights + ascension launches, star chart + map labels, teleport sequence, hop logic (tryHop/pendingHops/trySpringHop), hazard checks, storm strikes + surges, heart-sprites, falling stars, merchant visits, bounties, shard/lodestone/altar/boon/hermit/spring/teleporter handlers, hover+path UI, `window.__astral` |
-| `pathfind.js`, `hexmath.js`, `rng.js`, `labels.js`, `ui.js` | Support (labels: screenSpace option; ui adds setChartActive/onChartClick/showTeleportPrompt/hideTeleport/moveHover) |
+| `player.js` | The paper magician (makePaperFigure billboard + halo/light), click-to-sail BFS stepping, `speedMul` (stepSpeed items), `startBlast(destKey, 'arc'\|'line'\|'hop', {durMul})`, `blastPointAt(t)` path sampler, baseY-aware heights |
+| `controls.js` | mode 'locked' (either-drag rotate, capped zoom, no pan) \| 'free' (LMB glide), RMB rotate, wheel zoom (max 4400), smooth cap reel-in |
+| `main.js` | Wiring: run state (hearts/charm/voucher/death/ringReached + mods/stats/items/relic/kills), combat triggers + rewards (onCombatVictory/offerItem/offerRelic), roamer spawner, warden thresholds (bossFx intro), beam flights + ascension launches, star chart + map labels, teleport sequence, hop logic, hazard checks (hazardGuard/stormSoul), storm strikes + surges, heart-sprites, falling stars, merchant visits, bounties, shard/lodestone/altar/boon/hermit/spring/teleporter handlers, hover+path UI, `window.__astral` |
+| `pathfind.js`, `hexmath.js`, `rng.js`, `labels.js`, `ui.js` | Support (ui adds the Round 11 combat surface: combatShow/Banner/Hint, foePanel/foeHp, spellShow/Progress, barShow/Cursor/Result, debuffs, itemCard, relicSlot, bossIntro, choice, statsLine) |
 
 ## Dev workflow
 
@@ -243,6 +310,17 @@ paper sun in a dark aetherial papercraft cosmos. Everything is seeded
     hazards — an undiscovered landfall starts a discovery cutscene, and
     `damage()` is inert during cutscenes.
   - lift fog directly for visual checks: `built.revealArea(areaId, false)`.
+  - combat (Round 11): start a fight directly —
+    `const e = __astral.debug.makeEnemy(area, {}); __astral.combat.start({
+    enemy: e, worldPos: {x,y,z}, biome: area.biome, boss: false })`; wait
+    for `combat.phase === 'target'`, press Space, read
+    `combat.spell.word`, type it via `page.keyboard`, Space on the bar;
+    `combat.debugWin()` forces victory (reward flow may complete
+    SYNCHRONOUSLY when no item drops — wait on `phase === 'reward' ||
+    !combat.active`). Boss path: teleport onto `world.wardens[0]
+    .thresholdKeys[0]` + `player.onEnterHex(...)` → bossFx intro (~5 sim s)
+    → boss combat. Item cards: click `#item-take` / `#item-leave`. Meta is
+    localStorage — a fresh browser context starts clean.
 - NOTE: headless SwiftShader runs a few fps and `dt` clamps at 0.05s, so
   sim time crawls (~0.2-0.4 s/s): blasts, storm retreats, and camera glides
   take many real seconds — poll with `waitForFunction`, not fixed waits.
@@ -252,12 +330,26 @@ paper sun in a dark aetherial papercraft cosmos. Everything is seeded
 ## Gotchas
 
 - Worldgen/build rng call ORDER is the seed contract — reordering rng
-  calls reshuffles every world. (Round 8 re-ordered it: old seeds now
-  produce different worlds than in Round 7 builds. That's expected.)
-- Region `maxDist` cap (clear+9..15) is the geometric guarantee that two
-  facing gate islets never merge. `STORM_BOUNDARIES` (145/400/668/938)
-  additionally assume region extent + islets + shard perch stay inside
-  each boundary — re-check BOTH if orbits or region sizes change.
+  calls reshuffles every world. (Rounds 8 and 11 both re-ordered it: old
+  seeds now produce different worlds. That's expected.)
+- ORBIT GEOMETRY IS ONE COUPLED CONTRACT (Round 11): `RINGS`
+  (350/700/1050/1400), `STORM_BOUNDARIES` (222/572/922/1272), and the ~20
+  tile warden causeways were derived together. Worst case per boundary r:
+  region rim ≈ 99u + causeway ≈ 114u past it must stay INSIDE boundary r
+  (margin ~9u), while the NEXT ring's inward gate islet (ring radius −
+  ~125u) must stay OUTSIDE it. Region `maxDist` cap (clear+9..15) is still
+  the rim guarantee. Touch ANY of ring radii / causeway length /
+  `STORM_BOUNDARIES` / region sizes → re-derive all of them (see
+  scratchpad-style math in DESIGN.md Round 11). Belts, leviathan orbits and
+  the merchant circle now derive from RINGS midpoints.
+- `pickRim` MUST skip `hex.causeway` (as well as `baseY`/`stillmoon`) — a
+  20-row causeway out-scores every true rim cell for aligned bearings and
+  would silently detach stillmoons/launches/lodestones onto it. The
+  stillmoon `gateZone` keep-out also includes every causeway cell.
+- Causeway cells beyond the threshold row are `blocked` until
+  `wardenFalls` clears `warden.blockedKeys` — BOTH pathability and the
+  boss trigger rely on that (the player can only ever reach rows ≤ 2
+  before the fight).
 - Custom instanced attributes live on the GEOMETRY; `instanceMatrix` on
   each MESH. The fringe mesh clones the geometry for its own attributes.
 - `hex.elev` is mutated at build time — build runs before Player exists;
@@ -326,22 +418,51 @@ paper sun in a dark aetherial papercraft cosmos. Everything is seeded
   nowhere else, it will be overwritten.
 - The cutscene owns the camera by nulling `controls._focusTo` every
   frame; anything else wanting camera control must check `cutscene.active`
-  (sail-follow and storm strikes in main do).
+  (sail-follow and storm strikes in main do). COMBAT and the BOSS INTRO do
+  the same — main's locked-camera block additionally checks
+  `combat.active`/`bossFx.active`.
+- COMBAT OWNS THE KEYBOARD: main's overworld keydown handler bails while
+  `combat.active || bossFx.active || ui.itemCardOpen || ui.choiceOpen` —
+  spelling words hits every letter key, including F/M/R/H (R would reseed
+  mid-fight!). combat.js registers its own keydown listener, always
+  installed, self-guarded by `this.active`. Clicks likewise route through
+  `combat.onClick` first.
+- `damage()` is inert during `combat.active` (combat routes hits through
+  main's `combatDamage`, which respects charm + a 0.35s combat invuln and
+  triggers `die()` itself). Hazard bites pass `{hazard:true}` so
+  `hazardGuard` items can shrug them; `stormSoul` skips storm-strike hits.
+- The reward flow can complete SYNCHRONOUSLY inside a victory (no drop →
+  `combat.finish()` immediately); anything watching phases must accept
+  'reward' OR inactive. Meta tier unlocks are bumped BEFORE the boss's
+  drops are rolled (wardens must unlock the tiers their own loot needs).
+- `run.mods` accumulates raw item effects; NEVER write `run.stats`
+  directly — call `computeStats(run)` (applyItem does). Instant payloads
+  (heal/charm/containers/setMaxHalves) are returned by `applyItem` and
+  applied by main's `applyInstant`.
+- Meta (`meta.js`) writes localStorage on every bump — it is shared across
+  seeds and survives death BY DESIGN; smoke tests get a clean slate only
+  because each Playwright context is fresh.
+- Roamers never spawn on / walk onto special hexes (`roamerHexOk`) — the
+  overlap trigger would otherwise fire combat on top of a gate/teleporter
+  handler.
 
 ## Roadmap (undone, in rough priority)
 
-1. Combat: warden fights at gates (hook: `handleGate`), boss-tally ward
-   criteria (`ward.criterion`), shrine trials (hazard gauntlet first) in
-   front of the heart containers. Design as a full roguelike system —
-   deferred deliberately to be written as one piece.
-2. Run structure beyond death: run summary, meta unlocks, optional
-   same-seed practice mode; persist discovery/ward state within a run so
-   a reload doesn't wipe it.
+1. Combat round 2: player-board effects (12 candidates listed in DESIGN.md
+   Round 11 — ember/mire/gale/crumble/sanctuary/sparkle/rift/static/
+   lodestone/echo/mirror/tidal), richer enemy strike patterns + timings
+   (the timeline machinery already takes arbitrary types), shrine trials in
+   front of the heart containers, ward criteria beyond the shard
+   (`ward.criterion` is still pluggable), "or otherwise depending on the
+   attack type" targeting variants for the player.
+2. Run structure beyond death: run summary screen, same-seed practice mode;
+   persist discovery/ward/warden state within a run so a reload doesn't
+   wipe it (meta already persists).
 3. New discovery mechanic for the Hollow Moon (rumor obelisks retired).
 4. Tide-gated hexes; flavor-specific water rules.
 5. Full planetary revolution (rigid region groups; gates re-anchor).
 6. Sound: chimes for discovery, storm rumble, shard crack, blast whoosh,
-   heart tear.
+   heart tear, spell keys, bar ticks, warden horns.
 
 ## History
 
@@ -377,9 +498,26 @@ tracks the wisp; teleport concourses on rings 2-4 — marble waystations
 with a Parthenon temple whose stone teleports (beam up, pan, beam down)
 to any visited same-ring region's spring stone under its astral body.
 
+→ Round 11 (single spec, no polls): COMBAT, written as one piece — the
+player remade as a 2D paper-cutout hooded magician (glowing eyes, star
+staff; `sprites.js` atelier); per-biome paper beasts roaming discovered
+regions (tile-share starts a duel, Elders challenge by dialogue choice);
+zoomed papercraft combat dioramas with two 3x3 boards, speed-metered
+turns, the target→spell-typing→timing-bar attack challenge, telegraphed
+enemy strikes with WASD dodging (melee lanes, 2-square ranged runs,
+warden sweeps), control-hex debuffs (reversed/scrambled keys, locked
+lanes), burn/freeze/slow imbues; a 512-piece item pool (200/150/100/50 +
+12 relics, trade-off "cracked" pieces, always-optional card drops, 2D
+card sprites) gated by localStorage META progression (kills, wardens,
+achievements); a single Q-fired relic slot charged by kills; and the four
+WARDENS bodily blocking the ascension gates at the end of ~20-tile
+causeways behind threshold boss-gates (camera pan + burst-of-light name
+reveal into combat). Orbits widened to 350/700/1050/1400 to fit the
+causeways.
+
 Dev branch convention: work happens on a `claude/...` branch, PR'd to
 `main` and merged; this round's branch is
-`claude/audit-map-progression-elements-jpfcbh`. NOTE: GitHub Pages deploys
+`claude/combat-enemies-stats-items-4oo1wz`. NOTE: GitHub Pages deploys
 from `main` only — dev branches must NOT be added to the deploy workflow
 triggers (the `github-pages` environment rejects them, and via the shared
 concurrency group a failing dev run can cancel the real deploy).

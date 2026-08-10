@@ -12,14 +12,19 @@
 
 export const HEX = 3; // hex radius in world units
 
+// Round 11 widened the orbits: every ring boundary's ascension gate now
+// stands at the end of a ~20-tile WARDEN CAUSEWAY reaching out from the
+// region rim, and the old 270u gaps could not hold one (worst-case rim 99u +
+// causeway 110u collided with both the storm boundary and the facing
+// region). Gaps are now 350u; STORM_BOUNDARIES moved with them.
 export const RINGS = [
-  { radius: 260, count: 3 },
-  { radius: 530, count: 4 },
-  { radius: 800, count: 5 },
-  { radius: 1070, count: 5 },
+  { radius: 350, count: 3 },
+  { radius: 700, count: 4 },
+  { radius: 1050, count: 5 },
+  { radius: 1400, count: 5 },
 ];
 
-export const SECRET_RADIUS = [1380, 1540];
+export const SECRET_RADIUS = [1700, 1860];
 
 export const BIOMES = [
   {
@@ -461,13 +466,16 @@ export const STORM = {
   color: 0x241f4d,     // deep storm indigo
   bright: 0x8a76e6,    // violet churn highlights
   flash: 0xdfe6ff,     // lightning
-  outer: 2400,         // the sheet's far edge
+  outer: 2900,         // the sheet's far edge
   sheetY: 9,           // hangs above the seas, below the labels
 };
 
 // Inner radius of the storm sheet for each frontier ring (0 = only the sun
-// region is calm). Chosen to clear each ring's region rims + gate islets.
-export const STORM_BOUNDARIES = [145, 400, 668, 938];
+// region is calm). Chosen to clear each ring's region rims + WARDEN
+// CAUSEWAYS (rim 99u worst + 20 rows + shard perch ≈ 213u past the region
+// center) while staying short of the next ring's inward-facing gate islets
+// (ring radius − ~125u). With 350u gaps that leaves ~9u margin each side.
+export const STORM_BOUNDARIES = [222, 572, 922, 1272];
 
 // Two lines for the shard-claim cutscene, per ring boundary: the crystal
 // flies to the great gate's crown and ARMS it. The storm holds until the
@@ -533,6 +541,88 @@ export const TRAPS = {
   lanternfen: { kind: 'lure', tint: 0xff9adb },
   frostveil: { kind: 'lure', tint: 0xd6f4ff },
   storm: { kind: 'lure', tint: 0xa89aff },
+};
+
+// ---------------------------------------------------------------------------
+// The four WARDENS (Round 11): each ring boundary's ascension gate is now
+// bodily blocked by a warden boss. The gate platform reaches ~20 tiles out
+// from the region rim as a causeway; a threshold boss-gate bars it near the
+// rim, an arena flat waits midway, and the dolmen travel gate (plus its
+// stormheart perch) stands at the far end. Crossing the threshold reveals
+// the warden in a burst of light and begins combat; only its defeat opens
+// the way to the shard and the gate. Indexed by boundary (0..3).
+export const WARDENS = [
+  {
+    key: 'emberclad', name: 'Pyraxis the Emberclad',
+    title: 'Warden of the First Veil',
+    tint: 0xff9a5c, tint2: 0x8f3a26, eye: 0xffe9c4,
+    intro: [
+      'A hearth-light gathers on the causeway, and armor of cooled ember steps out of it.',
+      '"Little flame. The first veil is mine to keep — show me your word is worth the dark."',
+    ],
+    defeat: [
+      'The ember armor folds open like paper and the warden bows, guttering.',
+      '"Warm enough. Take the shard, take the gate — the storm will test the rest."',
+    ],
+  },
+  {
+    key: 'tidebound', name: 'Maelis the Tidebound',
+    title: 'Warden of the Second Veil',
+    tint: 0x7fc4ff, tint2: 0x1e3a8f, eye: 0xd6f4ff,
+    intro: [
+      'The causeway stones darken with wet. Something vast surfaces without a sound.',
+      '"The second veil drowns the unworthy politely. Spell against me, pilgrim."',
+    ],
+    defeat: [
+      'The tide-warden unravels into spray that hangs, glittering, refusing to fall.',
+      '"Well cast. The deep keeps its manners — mind the third does not."',
+    ],
+  },
+  {
+    key: 'galecrowned', name: 'Vhorren the Galecrowned',
+    title: 'Warden of the Third Veil',
+    tint: 0xb0a8ff, tint2: 0x2e2866, eye: 0xdfe6ff,
+    intro: [
+      'The air above the arena bends. A crown of small lightnings finds a brow to sit on.',
+      '"Third veil. No more courtesies — the storm and I keep score together."',
+    ],
+    defeat: [
+      'The crown of lightnings scatters into fireflies; the wind lets go of your cloak.',
+      '"Scored and settled. The outer dark is owed you — I would not hurry."',
+    ],
+  },
+  {
+    key: 'outerdark', name: 'Nyx Ophellum',
+    title: 'Warden of the Last Veil',
+    tint: 0x9a6eff, tint2: 0x191433, eye: 0xc9f2e4,
+    intro: [
+      'Nothing arrives. The dark between the gate-posts simply begins to watch you.',
+      '"Last veil. Beyond me the void is honest. Prove you deserve honesty."',
+    ],
+    defeat: [
+      'The watching dark closes like an eye that has finally seen enough.',
+      '"Deserved. Go — the storm has nothing left to say to you."',
+    ],
+  },
+];
+
+// Magical words for the spell-casting challenge, by difficulty tier.
+// Uppercase A-Z only — they are typed against the clock.
+export const SPELL_WORDS = {
+  short: [
+    'IGNIS', 'ASTRA', 'LUMEN', 'VELUM', 'RUNA', 'ORBIS', 'PYRA', 'UMBRA',
+    'FLUX', 'AURA', 'NIMBA', 'SIDUS', 'VIVAX', 'MICA', 'FONS', 'NOX',
+  ],
+  medium: [
+    'FULGOR', 'GLACIES', 'VORTEX', 'STELLA', 'CORONA', 'AETHER', 'ZEPHYRUS',
+    'ARCANUM', 'TEMPESTA', 'SOLARIS', 'NOCTURNE', 'MERIDIA', 'OBSIDIA',
+    'CANTARIS', 'VESPERUM', 'AURELION',
+  ],
+  long: [
+    'TONITRUS', 'MAELSTROM', 'INCANDESSA', 'CRYSTALLIS', 'VELUMBRA',
+    'PYROCLASMUS', 'UMBRAVORTEX', 'ASTRAPHOBOS', 'LUMINIFERA', 'HELIOTROPUS',
+    'STELLANOVAE', 'AETHERION',
+  ],
 };
 
 // Two lines for the lodestone chain-reveal cutscene.

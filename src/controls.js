@@ -17,7 +17,7 @@ export class AstralControls {
     this.pitch = 0.95;
     this.dist = 130;
     this.minDist = 16;
-    this.maxDist = 3600;
+    this.maxDist = 4400;
     this.mode = 'locked'; // 'locked' | 'free'
     this.onClick = null; // (clientX, clientY) for clean left clicks
     this._btn = -1;
