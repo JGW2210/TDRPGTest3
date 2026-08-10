@@ -1200,3 +1200,99 @@ export function makeLandmark(kind, biome, rng, { gradientMap, glowTex, animators
   }
   return g;
 }
+
+// ---------------------------------------------------------------- threshold gate
+// The warden's boss-gate (Round 11): a broad fortified arch barring a
+// causeway near its rim end. Heavier and wider than any dolmen — two bastion
+// piers, a spiked lintel, and a humming ward-lattice slung across the gap
+// that burns away when the warden falls. open() drops the lattice.
+export function makeThresholdGate({ rng, gradientMap, glowTex, animators, tint = 0x8a76e6 }) {
+  const g = new THREE.Group();
+  const seed = (rng.float() * 1e6) | 0;
+
+  const stoneMat = new THREE.MeshToonMaterial({
+    color: new THREE.Color(0x5f5a80).offsetHSL((rng.float() - 0.5) * 0.03, 0, (rng.float() - 0.5) * 0.04),
+    gradientMap,
+  });
+
+  const stoneParts = [];
+  const inkParts = [];
+  function addStone(geo, m4, hull = [1.14, 1.03, 1.14]) {
+    const o = geo.clone();
+    o.scale(hull[0], hull[1], hull[2]);
+    geo.applyMatrix4(m4);
+    o.applyMatrix4(m4);
+    stoneParts.push(geo);
+    inkParts.push(o);
+  }
+
+  // bastion piers: squat, stepped, unarguable
+  for (const side of [-1, 1]) {
+    const base = roughen(new THREE.CylinderGeometry(1.5, 1.9, 2.2, 7, 2), seed + side, 0.3);
+    addStone(base, compose(side * 4.4, 1.1, 0, 0, rng.angle(), 0));
+    const mid = roughen(new THREE.CylinderGeometry(1.15, 1.45, 3.4, 7, 2), seed + side * 3, 0.28);
+    addStone(mid, compose(side * 4.4, 3.7, 0, 0, rng.angle(), side * 0.02));
+    const cap = roughen(new THREE.ConeGeometry(1.3, 1.6, 6), seed + side * 5, 0.16);
+    addStone(cap, compose(side * 4.4, 6.1, 0, 0, rng.angle(), 0), [1.18, 1.05, 1.18]);
+  }
+  // the spiked lintel spanning the causeway
+  const lin = roughen(new THREE.BoxGeometry(9.6, 1.15, 1.6), seed + 9, 0.2);
+  addStone(lin, compose(0, 6.35, 0, 0, 0, rng.range(-0.015, 0.015)), [1.05, 1.12, 1.12]);
+  for (let i = -2; i <= 2; i++) {
+    const spike = roughen(new THREE.ConeGeometry(0.3, 1.4 - Math.abs(i) * 0.18, 5), seed + 20 + i, 0.1);
+    addStone(spike, compose(i * 1.7, 7.3 - Math.abs(i) * 0.1, 0, 0, 0, i * 0.05), [1.2, 1.05, 1.2]);
+  }
+
+  g.add(new THREE.Mesh(mergeGeometries(stoneParts), stoneMat));
+  g.add(new THREE.Mesh(
+    mergeGeometries(inkParts),
+    new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide })
+  ));
+
+  // the ward-lattice: crossed strands of light barring the arch
+  const lattice = new THREE.Group();
+  const strandMat = new THREE.MeshBasicMaterial({
+    color: tint, transparent: true, opacity: 0.55,
+    blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+  });
+  for (let i = 0; i < 5; i++) {
+    const bar = new THREE.Mesh(new THREE.PlaneGeometry(7.6, 0.16), strandMat);
+    bar.position.set(0, 1.0 + i * 1.15, 0);
+    bar.rotation.z = (i % 2 ? 1 : -1) * 0.09;
+    lattice.add(bar);
+  }
+  for (const side of [-1, 1]) {
+    const bar = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 5.4), strandMat);
+    bar.position.set(side * 2.3, 3.3, 0);
+    bar.rotation.z = side * 0.12;
+    lattice.add(bar);
+  }
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTex, color: tint, transparent: true, opacity: 0.4,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  }));
+  glow.scale.setScalar(9);
+  glow.position.y = 3.6;
+  glow.renderOrder = 3;
+  lattice.add(glow);
+  lattice.renderOrder = 4;
+  g.add(lattice);
+
+  const state = { open: 0, target: 0 }; // 0 = barred, 1 = open
+  const ph = rng.angle();
+  animators.push((t, dt) => {
+    if (state.open < state.target) {
+      state.open = Math.min(1, state.open + dt * 0.8);
+      lattice.position.y = -state.open * 1.5;
+    }
+    const breathe = 0.55 + 0.2 * Math.sin(t * 2.6 + ph);
+    strandMat.opacity = (1 - state.open) * breathe;
+    glow.material.opacity = (1 - state.open) * 0.4;
+    lattice.visible = state.open < 1;
+  });
+
+  return {
+    group: g,
+    open: () => { state.target = 1; },
+  };
+}

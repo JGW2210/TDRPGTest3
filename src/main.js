@@ -10,6 +10,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 
 import {
   HEX, RINGS, toRunes, INTRO_LINES, SHARD_LINES, WARD_LINES, LODE_LINES, HERMITS,
+  WARDENS,
 } from './config.js';
 import * as Hx from './hexmath.js';
 import { Rng } from './rng.js';
@@ -21,6 +22,14 @@ import { Player } from './player.js';
 import { Cutscene } from './cutscene.js';
 import { ui } from './ui.js';
 import { makeLabel, updateLabels } from './labels.js';
+import { Combat } from './combat.js';
+import { makeEnemy, makeWardenEnemy, BESTIARY } from './enemies.js';
+import {
+  freshMods, computeStats, applyItem, rollDrop, rollRelic, ITEMS, RELICS,
+  POOL_COUNTS,
+} from './items.js';
+import { meta, ACHIEVEMENTS } from './meta.js';
+import { creatureCanvas, makePaperFigure, wardenCanvas, itemDataUrl } from './sprites.js';
 
 // ---------------------------------------------------------------- setup
 const params = new URLSearchParams(location.search);
@@ -33,7 +42,7 @@ const BG = 0x14172e; // dark cosmic indigo with a papery warmth
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(BG);
-scene.fog = new THREE.FogExp2(BG, 0.00026);
+scene.fog = new THREE.FogExp2(BG, 0.00023);
 
 const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.5, 9000);
 
@@ -93,11 +102,25 @@ const springRested = new Set(); // waystation springs already used this visit
 // ringReached: the deepest ring the wisp has ascended to. Ascension gates
 // fire ONCE and only outward — everything sunward of ringReached is lost to
 // this run, so timed events stop spawning there.
-const run = { maxHalves: 6, halves: 6, invulnUntil: -1, dead: false, charm: 0, voucher: 0, ringReached: 0 };
+const run = {
+  maxHalves: 6, halves: 6, invulnUntil: -1, dead: false, charm: 0, voucher: 0,
+  ringReached: 0,
+  // Round 11 — the roguelike layer: item mods fold into derived stats,
+  // taken ids leave the pool, one relic rides the belt, kills charge it
+  mods: freshMods(), stats: {}, items: [], taken: new Set(),
+  relic: null, relicTaken: new Set(), transmute: false, kills: 0,
+};
+computeStats(run);
+meta.bump('runs');
 
-function damage(n = 1, note = '') {
-  if (run.dead || cutscene.active || player.blast || teleport.active) return;
+function damage(n = 1, note = '', { hazard = false } = {}) {
+  if (run.dead || cutscene.active || player.blast || teleport.active || combat.active) return;
   if (clockTime < run.invulnUntil) return;
+  // trained feet: hazard bites can be shrugged off outright
+  if (hazard && Math.random() < run.stats.hazardGuard) {
+    flashLocation('✦ you slip the bite untouched ✦', 1800);
+    return;
+  }
   run.invulnUntil = clockTime + 1.15;
   if (run.charm > 0) {
     run.charm -= 1;
@@ -139,9 +162,13 @@ function heal(n) {
 }
 
 function die() {
+  if (run.dead) return;
   run.dead = true;
+  meta.bump('deaths');
   player.path = [];
   ui.hideDialogue();
+  ui.hideItemCard();
+  ui.hideChoice();
   ui.announce('The Wisp Gutters Out', 'ᛉ ᛫ the void reclaims its light ᛫ a new cosmos kindles', 5200);
   ui.deathFade();
   setTimeout(() => {
@@ -355,6 +382,411 @@ function handleSpring(hex) {
   else flashLocation('✦ the spring murmurs — you are already whole ✦');
 }
 
+// ---------------------------------------------------------------- combat (Round 11)
+// Fights are a zoomed papercraft diorama staged over the encounter hex —
+// see combat.js. Main owns the triggers (a roamer sharing your tile, an
+// elder's challenge, a warden's causeway threshold), the rewards (drops
+// from the 500-item pool, relics from the wardens), and the meta tallies.
+
+let combatInvulnUntil = -1;
+function combatDamage(n, note) {
+  if (run.dead) return 'dead';
+  if (clockTime < combatInvulnUntil) return 'hit';
+  combatInvulnUntil = clockTime + 0.35;
+  if (run.charm > 0) {
+    run.charm -= 1;
+    ui.renderCharm(run.charm);
+    ui.hurt();
+    flashLocation('ᛉ ✦ the ward-charm shatters in your stead ✦', 2000);
+    return 'charm';
+  }
+  run.halves = Math.max(0, run.halves - n);
+  ui.renderHearts(run.halves, run.maxHalves);
+  ui.hurt();
+  if (note) flashLocation(note, 1800);
+  if (run.halves <= 0) {
+    die();
+    return 'dead';
+  }
+  return 'hit';
+}
+
+// instant item payloads: heals, charms, heart containers
+function applyInstant(inst) {
+  if (!inst) return;
+  if (inst.setMaxHalves) {
+    run.maxHalves = inst.setMaxHalves;
+    run.halves = Math.min(run.halves, run.maxHalves);
+  }
+  if (inst.containers) {
+    run.maxHalves = Math.max(2, Math.min(24, run.maxHalves + inst.containers));
+    run.halves = Math.min(run.halves, run.maxHalves);
+  }
+  ui.renderHearts(run.halves, run.maxHalves);
+  if (inst.heal) heal(inst.heal);
+  if (inst.charm && run.charm < 1) {
+    run.charm = 1;
+    ui.renderCharm(run.charm);
+  }
+}
+
+function refreshStatsUi() {
+  ui.statsLine(run.stats, run.items.length);
+}
+
+function applyStatsToOverworld() {
+  player.speedMul = run.stats.stepSpeed;
+}
+
+function refreshRelicUi() {
+  if (!run.relic) {
+    ui.relicSlot(null);
+    return;
+  }
+  const d = run.relic.def;
+  ui.relicSlot({
+    name: d.name, desc: d.desc, charge: run.relic.charge, cd: d.cd,
+    dataUrl: itemDataUrl({ id: d.id, tier: 'legendary', glyph: d.glyph, tint: d.tint }),
+  });
+}
+
+// a drop is always OPTIONAL — the card offers, the pilgrim decides
+function offerItem(tierBoost, done, excluded = new Set()) {
+  const taken = new Set([...run.taken, ...excluded]);
+  const item = rollDrop({ luck: run.stats.luck, tierBoost, taken });
+  if (!item) { done(); return; }
+  ui.itemCard(
+    { name: item.name, tier: item.tier, desc: item.desc, dataUrl: itemDataUrl(item) },
+    () => {
+      const inst = applyItem(run, item);
+      applyInstant(inst);
+      meta.bump('itemsTaken');
+      refreshStatsUi();
+      applyStatsToOverworld();
+      done();
+    },
+    () => {
+      // a gambler's refusal shakes the pool once more
+      if (run.stats.flags.gambler && !excluded.size) {
+        excluded.add(item.id);
+        offerItem(tierBoost, done, excluded);
+      } else done();
+    }
+  );
+}
+
+function offerRelic(done) {
+  const r = rollRelic({ taken: run.relicTaken });
+  if (!r) { done(); return; }
+  ui.itemCard(
+    {
+      name: r.name, tier: 'relic',
+      desc: `${r.desc} ᛫ recharges after ${r.cd} fallen foes ᛫ fired with Q`,
+      dataUrl: itemDataUrl({ id: r.id, tier: 'legendary', glyph: r.glyph, tint: r.tint }),
+      takeLabel: '✦ claim the relic ✦', leaveLabel: 'refuse it',
+    },
+    () => {
+      run.relic = { def: r, charge: r.cd }; // it wakes charged
+      run.relicTaken.add(r.id);
+      refreshRelicUi();
+      done();
+    },
+    () => done()
+  );
+}
+
+let activeBoss = null; // the world.wardens entry while a boss fight runs
+
+function onCombatVictory({ enemy, boss, flawless }) {
+  run.kills += 1;
+  meta.bump('kills');
+  // a warden's fall unlocks deeper tiers BEFORE its spoils are rolled
+  if (boss && activeBoss) meta.setMax('wardens', activeBoss.boundary + 1);
+  if (run.relic && run.relic.charge < run.relic.def.cd) {
+    run.relic.charge += 1;
+    refreshRelicUi();
+  }
+  if (flawless) meta.award('untouched');
+  if (boss && flawless) meta.award('flawless');
+  if (Math.random() < run.stats.lifesteal) heal(1);
+  const boost = (boss ? 2 : enemy.elite ? 1 : 0) + (run.transmute ? 1 : 0);
+  run.transmute = false;
+  const chance = boss || enemy.elite ? 1 : 0.4 + run.stats.luck * 0.04;
+  const wrap = () => afterVictory(boss, enemy);
+  if (boss && !run.relic) offerRelic(() => offerItem(boost, wrap));
+  else if (Math.random() < chance) offerItem(boost, wrap);
+  else {
+    // now and then a felled foe coughs up a voltspark for the relic
+    if (run.relic && run.relic.charge < run.relic.def.cd && Math.random() < 0.15) {
+      run.relic.charge = run.relic.def.cd;
+      refreshRelicUi();
+      flashLocation('✦ a voltspark leaps into your relic ᛫ it hums, ready ✦', 2600);
+    }
+    wrap();
+  }
+}
+
+function afterVictory(boss, enemy) {
+  combat.finish();
+  if (boss && activeBoss) {
+    wardenFalls(activeBoss);
+    activeBoss = null;
+  } else {
+    ui.announce('The Way Is Clear', `✦ ᛫ the ${enemy.name.toLowerCase()} comes apart like wet paper`);
+  }
+}
+
+function wardenFalls(warden) {
+  warden.defeated = true;
+  const gate = world.gates[warden.gateId];
+  for (const k of warden.blockedKeys) {
+    const h = world.hexes.get(k);
+    if (h) h.blocked = false;
+  }
+  built.openThreshold(gate.id);
+  meta.setMax('wardens', warden.boundary + 1);
+  const w = WARDENS[warden.boundary];
+  const ah = world.hexes.get(warden.arenaKey);
+  const ap = Hx.toWorld(ah.q, ah.r, HEX);
+  cutscene.startDiscovery({
+    title: `${w.name} Yields`,
+    sub: `${w.title} ᛫ the ward-lattice falls`,
+    lines: w.defeat,
+    focus: new THREE.Vector3(ap.x, 4, ap.z),
+    dist: 46,
+    homeOf: () => new THREE.Vector3(player.mesh.position.x, 0, player.mesh.position.z),
+  });
+}
+
+const combat = new Combat({
+  scene, controls, run, cui: ui,
+  hooks: {
+    damagePlayer: combatDamage,
+    healPlayer: heal,
+    onVictory: onCombatVictory,
+    onDefeat: () => {},
+    announce: (t2, s2) => ui.announce(t2, s2),
+    flash: flashLocation,
+    onRelicUsed: refreshRelicUi,
+    onStrike: (res) => {
+      if (res.swift) meta.bump('swiftCasts');
+      if (res.perfect) meta.bump('perfectBars');
+    },
+  },
+});
+
+// ---------------------------------------------------------------- roamers
+// Paper beasts drifting through discovered regions. Sharing a tile with one
+// begins combat outright; an ELDER (challenger) holds its ground and asks
+// first — a floating choice, Isaac-style optional.
+const roamers = { list: [], nextSpawn: 16 };
+
+function hexTopY(h) {
+  return (h.baseY || 0) + (h.kind === 'isle' ? h.elev : 0);
+}
+
+function roamerCanvas(area, elite) {
+  const b = area.biome;
+  const spec = BESTIARY[b.key] ?? BESTIARY.shatterreef;
+  return creatureCanvas({
+    id: b.key + (elite ? ':elite' : ''),
+    painter: spec.painter,
+    base: elite ? b.island.top2 : b.island.top,
+    dark: b.island.side,
+    eye: b.island.glow,
+  });
+}
+
+function roamerHexOk(h, areaId) {
+  return h && h.areaId === areaId && !h.blocked && !h.hazard && !h.baseY
+    && h.gateId === null && h.wardId === undefined && h.chainId === undefined
+    && h.lodeChain === undefined && !h.spring && !h.springStone && !h.teleporter
+    && h.thresholdGate === undefined && h.causewayGate === undefined && !h.stillmoon;
+}
+
+function spawnRoamer() {
+  const cands = world.areas.filter((a) =>
+    a.discovered && !a.teleport && a.ring >= run.ringReached
+    && roamers.list.filter((r) => r.areaId === a.id).length < (a.ring === 0 ? 1 : 3));
+  if (!cands.length) return;
+  const area = cands[(Math.random() * cands.length) | 0];
+  const startHex = world.hexes.get(world.startKey);
+  const keys = area.hexKeys.filter((k) => {
+    const h = world.hexes.get(k);
+    if (!roamerHexOk(h, area.id) || k === player.hexKey) return false;
+    if (area.ring === 0 && Hx.dist(h.q, h.r, startHex.q, startHex.r) < 6) return false;
+    const ph = world.hexes.get(player.hexKey);
+    return Hx.dist(h.q, h.r, ph.q, ph.r) > 3; // never materialize on top of the wisp
+  });
+  if (!keys.length) return;
+  const key = keys[(Math.random() * keys.length) | 0];
+  const elite = area.ring >= 1 && Math.random() < 0.16;
+  const spec = BESTIARY[area.biome.key] ?? BESTIARY.shatterreef;
+  const fig = makePaperFigure(roamerCanvas(area, elite), {
+    height: elite ? 3.2 : 2.5, glow: area.biome.island.glow, glowScale: 1.4,
+  });
+  const h = world.hexes.get(key);
+  const p = Hx.toWorld(h.q, h.r, HEX);
+  fig.position.set(p.x, hexTopY(h) + 0.25, p.z);
+  scene.add(fig);
+  roamers.list.push({
+    fig, hexKey: key, areaId: area.id, elite,
+    name: elite ? `Elder ${spec.name}` : spec.name,
+    nextMove: clockTime + 2 + Math.random() * 3,
+    phase: Math.random() * 9, prompted: false,
+  });
+}
+
+function removeRoamer(r) {
+  scene.remove(r.fig);
+  r.fig.traverse((o) => { o.material?.dispose?.(); });
+  const i = roamers.list.indexOf(r);
+  if (i >= 0) roamers.list.splice(i, 1);
+}
+
+function startCombatWith(roamer) {
+  if (combat.active || bossFx.active || cutscene.active || teleport.active
+    || launch.active || run.dead || player.blast) return;
+  if (mapFx.active) exitChart();
+  ui.hideHover();
+  ui.hideChoice();
+  hoverMarker.visible = false;
+  player.path = [];
+  const area = world.areas[roamer.areaId];
+  const enemy = makeEnemy(area, { elite: roamer.elite });
+  const h = world.hexes.get(player.hexKey);
+  const wp = new THREE.Vector3(
+    player.mesh.position.x, hexTopY(h) + 6.5, player.mesh.position.z
+  );
+  removeRoamer(roamer);
+  combat.start({ enemy, worldPos: wp, biome: area.biome, boss: false });
+}
+
+function updateRoamers(t, dt) {
+  if (!run.dead && t > roamers.nextSpawn) {
+    roamers.nextSpawn = t + 7 + Math.random() * 6;
+    if (roamers.list.length < 22) spawnRoamer();
+  }
+  const busy = combat.active || bossFx.active || cutscene.active
+    || teleport.active || launch.active || run.dead;
+  const ph = world.hexes.get(player.hexKey);
+  for (const r of roamers.list) {
+    const h = world.hexes.get(r.hexKey);
+    const p = Hx.toWorld(h.q, h.r, HEX);
+    const wantY = hexTopY(h) + 0.25 + Math.sin(t * 1.8 + r.phase) * 0.22;
+    r.fig.position.x += (p.x - r.fig.position.x) * Math.min(1, dt * 3.2);
+    r.fig.position.z += (p.z - r.fig.position.z) * Math.min(1, dt * 3.2);
+    r.fig.position.y += (wantY - r.fig.position.y) * Math.min(1, dt * 4);
+    if (!r.elite && t > r.nextMove && !busy) {
+      r.nextMove = t + 2.5 + Math.random() * 2.5;
+      const dirs = Hx.DIRS.filter((d) =>
+        roamerHexOk(world.hexes.get(Hx.key(h.q + d[0], h.r + d[1])), r.areaId));
+      if (dirs.length) {
+        const d = dirs[(Math.random() * dirs.length) | 0];
+        r.hexKey = Hx.key(h.q + d[0], h.r + d[1]);
+      }
+    }
+    if (busy) continue;
+    // sharing a tile is a fight, no questions asked
+    if (r.hexKey === player.hexKey && !player.blast) {
+      startCombatWith(r);
+      break;
+    }
+    // an elder challenges from the next tile over — and takes an answer
+    if (r.elite) {
+      const d = Hx.dist(ph.q, ph.r, h.q, h.r);
+      if (d === 1 && !r.prompted && !ui.choiceOpen && !player.isMoving) {
+        r.prompted = true;
+        ui.choice(`the ${r.name.toLowerCase()} bars its ground ᛫ answer its challenge?`, [
+          { label: '⚔ fight', cb: () => startCombatWith(r) },
+          { label: 'step back', cb: () => {} },
+        ]);
+      } else if (d > 2) {
+        r.prompted = false;
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------- warden thresholds
+// Crossing a causeway's boss-gate: the camera pans to the arena between the
+// threshold and the travel gate, a burst of light reveals the warden and its
+// name — then the fight begins in earnest.
+const bossFx = {
+  active: false, phase: 'off', t: 0, warden: null, gate: null,
+  fig: null, arenaPos: null, spoke2: false,
+};
+
+function handleThreshold(hex) {
+  const gate = world.gates[hex.thresholdGate];
+  const warden = gate ? world.wardens[gate.wardenId] : null;
+  if (!warden || warden.defeated || bossFx.active || combat.active) return;
+  player.path = [];
+  ui.hideHover();
+  hoverMarker.visible = false;
+  bossFx.active = true;
+  bossFx.phase = 'pan';
+  bossFx.t = 0;
+  bossFx.warden = warden;
+  bossFx.gate = gate;
+  bossFx.spoke2 = false;
+  const ah = world.hexes.get(warden.arenaKey);
+  const ap = Hx.toWorld(ah.q, ah.r, HEX);
+  bossFx.arenaPos = new THREE.Vector3(ap.x, (ah.elev ?? 0) + 0.3, ap.z);
+  ui.announce('The Causeway Shudders', 'ᚺ ᛫ something vast takes its post ahead');
+}
+
+function updateBossIntro(dt) {
+  if (!bossFx.active) return;
+  bossFx.t += dt;
+  const c = controls;
+  c._focusTo = null;
+  c.target.lerp(bossFx.arenaPos, 1 - Math.exp(-dt * 3));
+  c.dist += (36 - c.dist) * Math.min(1, dt * 2.4);
+  c.pitch += (0.6 - c.pitch) * Math.min(1, dt * 2);
+  const w = WARDENS[bossFx.warden.boundary];
+  if (bossFx.phase === 'pan' && bossFx.t > 1.5) {
+    bossFx.phase = 'reveal';
+    bossFx.t = 0;
+    built.burstAt(bossFx.arenaPos.clone().add(new THREE.Vector3(0, 3.5, 0)), w.tint, 18);
+    bossFx.fig = makePaperFigure(wardenCanvas(bossFx.warden.boundary, w.tint, w.tint2, w.eye), {
+      height: 6.5, glow: w.eye, glowScale: 1.6,
+    });
+    bossFx.fig.position.copy(bossFx.arenaPos);
+    bossFx.fig.scale.setScalar(0.01);
+    scene.add(bossFx.fig);
+    ui.bossIntro(w.name, w.title);
+    ui.dialogue(w.intro[0]);
+  } else if (bossFx.phase === 'reveal') {
+    bossFx.fig.scale.lerp(new THREE.Vector3(1, 1, 1), 1 - Math.exp(-dt * 5));
+    if (bossFx.t > 1.6 && !bossFx.spoke2) {
+      bossFx.spoke2 = true;
+      ui.dialogue(w.intro[1]);
+    }
+    if (bossFx.t > 3.4) {
+      ui.hideBossIntro();
+      ui.hideDialogue();
+      scene.remove(bossFx.fig);
+      bossFx.fig.traverse((o) => { o.material?.dispose?.(); });
+      bossFx.fig = null;
+      activeBoss = bossFx.warden;
+      const enemy = makeWardenEnemy(bossFx.warden.boundary);
+      combat.start({
+        enemy,
+        worldPos: bossFx.arenaPos.clone().add(new THREE.Vector3(0, 4.8, 0)),
+        biome: world.areas[bossFx.warden.areaId].biome,
+        boss: true,
+      });
+      bossFx.active = false;
+    }
+  }
+}
+
+meta.onAward((key, a) => {
+  ui.announce(`Unlocked ᛫ ${a.name}`, `✶ ᛫ ${a.desc} ᛫ deeper curios join the pool`);
+  void key;
+});
+
 // ---------------------------------------------------------------- gate flight
 // The wisp no longer tumbles bodily through the void: a gate blast fires a
 // BEAM OF LIGHT along the flight path — the orbit's arc for ring crossings,
@@ -373,7 +805,7 @@ function startFlightBeam(isLaunch = false) {
   let radius = 0;
   for (const p of pts) radius = Math.max(radius, center.distanceTo(p));
   flight.frameCenter = center;
-  flight.frameDist = THREE.MathUtils.clamp(radius * 2.5, 200, 3400);
+  flight.frameDist = THREE.MathUtils.clamp(radius * 2.5, 200, 4200);
   const curve = new THREE.CatmullRomCurve3(pts);
   const geo = new THREE.TubeGeometry(curve, 96, isLaunch ? 1.15 : 0.5, 7, false);
   const beam = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
@@ -448,6 +880,7 @@ function startAscension(gate, hexKey) {
   const frontier = ward.boundary + 1;
   world.progress.frontier = frontier;
   run.ringReached = Math.max(run.ringReached, frontier);
+  meta.setMax('bestRing', frontier);
   newBounty(frontier); // the cartographer posts the next ring's errand
   const destKey = gate.portB;
   suppressGateKey = destKey;
@@ -506,7 +939,7 @@ const camFocus = new THREE.Vector3();
 const mapFx = { active: false, sprites: [], you: null };
 // the chart's own machinery: auto-glide, swollen hover-reactive bodies
 const CHART_HOME = new THREE.Vector3(0, 0, 0);
-const CHART_DIST = 2800;
+const CHART_DIST = 3400;
 const chartFx = { bodies: [], hitboxes: [], hovered: -1, easing: false, openedPerf: 0 };
 const chartHitMat = new THREE.MeshBasicMaterial();
 // teleport selection: violet-lit bodies on the current orbit are the picker
@@ -574,10 +1007,11 @@ function clearTpSelect() {
 }
 
 function enterChart() {
-  if (mapFx.active || cutscene.active || teleport.active || run.dead || player.isMoving) return false;
+  if (mapFx.active || cutscene.active || teleport.active || run.dead || player.isMoving
+    || combat.active || bossFx.active) return false;
   mapFx.active = true;
   cam.mode = controls.mode = 'free';
-  controls.maxDist = 3600;
+  controls.maxDist = 4400;
   ui.setChartActive(true);
   ui.hideHover();
   for (const l of built.labelsByArea.values()) l.sprite.visible = false;
@@ -770,7 +1204,7 @@ function updateTeleport(dt) {
 function trySpringHop(cur, targetKey) {
   const th = world.hexes.get(targetKey);
   if (!th || th.blocked || player.blast) return false;
-  const near = Hx.dist(cur.q, cur.r, th.q, th.r) <= 6;
+  const near = Hx.dist(cur.q, cur.r, th.q, th.r) <= 6 + run.stats.hopRange;
   if (!near) return false;
   if (cur.springStone && !th.baseY) {
     player.startBlast(targetKey, 'hop');
@@ -803,12 +1237,13 @@ player.onEnterHex = (hex) => {
   if (hex.hazard?.kind === 'snare') {
     hex.hazard = null; // one-shot: the glyph burns out
     built.triggerSnare(k);
-    damage(1, 'ᚦ ✦ a snare rune sears the sea-road');
+    damage(1, 'ᚦ ✦ a snare rune sears the sea-road', { hazard: true });
   } else if (hex.hazard?.kind === 'geyser' && built.geyserErupting(k, clockTime)) {
-    damage(1, '✦ the geyser catches you full ✦');
+    damage(1, '✦ the geyser catches you full ✦', { hazard: true });
   } else if (hex.hazard?.kind === 'maw' && built.mawSnapping(k, clockTime)) {
-    damage(1, '✦ the maw bloom bites ✦');
+    damage(1, '✦ the maw bloom bites ✦', { hazard: true });
   }
+  if (hex.thresholdGate !== undefined) handleThreshold(hex);
   if (hex.wardId !== undefined) handleShardClaim(hex);
   if (hex.lodeChain !== undefined) handleLodestone(hex);
   if (hex.spring) handleSpring(hex);
@@ -902,6 +1337,8 @@ function hexKeyAt(clientX, clientY) {
 
 controls.onClick = (x, y) => {
   if (run.dead || teleport.active || launch.active) return;
+  if (combat.active) { combat.onClick(x, y, camera); return; }
+  if (bossFx.active || ui.choiceOpen || ui.itemCardOpen) return;
   if (cutscene.advance()) return; // clicks progress the cutscene dialogue
   if (cam.mode === 'free') {
     // on the chart, a click may pick a violet-lit island to cross to
@@ -949,7 +1386,7 @@ addEventListener('pointermove', (e) => {
   ui.moveHover(e.clientX, e.clientY);
   if (hoverCooldown > 0) return;
   hoverCooldown = 0.06;
-  if (cutscene.active || teleport.active) {
+  if (cutscene.active || teleport.active || combat.active || bossFx.active) {
     ui.hideHover();
     hoverMarker.visible = false;
     return;
@@ -999,6 +1436,16 @@ addEventListener('pointermove', (e) => {
         ? `${gate.name} ${gate.rune.ch} ᛫ step in to ride the beam`
         : toRunes(gate.name) + ' ' + gate.rune.ch;
     }
+  } else if (hex.thresholdGate !== undefined) {
+    const wd = world.wardens[world.gates[hex.thresholdGate]?.wardenId];
+    text = wd?.defeated
+      ? 'the threshold stands open ᛫ the warden is paper on the wind'
+      : 'a warden\'s threshold ᛫ cross it and the causeway will answer';
+  } else if (hex.causewayGate !== undefined) {
+    const wd = world.wardens[world.gates[hex.causewayGate]?.wardenId];
+    text = wd?.defeated
+      ? 'the warden causeway ᛫ the gate waits at its end'
+      : 'a warden causeway ᛫ something vast keeps it';
   } else if (hex.teleporter) {
     text = 'the teleport stone ᛫ step into the temple to chart a crossing';
   } else if (hex.springStone) {
@@ -1060,7 +1507,7 @@ function updateStrikes(t, dt) {
   const curArea = world.areas[world.hexes.get(player.hexKey).areaId];
   const dread = Math.min(1, curArea.biome.dread ?? 0);
   if (t > surge.next && world.progress.frontier < world.wards.length
-    && !run.dead && !cutscene.active) {
+    && !run.dead && !cutscene.active && !combat.active) {
     surge.next = t + 90 + Math.random() * 60;
     if (curArea.ring === world.progress.frontier && curArea.discovered) {
       surge.until = t + 10;
@@ -1069,7 +1516,8 @@ function updateStrikes(t, dt) {
     }
   }
   const surging = t < surge.until && curArea.id === surge.areaId;
-  if ((curArea.ring >= 2 || surging) && t > strikes.next && !run.dead && !cutscene.active) {
+  if ((curArea.ring >= 2 || surging) && t > strikes.next && !run.dead
+    && !cutscene.active && !combat.active) {
     strikes.next = t + (surging ? 1.1 : 8 - 5 * dread + Math.random() * 3);
     const keys = curArea.hexKeys;
     const key = keys[(Math.random() * keys.length) | 0];
@@ -1111,7 +1559,9 @@ function updateStrikes(t, dt) {
         s.bolt.position.set(p.x, y + 32, p.z);
         s.bolt.renderOrder = 6;
         scene.add(s.bolt);
-        if (player.hexKey === s.key) damage(1, 'ᚢ ✦ the storm finds you');
+        if (player.hexKey === s.key && !run.stats.flags.stormSoul) {
+          damage(1, 'ᚢ ✦ the storm finds you', { hazard: true });
+        }
       }
     } else {
       s.fade -= dt;
@@ -1336,6 +1786,8 @@ function updateMerchant(t) {
 
 // ---------------------------------------------------------------- keys
 addEventListener('keydown', (e) => {
+  // combat and its overlays own the keyboard (typing spells hits every key)
+  if (combat.active || bossFx.active || ui.itemCardOpen || ui.choiceOpen) return;
   if (e.key === 'f' || e.key === 'F') controls.focus(player.mesh.position);
   if (e.key === 'm' || e.key === 'M') toggleChart();
   if (e.key === 'Escape' && mapFx.active) exitChart();
@@ -1357,10 +1809,14 @@ addEventListener('resize', () => {
 // dev/debug handle (also used by automated smoke tests)
 window.__astral = {
   world, player, controls, built, cutscene, run, damage, heal,
+  combat, meta,
   debug: {
     spawnFallingStar, bounty, newBounty, merchantVisit, surge, grantBoon, tryHop,
     cam, mapFx, chartFx, tpSelect, enterChart, exitChart, toggleChart, openTeleport,
     beginTeleportTo, teleport, launch, flight, startAscension, trySpringHop,
+    roamers, spawnRoamer, startCombatWith, bossFx, handleThreshold, wardenFalls,
+    offerItem, offerRelic, onCombatVictory, ITEMS, RELICS, POOL_COUNTS,
+    makeEnemy, makeWardenEnemy, ACHIEVEMENTS,
   },
 };
 
@@ -1368,6 +1824,9 @@ window.__astral = {
 ui.setSeed(seed, world.title);
 ui.renderHearts(run.halves, run.maxHalves);
 ui.renderCharm(run.charm);
+refreshStatsUi();
+refreshRelicUi();
+applyStatsToOverworld();
 newBounty(0); // the cartographer's first errand, close to home
 const startArea = areaOf(world.hexes.get(world.startKey));
 lastAreaId = startArea.id;
@@ -1399,9 +1858,9 @@ function frame() {
   if (!run.dead && !player.blast && !cutscene.active) {
     const h = world.hexes.get(player.hexKey);
     if (h?.hazard?.kind === 'geyser' && built.geyserErupting(player.hexKey, t)) {
-      damage(1, '✦ the geyser catches you full ✦');
+      damage(1, '✦ the geyser catches you full ✦', { hazard: true });
     } else if (h?.hazard?.kind === 'maw' && built.mawSnapping(player.hexKey, t)) {
-      damage(1, '✦ the maw bloom bites ✦');
+      damage(1, '✦ the maw bloom bites ✦', { hazard: true });
     }
   }
   updateStrikes(t, dt);
@@ -1410,18 +1869,23 @@ function frame() {
   updateMerchant(t);
   updateFlight(dt);
   updateTeleport(dt);
+  updateRoamers(t, dt);
+  updateBossIntro(dt);
+  combat.update(dt, camera);
   // the wisp blinks through its invulnerability window — and is absent
-  // entirely while it rides a beam or a teleport crossing
+  // entirely while it rides a beam or a teleport crossing (or stands on
+  // the combat stage as its papercraft self)
   player.mesh.visible = run.dead || t >= run.invulnUntil || Math.sin(t * 34) > -0.35;
-  if ((flight.active && player.blast) || teleport.active) player.mesh.visible = false;
+  if ((flight.active && player.blast) || teleport.active || combat.active) player.mesh.visible = false;
 
   // camera: the locked mode pins the view to the wisp — except while a gate
   // beam flies, when it pulls back to FRAME THE BEAM END TO END, returning
-  // to the locked view once the orb lands. Cutscenes and the teleport
-  // sequence steer for themselves; the free chart roams at will.
-  if (cam.mode === 'locked' && !cutscene.active && !teleport.active) {
+  // to the locked view once the orb lands. Cutscenes, the teleport sequence,
+  // combat, and the boss reveal steer for themselves; the chart roams free.
+  if (cam.mode === 'locked' && !cutscene.active && !teleport.active
+    && !combat.active && !bossFx.active) {
     if (flight.active && player.blast) {
-      controls.maxDist = 3600;
+      controls.maxDist = 4400;
       controls.target.lerp(flight.frameCenter, 1 - Math.exp(-dt * 2.6));
       controls.dist += (flight.frameDist - controls.dist) * Math.min(1, dt * 2.2);
       if (launch.active) {
@@ -1440,7 +1904,7 @@ function frame() {
       controls.maxDist = curArea ? zoomCapFor(curArea) : 300;
     }
   } else if (cam.mode === 'free') {
-    controls.maxDist = 3600;
+    controls.maxDist = 4400;
   }
   cutscene.update(dt);
 

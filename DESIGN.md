@@ -529,3 +529,118 @@ wardens-to-be. The silent shrine altars are where combat trials land.
 - New discovery mechanics for the Hollow Moon (its rumor-rune obelisks
   retired with the pedestal purge — it currently sits open once the last
   stormfront falls).
+
+---
+
+## Round 11 — Combat, beasts, stats, the item pool, warden causeways
+
+No polls this round; one spec, written as one piece (as the roadmap always
+intended for combat).
+
+### The shape of a fight
+
+- **Trigger**: sharing a tile with a roaming paper beast starts combat
+  outright; an **Elder** (challenger) beast sits still and asks first via a
+  floating dialogue choice — opting in is always the player's. Wardens
+  trigger by crossing their causeway threshold.
+- **Stage**: a zoomed papercraft **diorama** floating over the encounter
+  hex, dressed in the biome's own colors (torn disc, cut-paper peaks). Two
+  3x3 boards face each other; the camera drops to over-the-shoulder.
+- **Scheduling**: both sides fill an initiative meter at their **speed**
+  stat; whoever brims acts. Speed items visibly buy more turns; freeze
+  makes the foe forget one; slow drags its meter.
+- **Player attack** (three-step challenge): pick a target square on the
+  foe's board (attack-pattern items widen the footprint: twin / pierce /
+  sweep / cross / scatter) → **spell the magical word** against a draining
+  clock (mistakes cost breath; fizzled words still fire, weakly) → land the
+  **timing bar** (perfect strikes hit 1.6x and shatter lane-hexes).
+- **Enemy movement is planned and periodic**: every beast walks a fixed
+  patrol of its nine squares, one step per turn; dodgers take one extra
+  step the instant your strike commits. **Foresight** reads it back to you
+  (level 1: next square; 2: the square after; 3: the whole patrol).
+- **Enemy attack**: a telegraphed timeline. Danger squares TRACK the player
+  in amber (earlier with **sight**), lock red, then bite after a react
+  window of 0.8s (ring 0) down to 0.3s (the deep rings). Melee dashes into
+  a lane for one square; ranged shots take two squares rolling toward the
+  camera; wardens add row-sweeps and cross-bursts. The player moves freely
+  the whole turn.
+- **Control-hexes** (enemy debuffs, deep rings + wardens): reversed keys,
+  scrambled keys (reshuffled every beat), and a **locked lane** that only a
+  perfect strike reopens. `calmMind` halves them, `mirrorWard` rebounds
+  lane-locks, the Salt Circle relic purges them.
+- **Statuses** (player imbues): burn (stacking damage at the foe's turn),
+  freeze (skipped turns), slow (dragged meter).
+
+### Player-board effect candidates (for a later round)
+
+The 3x3 the player dances on is deliberately plain this round. Candidates
+to season it, roughly in the order they'd earn their keep:
+
+1. **Ember squares** — a tile smoulders for a few beats; standing on it
+   ticks half-heart damage. The cheapest pressure: shrinks the safe set.
+2. **Mire squares** — stepping ON one is fine, stepping OFF costs a beat
+   (movement delay). Punishes lazy center-camping without hard denial.
+3. **Gale rows** — a wind arrow telegraphs, then the whole board shoves one
+   square sideways at the next beat. Dodging becomes prediction.
+4. **Crumbling tiles** — a tile cracks on second visit and falls to void for
+   the rest of the turn (standing there when it falls = a hit). Makes
+   footwork a resource.
+5. **Sanctuary tile** — one glowing square eats the next hit outright, then
+   shatters. A reward square the enemy AI can deliberately aim at.
+6. **Mending sparkle** — blooms on a far square for ~2s; standing on it when
+   it pops mends half a heart. Bait: usually blooms inside danger.
+7. **Rift pads** — two paired squares; stepping on one snaps you to the
+   other. Free escape hatch AND a mis-input trap under scrambled keys.
+8. **Static squares** — touching one scrambles your keys for 2s (a tile-borne
+   version of the debuff, dodgeable by geometry instead of luck).
+9. **Lodestone square** — for two beats everything drifts one step toward
+   it unless the player inputs against the pull. Pairs cruelly with lanes.
+10. **Echo tiles** — remember the last strike's danger squares and repeat
+    them one beat later, fainter. Rewards remembering, not just reacting.
+11. **Mirror lane** — while standing in the marked column, left/right are
+    mirrored (a spatial, self-inflicted, always-readable reverse).
+12. **Tidal board** — the whole 3x3 slides one row toward the foe every N
+    beats and a new back row surfaces; melee reach effectively grows.
+
+### Beasts & wardens
+
+- One archetype per biome (17 ring biomes + waystation vermin + secret
+  hollows), drawn as parameterized paper cutouts from ~18 silhouette
+  families with the biome's own palette and glowing eyes; stats seasoned by
+  ring and dread. Elders are tinted, half again as strong, and always carry
+  an item.
+- The four **wardens** bar the ascension gates bodily. Each boundary gate's
+  platform became a ~20-tile **causeway** (threshold boss-gate at row 2, a
+  3-wide arena flat mid-span, the grand dolmen + stormheart perch at the far
+  end; everything past the threshold BLOCKED until the warden falls).
+  Crossing the threshold pans the camera to the arena, a burst of light
+  reveals the warden and its name, then combat begins. The orbits were
+  widened (350/700/1050/1400, storm boundaries 222/572/922/1272) so a
+  worst-case rim + causeway still clears every storm line and the facing
+  region — re-derive BOTH if either changes again.
+
+### Items, relics, meta
+
+- **512-piece pool**: 200 commons (one small stat nudge), 150 rares (the
+  last three of each line *cracked*: stronger + a trade-off), 100
+  super-rares (playstyle benders), 50 hand-cut legendaries (flags like
+  autoSpell / minGood / echoVision / gambler), 12 relics. Every piece
+  renders a 2D card sprite (tier frame + kind glyph + tint).
+- Drops are **always optional** (card with take/leave), rolled from the
+  unlocked pool minus everything already taken this run; luck tilts the
+  table, wardens floor it at super-rare.
+- **One relic slot**: active on Q, cooldown counted in kills, voltsparks
+  refill it early. Wardens offer a relic before their item.
+- **Meta** (localStorage, the only survivor of death): kills, wardens
+  felled, best ring, items taken, perfect strikes, swift casts, and ~15
+  achievements. Super-rares unlock at 15 kills or the first warden;
+  legendaries at the first warden or 40 kills; the weirdest pieces sit
+  behind specific achievements.
+
+### Stats vocabulary
+
+atk / spd (turn frequency) / sight (telegraph reveal time) / foresight
+(patrol prediction) / spellTime / barWidth / dodge (react window) / crit /
+luck / stepSpeed (overworld sailing) / hopRange (spring-stone leaps) /
+hazardGuard / burn / freeze / slow / thorns / shield / lifesteal /
+relicRate — folded from item mods by `computeStats` into `run.stats`.

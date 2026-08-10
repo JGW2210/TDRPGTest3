@@ -29,7 +29,7 @@
       <div id="dialogue-text"></div>
       <div id="dialogue-hint">&#10022; click &#10022;</div>
     </div>
-    <div id="hint"><b>drag</b> to turn &#10022; <b>scroll</b> to zoom &#10022; <b>click</b> a hex to sail &#10022; <b>M</b> or the chart opens the free camera &#10022; <b>F</b> finds your wisp &#10022; <b>R</b> births a new cosmos</div>
+    <div id="hint"><b>drag</b> to turn &#10022; <b>scroll</b> to zoom &#10022; <b>click</b> a hex to sail &#10022; share a tile with a paper beast to <b>duel</b> &#10022; <b>M</b> opens the star chart &#10022; <b>F</b> finds you &#10022; <b>Q</b> fires your relic &#10022; <b>R</b> births a new cosmos</div>
     <div id="seedline"></div>
     <div id="chartbtn" title="the star chart — free camera">&#10022; star chart &#10022;</div>
     <div id="tpanel">
@@ -37,6 +37,53 @@
       <div id="tpanel-sub">charted islands on this orbit</div>
       <div id="tpanel-list"></div>
       <div id="tpanel-cancel">&#10022; stay &#10022;</div>
+    </div>
+    <div id="statsline"></div>
+    <div id="relicslot">
+      <img id="relic-img" alt="" />
+      <div id="relic-cd"></div>
+    </div>
+    <div id="combat">
+      <div id="cbanner">
+        <div id="cbanner-title"></div>
+        <div id="cbanner-sub"></div>
+      </div>
+      <div id="foe">
+        <div id="foe-name"></div>
+        <div id="foe-title"></div>
+        <div id="foehp"><div id="foehp-fill"></div></div>
+        <div id="foe-status"></div>
+      </div>
+      <div id="spellbox">
+        <div id="spellword"></div>
+        <div id="spelltimer"><div id="spelltimer-fill"></div></div>
+      </div>
+      <div id="timebar">
+        <div id="timebar-good"></div>
+        <div id="timebar-perfect"></div>
+        <div id="timebar-cursor"></div>
+        <div id="timebar-result"></div>
+      </div>
+      <div id="cdebuffs"></div>
+      <div id="chint"></div>
+    </div>
+    <div id="itemcard">
+      <img id="item-img" alt="" />
+      <div id="item-tier"></div>
+      <div id="item-name"></div>
+      <div id="item-desc"></div>
+      <div id="item-actions">
+        <div id="item-take" class="ibtn">&#10022; take it &#10022;</div>
+        <div id="item-leave" class="ibtn">leave it</div>
+      </div>
+    </div>
+    <div id="bossintro">
+      <div id="bossintro-name"></div>
+      <div id="bossintro-title"></div>
+    </div>
+    <div id="choice">
+      <div id="choice-text"></div>
+      <div id="choice-opts"></div>
     </div>
   </div>
   <script type="module" src="./src/main.js"></script>

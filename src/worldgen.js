@@ -28,6 +28,7 @@ export function generateWorld(seedStr) {
   const gates = [];
   const edges = [];
   const wards = [];
+  const wardens = []; // boundary bosses barring the ascension causeways
   const shrines = [];
   const chains = [];
   const leviathans = [];
@@ -331,6 +332,7 @@ export function generateWorld(seedStr) {
       if (!h || h.gateId !== null) continue;
       if (h.baseY) continue; // floating cells are not the sea's rim
       if (h.stillmoon) continue; // satellite rock is not the sea's rim either
+      if (h.causeway) continue; // warden causeways out-reach every true rim
       const p = worldOf(h);
       const vx = p.x - c.x, vz = p.z - c.z;
       const L = Math.hypot(vx, vz) || 1;
@@ -414,6 +416,105 @@ export function generateWorld(seedStr) {
     return null;
   }
 
+  // A WARDEN CAUSEWAY (Round 11): a ring boundary's ascension gate no longer
+  // perches 2-4 hexes off the rim — its platform reaches ~20 tiles straight
+  // out toward the next ring. Near the rim a THRESHOLD boss-gate bars the
+  // way; midway the causeway swells into a 3-wide ARENA flat; the dolmen
+  // travel gate stands on a 7-hex islet at the far end (the stormheart perch
+  // joins it there later). Every cell beyond the threshold starts BLOCKED —
+  // main.js unblocks the way when the warden falls.
+  function placeBossNode(area, toward) {
+    const rim = pickRim(area, toward);
+    if (!rim) return null;
+    const rp = worldOf(rim);
+    let dx = toward.x - rp.x, dz = toward.z - rp.z;
+    const dl = Math.hypot(dx, dz) || 1;
+    dx /= dl; dz /= dl;
+    const px2 = -dz, pz2 = dx; // the causeway's sideways reach
+    const ROW = HEX * Hx.SQRT3;
+    const N_ROWS = 19;   // rim to the dolmen's heart
+    const THRESH = 2;    // the threshold boss-gate bars the causeway here
+    const ARENA0 = 8, ARENA1 = 13; // the 3-wide arena flat
+
+    const dolmenC = Hx.toHex(rp.x + dx * ROW * N_ROWS, rp.z + dz * ROW * N_ROWS, HEX);
+    const spine = Hx.line(rim.q, rim.r, dolmenC.q, dolmenC.r);
+    const special = (h) => h.gateId !== null || h.wardId !== undefined
+      || h.shrineId !== undefined || h.chainId !== undefined || h.baseY
+      || h.stillmoon || h.springStone || h.teleporter || h.spring;
+    const obstructed = (q, r) => {
+      const h = hexes.get(Hx.key(q, r));
+      return h !== undefined && (h.areaId !== area.id || special(h));
+    };
+    // the causeway's sky must be clear of anything foreign or special —
+    // same-area plain cells near the rim are simply absorbed into the walk
+    for (let i = 1; i < spine.length; i++) {
+      if (obstructed(spine[i].q, spine[i].r)) return null;
+    }
+    for (const d of Hx.DIRS) {
+      if (obstructed(dolmenC.q + d[0], dolmenC.r + d[1])) return null;
+    }
+
+    const causewayKeys = [];
+    const thresholdKeys = [];
+    const blockedKeys = [];
+    let arenaKey = null;
+    const claim = (q, r, elev) => {
+      const k = Hx.key(q, r);
+      if (!hexes.has(k)) {
+        setHex(q, r, {
+          kind: 'isle', areaId: area.id, elev,
+          islandId: null, rock: true, causeway: true,
+          flow: [0, 0], faint: false, blocked: false, levi: false,
+          gateId: null,
+        });
+        area.hexKeys.push(k);
+      }
+      return k;
+    };
+    for (let i = 1; i < spine.length; i++) {
+      const { q, r } = spine[i];
+      const t = i / spine.length;
+      const rowKeys = [claim(q, r, 0.45 + t * 0.3 + rng.float() * 0.15)];
+      // widen: both flanks at the threshold and across the arena, one
+      // alternating flank elsewhere — a hand-cut causeway, not a runway
+      const flanks = (i === THRESH || (i >= ARENA0 && i <= ARENA1)) ? [1, -1]
+        : [i % 2 ? 1 : -1];
+      const w = Hx.toWorld(q, r, HEX);
+      for (const s of flanks) {
+        const fc = Hx.toHex(w.x + px2 * ROW * 0.95 * s, w.z + pz2 * ROW * 0.95 * s, HEX);
+        if (obstructed(fc.q, fc.r)) continue;
+        rowKeys.push(claim(fc.q, fc.r, 0.4 + t * 0.3 + rng.float() * 0.15));
+      }
+      for (const k of rowKeys) {
+        if (!causewayKeys.includes(k)) causewayKeys.push(k);
+        if (i === THRESH) {
+          thresholdKeys.push(k);
+        } else if (i > THRESH) {
+          hexes.get(k).blocked = true;
+          if (!blockedKeys.includes(k)) blockedKeys.push(k);
+        }
+      }
+      if (i === Math.floor((ARENA0 + ARENA1) / 2)) {
+        arenaKey = Hx.key(q, r);
+        hexes.get(arenaKey).bossArena = true;
+      }
+    }
+    // the dolmen's 7-hex islet at the causeway's end
+    const portKey = claim(dolmenC.q, dolmenC.r, 0.75 + rng.float() * 0.2);
+    for (const d of Hx.DIRS) {
+      const k = claim(dolmenC.q + d[0], dolmenC.r + d[1], 0.55 + rng.float() * 0.3);
+      if (!causewayKeys.includes(k)) causewayKeys.push(k);
+      hexes.get(k).blocked = true;
+      if (!blockedKeys.includes(k)) blockedKeys.push(k);
+    }
+    hexes.get(portKey).blocked = true;
+    causewayKeys.push(portKey);
+    blockedKeys.push(portKey);
+    usedPorts.add(Hx.key(rim.q, rim.r));
+    if (!arenaKey) arenaKey = causewayKeys[Math.floor(causewayKeys.length / 2)];
+    return { portKey, arenaKey, thresholdKeys, causewayKeys, blockedKeys };
+  }
+
   // same-ring ports face along the orbit (tangentially), so ring blasts hug
   // the line of orbit instead of cutting inward toward the neighbor's center
   function orbitToward(fromArea, toArea) {
@@ -426,10 +527,16 @@ export function generateWorld(seedStr) {
   }
 
   const edgeSet = new Set();
-  function addGate(a, b, kind = 'ring') {
+  function addGate(a, b, kind = 'ring', boss = false) {
     const ek = Math.min(a.id, b.id) + '-' + Math.max(a.id, b.id);
     if (edgeSet.has(ek)) return null;
-    const ka = placeNode(a, kind === 'ring' ? orbitToward(a, b) : b.pos);
+    // boss crossings get the warden causeway on the DEPARTURE side (the
+    // ascension is one-way — the far port stays an ordinary islet); if the
+    // sky refuses a causeway, fall back to a plain node and the warden will
+    // simply bar the doorway itself
+    const bossInfo = boss ? placeBossNode(a, b.pos) : null;
+    const ka = bossInfo?.portKey
+      ?? placeNode(a, kind === 'ring' ? orbitToward(a, b) : b.pos);
     const kb = placeNode(b, kind === 'ring' ? orbitToward(b, a) : a.pos);
     if (!ka || !kb) return null;
     edgeSet.add(ek);
@@ -440,6 +547,7 @@ export function generateWorld(seedStr) {
       a: a.id, b: b.id,
       portA: ka, portB: kb,
     };
+    if (bossInfo) gate.causeway = bossInfo;
     hexes.get(ka).gateId = gate.id;
     hexes.get(kb).gateId = gate.id;
     gates.push(gate);
@@ -474,11 +582,27 @@ export function generateWorld(seedStr) {
       }
     }
     // exactly ONE passage outward per ring boundary, at a random crossing —
-    // it starts dark beneath a storm ward (boundary index = ri - 1)
+    // it starts dark beneath a storm ward (boundary index = ri - 1), and a
+    // WARDEN bars its causeway until beaten in combat
     const inner = rng.pick(ringGroups[ri - 1]);
     const outer = nearestArea(ringGroups[ri], inner.pos.x, inner.pos.z);
-    const radial = addGate(inner, outer, 'radial');
-    if (radial) radial.boundary = ri - 1;
+    const radial = addGate(inner, outer, 'radial', true);
+    if (radial) {
+      radial.boundary = ri - 1;
+      const info = radial.causeway;
+      const warden = {
+        id: wardens.length, boundary: ri - 1, gateId: radial.id,
+        areaId: inner.id,
+        arenaKey: info?.arenaKey ?? radial.portA,
+        thresholdKeys: info?.thresholdKeys ?? [],
+        blockedKeys: info?.blockedKeys ?? [],
+        defeated: false,
+      };
+      radial.wardenId = warden.id;
+      for (const k of warden.thresholdKeys) hexes.get(k).thresholdGate = radial.id;
+      for (const k of info?.causewayKeys ?? []) hexes.get(k).causewayGate = radial.id;
+      wardens.push(warden);
+    }
   }
   for (const s of secretsList) {
     const outer = ringGroups[ringGroups.length - 1];
@@ -536,10 +660,11 @@ export function generateWorld(seedStr) {
   const moonPalette = rng.shuffle(STILLMOON_CRYSTALS.slice());
   let moonCursor = 0;
 
-  // keep-out zone: every hex within 3 of a doorway or a stormheart perch
+  // keep-out zone: every hex within 3 of a doorway, a stormheart perch, or
+  // any cell of a warden causeway
   const gateZone = new Set();
   for (const [k, h] of hexes) {
-    if (h.gateId === null && h.wardId === undefined) continue;
+    if (h.gateId === null && h.wardId === undefined && !h.causeway) continue;
     const { q, r } = Hx.parseKey(k);
     for (let dq = -3; dq <= 3; dq++) {
       for (let dr = Math.max(-3, -dq - 3); dr <= Math.min(3, -dq + 3); dr++) {
@@ -972,7 +1097,10 @@ export function generateWorld(seedStr) {
   // ---------------------------------------------------------------- leviathans
   // Serpents of the open void: two circle between the orbits, and one wheels
   // tightly around the hidden crossing to the Unlit Star, marking the way.
-  for (const [radius, reverse] of [[395, false], [665, true]]) {
+  for (const [radius, reverse] of [
+    [(RINGS[0].radius + RINGS[1].radius) / 2, false],
+    [(RINGS[1].radius + RINGS[2].radius) / 2, true],
+  ]) {
     const pts = [];
     for (let i = 0; i < 48; i++) {
       const a = (i / 48) * TAU;
@@ -1057,7 +1185,7 @@ export function generateWorld(seedStr) {
   const title = `The ${rng.pick(WORLD_ADJ)} ${rng.pick(WORLD_NOUN)}`;
 
   return {
-    seed: seedStr, title, areas, hexes, gates, edges, wards, shrines, chains,
-    leviathans, startKey, progress: { frontier: 0 },
+    seed: seedStr, title, areas, hexes, gates, edges, wards, wardens, shrines,
+    chains, leviathans, startKey, progress: { frontier: 0 },
   };
 }

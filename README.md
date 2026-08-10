@@ -42,8 +42,13 @@ any mount path.
 | **M** / the ✦ star chart ✦ button | Toggle the free camera: glide the whole orrery under space-chart labels (no sailing while open) |
 | **Esc** | Close the star chart |
 | **F** | Find your wisp |
+| **Q** | Fire your relic (in combat, once its kill-charge is full) |
 | **R** | Generate a new cosmos (random seed) |
 | **H** | Re-show the controls hint |
+
+In **combat**: **WASD / arrows** move you square to square (and aim your
+strike), **Space / Enter / click** commits, **letters** spell the magical
+word, **Space** locks the timing bar, **Q** fires the relic.
 
 In the star chart, **left-drag** glides, **right-drag** rotates, and
 **scroll** soars out to the full orrery.
@@ -180,8 +185,45 @@ In the star chart, **left-drag** glides, **right-drag** rotates, and
   translates the cosmos (Twin-Tongue). In-world 3D labels hang over bodies and
   gates, rune-only until discovered.
 
+- **Paper beasts & duels (Round 11)** — every biome keeps its own 2D
+  paper-cutout beast (a Cinderling of the reefs, a Mirage Viper of the
+  dunes, an Oculite of the shallows…) drifting through discovered regions.
+  Share a tile with one and the world zooms into a papercraft **combat
+  diorama** staged over the hex: two 3x3 boards face each other, turns
+  scheduled by **speed**. Your attack is a three-step challenge — pick a
+  target square (items widen the pattern), **type the magical word** against
+  the clock, then land an **Undertale-style timing bar**. On the foe's turn
+  danger squares track you in amber, lock red, and bite after a 0.3-0.8s
+  react window — melee takes one square, ranged shots run two squares toward
+  the camera — while you dodge freely with WASD. Deep-ring foes throw
+  **control-hexes**: reversed keys, scrambled keys, or a locked lane only a
+  perfect strike reopens. **Elder** beasts hold their ground and challenge
+  you by dialogue choice — fights are always yours to accept.
+- **The hooded magician** — the Star-Pilgrim remade as a paper cutout:
+  glowing eyes deep in the cowl, a staff crowned with a caught star.
+- **500-item pool, Isaac-style (Round 11)** — 200 commons, 150 rares (a few
+  *cracked*, stronger but costly), 100 super-rares that bend the playstyle
+  (imbues that burn/freeze/slow, attack patterns, foresight into enemy
+  patrols, overworld movement), and 50 hand-cut legendaries that warp the
+  run. Drops are random but **always optional**, offered on a papercraft
+  card with a 2D sprite; deeper tiers and the strangest pieces stay locked
+  until meta progression (kills, wardens, achievements) opens them — and
+  that meta is the only thing death cannot take.
+- **The relic slot (Round 11)** — exactly one active relic rides your belt,
+  fired with **Q** and recharged by felling enemies (or a stray voltspark):
+  novas, stasis bells, borrowed hours, bottled eclipses.
+- **Warden causeways (Round 11)** — every ascension gate now stands at the
+  far end of a ~20-tile causeway reaching out from the region rim, barred
+  near its start by a fortified **threshold gate**. Cross the threshold and
+  the camera pans to the arena beyond, a burst of light reveals the
+  **warden** — Pyraxis the Emberclad, Maelis the Tidebound, Vhorren the
+  Galecrowned, Nyx Ophellum — and the fight begins. Only its defeat drops
+  the ward-lattice and opens the way to the stormheart shard and the gate.
+
 Everything is procedurally generated from the seed (layout, biome placement,
-archipelago shapes, gate runes, shard perches, hazards, shrine platforms).
+archipelago shapes, gate runes, warden causeways, shard perches, hazards,
+shrine platforms). The 500-item pool and the bestiary are fixed tables;
+drops, roams, and unlocks are the run's own dice.
 
 ## Project shape
 
@@ -195,7 +237,12 @@ archipelago shapes, gate runes, shard perches, hazards, shrine platforms).
 | `src/cutscene.js` | Discovery cutscene: camera glide + click-through dialogue |
 | `src/decorSets.js` | Bespoke per-biome island decor geometry library |
 | `src/materials.js` | Water/veil shaders, canvas textures |
-| `src/player.js` | The Star-Pilgrim wisp: click-to-sail, BFS pathing, ripples |
+| `src/player.js` | The paper magician: click-to-sail, BFS pathing, ripples |
+| `src/sprites.js` | Paper-cutout atelier: magician, biome beasts, wardens, item cards |
+| `src/combat.js` | The combat diorama: speed-metered turns, spell + timing-bar attack, telegraphed dodging, debuffs, relics |
+| `src/enemies.js` | Bestiary: per-biome beasts, patrols, temperaments; the four wardens |
+| `src/items.js` | The 500-item pool + relics, drop rolls, stat engine |
+| `src/meta.js` | localStorage meta progression: kills, wardens, achievements, unlocks |
 | `src/controls.js` | Left-drag glide / right-drag rotate / scroll zoom camera |
 | `src/ui.js`, `src/labels.js` | Floating runic text, Twin-Tongue deciphering |
 | `DESIGN.md` | The design polls, chosen directions, and roadmap |

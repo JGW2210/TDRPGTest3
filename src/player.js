@@ -1,12 +1,13 @@
-// The Star-Pilgrim wisp: click-to-sail, step-by-step hex movement with a
-// squashy hop, ripple rings on the water, an orbiting rune halo — and the
-// gate blast, a soaring arc between a gate's two node islets.
+// The Star-Pilgrim remade (Round 11): a 2D paper-cutout HOODED MAGICIAN —
+// glowing eyes in the cowl, a staff crowned with a caught star — riding the
+// same click-to-sail hex movement, squashy hop, water ripples, and rune
+// halo. The gate blast still hurls them across the void as an orb of light.
 
 import * as THREE from 'three';
 import { HEX } from './config.js';
 import * as Hx from './hexmath.js';
 import { findPath } from './pathfind.js';
-import { makeGlowSpriteTexture } from './materials.js';
+import { magicianCanvas, makePaperFigure } from './sprites.js';
 
 const STEP_TIME = 0.22;
 
@@ -17,22 +18,16 @@ export class Player {
     this.path = [];
     this.stepT = 0;
     this.blast = null;
+    this.speedMul = 1; // overworld sail-speed items feed this (Round 11)
     this.onEnterHex = null; // cb(hexRecord)
 
     const group = new THREE.Group();
-    const body = new THREE.Mesh(
-      new THREE.ConeGeometry(0.85, 2.4, 6),
-      new THREE.MeshStandardMaterial({ color: 0x4a4f7a, flatShading: true, emissive: 0x2a2f5c, emissiveIntensity: 0.6 })
-    );
-    body.position.y = 1.2;
-    group.add(body);
-
-    const head = new THREE.Mesh(
-      new THREE.SphereGeometry(0.55, 10, 8),
-      new THREE.MeshBasicMaterial({ color: 0xffe9c4 })
-    );
-    head.position.y = 2.9;
-    group.add(head);
+    // the paper magician: a billboard cutout, feet at the group origin
+    // (its built-in glow doubles as the aura that reads from orrery zoom)
+    this.figure = makePaperFigure(magicianCanvas(), {
+      height: 3.6, glow: 0xffe9c4, glowScale: 1.9,
+    });
+    group.add(this.figure);
 
     this.halo = new THREE.Mesh(
       new THREE.TorusGeometry(1.35, 0.07, 6, 24),
@@ -45,15 +40,6 @@ export class Player {
     this.light = new THREE.PointLight(0xffd9a8, 60, 40, 1.8);
     this.light.position.y = 3.2;
     group.add(this.light);
-
-    // soft aura so the wisp reads even from the orrery zoom
-    const aura = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: makeGlowSpriteTexture(), color: 0xffe9c4, transparent: true,
-      opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false,
-    }));
-    aura.scale.setScalar(7);
-    aura.position.y = 2.6;
-    group.add(aura);
 
     this.mesh = group;
     this.ripples = [];
@@ -216,7 +202,7 @@ export class Player {
       return;
     }
 
-    this.stepT += dt / STEP_TIME;
+    this.stepT += (dt / STEP_TIME) * this.speedMul;
     const from = this._hexPos(this.hexKey);
     const to = this._hexPos(this.path[0]);
     if (this.stepT >= 1) {

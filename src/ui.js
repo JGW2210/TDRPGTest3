@@ -167,4 +167,171 @@ export const ui = {
   showHint() {
     el('hint').classList.remove('faded');
   },
+
+  // ================= Round 11: combat, items, relic, stats =================
+
+  combatShow(on) {
+    el('combat').classList.toggle('show', on);
+    el('chartbtn').style.visibility = on ? 'hidden' : 'visible';
+    if (!on) {
+      el('cbanner').classList.remove('show');
+      el('cdebuffs').textContent = '';
+      el('chint').textContent = '';
+    }
+  },
+
+  combatBanner(title, sub = '', holdMs = 2600) {
+    const box = el('cbanner');
+    el('cbanner-title').textContent = title;
+    el('cbanner-sub').textContent = sub;
+    box.classList.add('show');
+    clearTimeout(this._cbannerTimer);
+    this._cbannerTimer = setTimeout(() => box.classList.remove('show'), holdMs);
+  },
+
+  combatHint(text) {
+    el('chint').textContent = text;
+  },
+
+  foePanel(enemy) {
+    el('foe-name').textContent = enemy.name;
+    el('foe-title').textContent = enemy.title ?? (enemy.elite ? 'a challenger of the void' : '');
+    el('foe').style.display = 'block';
+  },
+
+  foeHp(frac, statusText = '') {
+    el('foehp-fill').style.width = `${Math.max(0, frac) * 100}%`;
+    el('foe-status').textContent = statusText;
+  },
+
+  hideFoe() {
+    el('foe').style.display = 'none';
+  },
+
+  debuffs(list) {
+    el('cdebuffs').textContent = list.length ? `⊘ ${list.join(' ᛫ ')} ⊘` : '';
+  },
+
+  // ---- the spell word ----
+  spellShow(word) {
+    const w = el('spellword');
+    w.innerHTML = word.split('').map((c) => `<span>${c}</span>`).join('');
+    el('spelltimer-fill').style.width = '100%';
+    el('spellbox').classList.add('show');
+  },
+
+  spellProgress(typed, timeFrac, err) {
+    const spans = el('spellword').children;
+    for (let i = 0; i < spans.length; i++) spans[i].classList.toggle('done', i < typed);
+    el('spelltimer-fill').style.width = `${Math.max(0, timeFrac) * 100}%`;
+    if (err) {
+      const w = el('spellword');
+      w.classList.remove('err');
+      void w.offsetWidth;
+      w.classList.add('err');
+    }
+  },
+
+  spellHide() {
+    el('spellbox').classList.remove('show');
+  },
+
+  // ---- the timing bar ----
+  barShow(perfectHalf, goodHalf) {
+    el('timebar-perfect').style.width = `${perfectHalf * 2 * 100}%`;
+    el('timebar-good').style.width = `${goodHalf * 2 * 100}%`;
+    el('timebar-cursor').style.left = '0%';
+    el('timebar-result').className = '';
+    el('timebar').classList.add('show');
+  },
+
+  barCursor(t) {
+    el('timebar-cursor').style.left = `${t * 100}%`;
+  },
+
+  barResult(cls) {
+    const r = el('timebar-result');
+    r.textContent = cls === 'perfect' ? '✦ perfect ✦' : cls === 'good' ? 'clean' : cls === 'glance' ? 'glancing' : 'missed';
+    r.className = `show ${cls}`;
+    clearTimeout(this._barHideTimer);
+    this._barHideTimer = setTimeout(() => this.barHide(), 700);
+  },
+
+  barHide() {
+    el('timebar').classList.remove('show');
+  },
+
+  // ---- item card (drops are always optional) ----
+  itemCard({ name, tier, desc, dataUrl, takeLabel = '✦ take it ✦', leaveLabel = 'leave it' }, onTake, onLeave) {
+    el('item-img').src = dataUrl;
+    el('item-tier').textContent = tier === 'superrare' ? 'super rare' : tier;
+    el('item-tier').className = tier;
+    el('item-name').textContent = name;
+    el('item-desc').textContent = desc;
+    el('item-take').textContent = takeLabel;
+    el('item-leave').textContent = leaveLabel;
+    el('item-take').onclick = () => { this.hideItemCard(); onTake(); };
+    el('item-leave').onclick = () => { this.hideItemCard(); onLeave(); };
+    el('itemcard').classList.add('show');
+    this.itemCardOpen = true;
+  },
+
+  hideItemCard() {
+    el('itemcard').classList.remove('show');
+    this.itemCardOpen = false;
+  },
+
+  // ---- relic slot ----
+  relicSlot(relic) {
+    const box = el('relicslot');
+    if (!relic) {
+      box.classList.remove('show');
+      return;
+    }
+    box.classList.add('show');
+    el('relic-img').src = relic.dataUrl;
+    const ready = relic.charge >= relic.cd;
+    box.classList.toggle('ready', ready);
+    el('relic-cd').textContent = ready ? 'Q ᛫ ready' : `${relic.charge}/${relic.cd}`;
+    box.title = `${relic.name} — ${relic.desc}`;
+  },
+
+  // ---- boss intro splash ----
+  bossIntro(name, title) {
+    el('bossintro-name').textContent = name;
+    el('bossintro-title').textContent = title;
+    el('bossintro').classList.add('show');
+  },
+
+  hideBossIntro() {
+    el('bossintro').classList.remove('show');
+  },
+
+  // ---- floating choice (fight or walk away) ----
+  choice(text, options) {
+    el('choice-text').textContent = text;
+    const box = el('choice-opts');
+    box.innerHTML = '';
+    for (const opt of options) {
+      const b = document.createElement('div');
+      b.className = 'ibtn';
+      b.textContent = opt.label;
+      b.onclick = () => { this.hideChoice(); opt.cb(); };
+      box.appendChild(b);
+    }
+    el('choice').classList.add('show');
+    this.choiceOpen = true;
+  },
+
+  hideChoice() {
+    el('choice').classList.remove('show');
+    this.choiceOpen = false;
+  },
+
+  // ---- the stats line ----
+  statsLine(stats, itemCount) {
+    el('statsline').textContent =
+      `atk ${stats.atk.toFixed(2)} ᛫ spd ${stats.spd.toFixed(1)} ᛫ sight ${stats.sight.toFixed(0)} ᛫ fore ${stats.foresight.toFixed(0)}`
+      + (itemCount ? ` ᛫ ${itemCount} curio${itemCount > 1 ? 's' : ''}` : '');
+  },
 };

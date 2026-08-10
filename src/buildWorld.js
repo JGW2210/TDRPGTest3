@@ -15,7 +15,7 @@ import { sculptBody } from './bodies.js';
 import {
   makeDolmenGate, makeLandmark, makeAltar, makeChomper,
   makeSpringboard, makeMarketStall, makeBoonPedestal, makeHermit,
-  makeTemple, makeStillmoonBody,
+  makeTemple, makeStillmoonBody, makeThresholdGate,
 } from './structures.js';
 import { buildDecorLibrary } from './decorSets.js';
 import { makeLabel } from './labels.js';
@@ -924,6 +924,30 @@ export function buildWorld(world, rng) {
     for (const fn of gateCrystalFns.get(gateId) ?? []) fn(state);
   }
 
+  // ------------------------------------------------------------ threshold gates
+  // The warden causeways (Round 11): a fortified boss-gate stands across
+  // each causeway's threshold row, its ward-lattice barring the way until
+  // openThreshold(gateId) drops it (the warden's defeat).
+  const thresholdFns = new Map(); // gateId -> open()
+  for (const gate of world.gates) {
+    const info = gate.causeway;
+    if (!info || !info.thresholdKeys.length) continue;
+    // stand on the threshold row's spine cell, facing along the causeway
+    const th = world.hexes.get(info.thresholdKeys[0]);
+    const tp = Hx.toWorld(th.q, th.r, HEX);
+    const ph = world.hexes.get(gate.portA);
+    const pp = Hx.toWorld(ph.q, ph.r, HEX);
+    const built2 = makeThresholdGate({ rng, gradientMap, glowTex, animators });
+    built2.group.position.set(tp.x, Math.max(0, th.elev - 0.2), tp.z);
+    built2.group.rotation.y = Math.atan2(pp.x - tp.x, pp.z - tp.z);
+    group.add(built2.group);
+    regFx(th.areaId, built2.group);
+    thresholdFns.set(gate.id, built2.open);
+  }
+  function openThreshold(gateId) {
+    thresholdFns.get(gateId)?.();
+  }
+
   // ------------------------------------------------------------ effect bursts
   const bursts = [];
   function burstAt(pos, color, scale = 6) {
@@ -1580,7 +1604,7 @@ export function buildWorld(world, rng) {
     howdah.add(hut, roof, lamp);
     group.add(howdah);
 
-    const ROAM_R = 470;
+    const ROAM_R = (RINGS[0].radius + RINGS[1].radius) / 2; // between orbits 1-2
     const state = {
       mode: 'roam', angle: rng.angle(), target: null, onArrive: null,
       head: null, trail: [],
@@ -1838,9 +1862,9 @@ export function buildWorld(world, rng) {
   // asteroid belts between the orbital rings — the orrery's slow clockwork
   {
     const beltSpecs = [
-      { r: 395, n: 170, speed: 0.004 },
-      { r: 665, n: 200, speed: 0.003 },
-      { r: 935, n: 180, speed: 0.002 },
+      { r: (RINGS[0].radius + RINGS[1].radius) / 2, n: 170, speed: 0.004 },
+      { r: (RINGS[1].radius + RINGS[2].radius) / 2, n: 200, speed: 0.003 },
+      { r: (RINGS[2].radius + RINGS[3].radius) / 2, n: 180, speed: 0.002 },
     ];
     const rockGeo = new THREE.DodecahedronGeometry(1, 0);
     for (const spec of beltSpecs) {
@@ -2268,5 +2292,6 @@ export function buildWorld(world, rng) {
     triggerSnare, geyserErupting, mawSnapping, claimAltar,
     revealChain, claimLodestone, claimBoon, merchant, burstAt,
     bounceIsle, boingGate, wobbleBody, revealArea, setTrackTarget,
+    openThreshold,
   };
 }
