@@ -166,9 +166,13 @@ html, body {
 }
 
 /* ---- cursor hover label ---- */
+/* positioned purely via transform (updated every pointermove) so it glides
+   with the cursor instead of hopping on throttled layout writes */
 #hover {
-  position: absolute;
-  transform: translate(16px, 12px);
+  position: fixed;
+  left: 0;
+  top: 0;
+  will-change: transform;
   font-size: 16px;
   font-style: italic;
   letter-spacing: 0.14em;

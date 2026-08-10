@@ -32,8 +32,10 @@ paper sun in a dark aetherial papercraft cosmos. Everything is seeded
   hitboxes) one fires a BEAM OF LIGHT along the flight path with an ORB
   (the wisp, unmade for the crossing) riding it — `main.js`
   `startFlightBeam` builds a tube along `player.blastPointAt` samples, the
-  wisp mesh hides while `flight.active && player.blast`, and the locked
-  camera follows the orb. Same-ring gates chain neighbors around each ring
+  wisp mesh hides while `flight.active && player.blast`, and the camera
+  pulls back to FRAME THE BEAM END TO END (bounding-sphere framing:
+  `flight.frameCenter`/`frameDist`), returning to the locked wisp view
+  once the orb lands. Same-ring gates chain neighbors around each ring
   (through the waystations AND teleport concourses on rings 2-4), fly
   ALONG THE ORBIT (arc beam), doorways facing the orbit's tangent;
   radial/secret gates fire a straight beam. Each ring boundary has exactly
@@ -60,41 +62,53 @@ paper sun in a dark aetherial papercraft cosmos. Everything is seeded
   flies. The outer port refuses inward travel forever ("the way back is
   sealed"); timed events (stars/hearts/merchant) only spawn in regions
   with `ring >= run.ringReached`. The last launch dissolves the sheet and
-  un-smothers the secrets' surge pillars. STORM HERALDS fade per boundary
-  at launch. Criterion is pluggable: boss tallies later.
-- **STILLMOONS (Round 10)** — every true region (sun, rings 1-4, secrets;
-  never waystations/concourses) grows a 40-50 hex bare-rock SATELLITE
-  PLATFORM attached to its sea rim (`worldgen placeStillmoon`,
-  `hex.stillmoon`, `area.stillmoon = {centerKey, keys, color}`). Ringed
-  regions attach theirs TANGENTIALLY (±π/2 of the spoke) so the moon can
-  never breach a storm boundary; `pickRim` skips stillmoon cells so gates,
-  launches and lodestones still anchor on the true rim. Each moon carries
-  instanced crystals in ONE colour (`STILLMOON_CRYSTALS`, shuffled,
-  cycled) and a small polygonal rock body (`makeStillmoonBody`) afloat
-  over its `moonCore` hex. All of it fog-registered per region.
+  un-smothers the secrets' surge pillars. (The storm heralds are RETIRED —
+  `makeHerald` sits unused beside `makeShrineStone`.) Criterion is
+  pluggable: boss tallies later.
+- **STILLMOONS (Round 10, tuned 10.1)** — ~30% of the RING regions (never
+  the sun, secrets, waystations or concourses) grow a 25-30 hex bare-rock
+  SATELLITE PLATFORM attached to their sea rim (`worldgen placeStillmoon`,
+  `hex.stillmoon`, `area.stillmoon = {centerKey, keys, color}`). Moons are
+  placed AFTER gates + wards and reject any cell inside the `gateZone`
+  (≤3 hexes from a doorway or shard perch); bearings are free except ring
+  1 may not face sunward (would poke into the innermost calm circle), and
+  `pickRim` skips stillmoon cells so later launches/lodestones anchor on
+  the true rim. Each moon carries instanced crystals in ONE colour
+  (`STILLMOON_CRYSTALS`, shuffled, cycled) and a small polygonal rock body
+  (`makeStillmoonBody`) afloat over its `moonCore` hex. Fog-registered.
 - **TELEPORT CONCOURSES + SPRING STONES (Round 10)** — rings 2-4 each
   thread ONE marble waystation (`TELEPORT_BIOMES`, `area.teleport`,
   biome-flagged `asteroid` so all waystation exclusions apply; no spring)
   into a free gap of the ring's gate chain. Its central hex
   (`hex.teleporter`, `area.teleportStoneKey`) bears a Parthenon-style
   pillared hut (`makeTemple`) with the teleport stone. Stepping on (or
-  clicking under) the stone opens the STAR CHART + a DOM panel (`#tpanel`)
-  listing the ring's DISCOVERED true regions; every ring 2-4 region keeps
+  clicking under) the stone opens the STAR CHART in TELEPORT-SELECT mode
+  (`tpSelect`): the current orbit burns violet (ring band + halos behind
+  each choice), the DISCOVERED true regions' bodies are the picker —
+  hover swells them, click crosses — and `#tpanel` is just a prompt +
+  cancel (no list). Every ring 2-4 region keeps
   an isolated SPRING STONE (`hex.springStone`, `area.springStoneKey`) — a
   lone rock in the empty nestling gap under the astral body, reachable
   only by hop (`trySpringHop`: ≤6 hexes on/off the stone). The crossing
   (`beginTeleportTo`/`updateTeleport`): upward beam takes the wisp →
   camera pans the orbit → downward beam sets it on the spring stone.
   `damage()` is inert while `teleport.active`.
-- **CAMERA (Round 10)** — `controls.mode`: 'locked' (default) pins the
-  target to the wisp, either drag ROTATES, zoom capped at `zoomCapFor`
-  (region extent × 2.6 + 70; smooth reel-in when the cap shrinks);
-  'free' = the STAR CHART (`#chartbtn` / M key, `enterChart`/`exitChart`
-  in main): pan/zoom the whole system, clicks never move the wisp, normal
-  area labels swap for space-chart labels (name + orbit + body, runic
-  where undiscovered) plus a "your wisp" marker, all rebuilt fresh each
-  open. Ophthal's eye TRACKS the wisp (`built.setTrackTarget`; the 'eye'
-  body slerps toward it instead of spinning).
+- **CAMERA (Round 10, chart reworked 10.1)** — `controls.mode`: 'locked'
+  (default) pins the target to the wisp, either drag ROTATES, zoom capped
+  at `zoomCapFor` (region extent × 2.6 + 70; smooth reel-in when the cap
+  shrinks); during a gate beam the camera frames the beam end to end,
+  then reels back in. 'free' = the STAR CHART (`#chartbtn` / M key,
+  `enterChart`/`exitChart` in main): AUTO-GLIDES out to the full orrery
+  (target sun, dist 2800, top-down pitch — until the user pans), clicks
+  never move the wisp, labels are SCREEN-SPACE (`makeLabel({screenSpace})`
+  — constant on-screen size, readable fully zoomed out; name + orbit +
+  body, runic where undiscovered) plus a "your wisp" marker. DISCOVERED
+  bodies swell ×2.5-6 (`chartFx`, invisible sphere hitboxes) and enlarge
+  further on hover. All rebuilt fresh each open. Ophthal's eye TRACKS the
+  wisp (`built.setTrackTarget`; the 'eye' body slerps toward it instead
+  of spinning). The cursor hover label follows via `ui.moveHover` on
+  every pointermove (transform-only write); only the raycast is
+  throttled.
 - **HAZARDS (Round 8, trap atlas Round 9)** — assigned in worldgen after
   the start hex, scaled by `biome.dread`, skipped on
   gate/ward/shrine/chain/lodestone/spring/platform hexes and a 4-hex cradle
@@ -201,14 +215,14 @@ paper sun in a dark aetherial papercraft cosmos. Everything is seeded
 | `worldgen.js` | Seeded gen: layout (+ teleport concourses in ring gaps) → regions (+ teleporter hex) → stillmoons → gates → storm wards → shrines (baseY platform + hidden helix chain + lodestone) → attachment chains (markets/hermits) → springs → spring stones → start hex → hazards (trap atlas) |
 | `buildWorld.js` | All meshes/décor/animators + runtime API (igniteGate, claimShard, setStormFrontier, setGateCrystal, setTrackTarget, triggerSnare, geyserErupting, mawSnapping, claimAltar, revealChain, claimLodestone, claimBoon, merchant, burstAt, landmarkSpots, bounceIsle, boingGate, wobbleBody, revealArea) |
 | `bodies.js` | sculptBody: bespoke per-body geometry archetypes |
-| `structures.js` | makeDolmenGate (startLit/ignite; grand + setCrystal for ascension gates), makeTemple (Parthenon hut + teleport stone), makeStillmoonBody, makeChomper (6 trap archetypes, setOpen), makeSpringboard, makeMarketStall, makeBoonPedestal, makeHermit, makeAltar, makeHerald, makeLandmark, makeShrineStone (retired, unused) |
+| `structures.js` | makeDolmenGate (startLit/ignite; grand + setCrystal for ascension gates), makeTemple (Parthenon hut + teleport stone), makeStillmoonBody, makeChomper (6 trap archetypes, setOpen), makeSpringboard, makeMarketStall, makeBoonPedestal, makeHermit, makeAltar, makeLandmark, makeHerald + makeShrineStone (both retired, unused) |
 | `cutscene.js` | Camera glide + click-through dialogue (discovery + gate arming) |
 | `decorSets.js` | buildDecorLibrary: ~40 merged decor geometries |
 | `materials.js` | Water shader, energy veil (uIgnite), storm sheet shader, canvas textures |
 | `player.js` | Click-to-sail BFS stepping, `startBlast(destKey, 'arc'\|'line'\|'hop', {durMul})`, `blastPointAt(t)` path sampler, baseY-aware heights |
 | `controls.js` | mode 'locked' (either-drag rotate, capped zoom, no pan) \| 'free' (LMB glide), RMB rotate, wheel zoom (max 3600), smooth cap reel-in |
 | `main.js` | Wiring: run state (hearts/charm/voucher/death/ringReached), beam flights + ascension launches, star chart + map labels, teleport sequence, hop logic (tryHop/pendingHops/trySpringHop), hazard checks, storm strikes + surges, heart-sprites, falling stars, merchant visits, bounties, shard/lodestone/altar/boon/hermit/spring/teleporter handlers, hover+path UI, `window.__astral` |
-| `pathfind.js`, `hexmath.js`, `rng.js`, `labels.js`, `ui.js` | Support (ui adds setChartActive/onChartClick/showTeleport/hideTeleport) |
+| `pathfind.js`, `hexmath.js`, `rng.js`, `labels.js`, `ui.js` | Support (labels: screenSpace option; ui adds setChartActive/onChartClick/showTeleportPrompt/hideTeleport/moveHover) |
 
 ## Dev workflow
 
@@ -288,13 +302,15 @@ paper sun in a dark aetherial papercraft cosmos. Everything is seeded
   reload is a fresh run (by design: death reloads with a new seed).
 - `INTRO_LINES` keyed by `biome.key`; `SHARD_LINES` (arming cutscene) and
   `WARD_LINES` (launch dialogue) indexed by boundary.
-- STILLMOON GEOMETRY CONTRACT: moons grow ≤5 hexes from an anchor that is
+- STILLMOON GEOMETRY CONTRACT: moons grow ≤4 hexes from an anchor that is
   ADJACENT to a rim hex, bounded to `hexRadius + 8` from the region
-  center, tangential on ringed regions — the absolute worst case
-  (rim 98.7u + moon 26u + tile 3u) stays inside every `STORM_BOUNDARIES`
-  gap. `pickRim` MUST keep skipping `hex.stillmoon` (like `baseY`) or
-  gate islets will anchor off moon tips and break the boundary math.
-  Moon cells reject any candidate adjacent to ANOTHER area's hexes.
+  center — the absolute worst case at ANY bearing (rim 98.7u + moon 26u +
+  tile 3u = R+128) stays inside every `STORM_BOUNDARIES` gap
+  (388<400, 658<668, 928<938); ring 1 additionally excludes the sunward
+  cone (min radial stays > 145). Moons place AFTER gates/wards and reject
+  cells in `gateZone` (≤3 hexes of any doorway/perch) and cells adjacent
+  to ANOTHER area's hexes. `pickRim` MUST keep skipping `hex.stillmoon`
+  (like `baseY`) or shrine launches/lodestones will anchor off moon tips.
 - SPRING STONES touch nothing (the nestling gap guarantees ≥`clear` empty
   hexes around them): BFS can never reach one, only `trySpringHop`
   (≤6 hex leap on/off). Don't grow anything into the nestling gap.

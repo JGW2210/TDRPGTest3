@@ -116,12 +116,18 @@ export const ui = {
     el('dialogue').classList.remove('show');
   },
 
+  // Text and position are decoupled: moveHover runs on EVERY pointermove
+  // (a cheap transform write) so the label glides with the cursor, while
+  // hover (text + raycast) may be throttled without any jumpiness.
   hover(text, x, y) {
     const h = el('hover');
     h.textContent = text;
-    h.style.left = x + 'px';
-    h.style.top = y + 'px';
+    if (x !== undefined) this.moveHover(x, y);
     h.classList.add('show');
+  },
+
+  moveHover(x, y) {
+    el('hover').style.transform = `translate3d(${x + 16}px, ${y + 12}px, 0)`;
   },
 
   hideHover() {
@@ -141,23 +147,11 @@ export const ui = {
     el('chartbtn').addEventListener('click', fn);
   },
 
-  // dests: [{ name, sub }] — onPick(index); onCancel() when 'stay' is chosen
-  showTeleport(dests, onPick, onCancel) {
-    const list = el('tpanel-list');
-    list.innerHTML = '';
-    if (!dests.length) {
-      const none = document.createElement('div');
-      none.className = 'tp-none';
-      none.textContent = 'no islands charted on this orbit yet';
-      list.appendChild(none);
-    }
-    dests.forEach((d, i) => {
-      const row = document.createElement('div');
-      row.className = 'tp-dest';
-      row.textContent = d.name;
-      row.addEventListener('click', () => onPick(i));
-      list.appendChild(row);
-    });
+  // The teleport prompt: no destination list — the chart itself is the
+  // picker (violet-lit bodies on the current orbit are clickable).
+  showTeleportPrompt(sub, onCancel) {
+    el('tpanel-list').innerHTML = '';
+    el('tpanel-sub').textContent = sub;
     el('tpanel-cancel').onclick = () => onCancel();
     el('tpanel').classList.add('show');
   },
