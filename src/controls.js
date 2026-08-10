@@ -1,5 +1,10 @@
-// Camera controls: hold LEFT-drag to glide across the sea, hold RIGHT-drag to
-// rotate, scroll to soar. A clean left click (no drag) is a sail command.
+// Camera controls. Two modes:
+//  - 'locked' (default): the camera stays pinned to the wisp — either drag
+//    rotates, scroll zooms out only far enough to see just beyond the
+//    current region (main feeds maxDist), and there is no panning.
+//  - 'free' (the star chart): left-drag glides across the whole system,
+//    right-drag rotates, scroll soars to the orrery view.
+// A clean left click (no drag) is a sail command either way.
 
 import * as THREE from 'three';
 
@@ -13,6 +18,7 @@ export class AstralControls {
     this.dist = 130;
     this.minDist = 16;
     this.maxDist = 3600;
+    this.mode = 'locked'; // 'locked' | 'free'
     this.onClick = null; // (clientX, clientY) for clean left clicks
     this._btn = -1;
     this._lastX = 0;
@@ -42,8 +48,9 @@ export class AstralControls {
       this._lastX = e.clientX;
       this._lastY = e.clientY;
       this._moved += Math.abs(dx) + Math.abs(dy);
-      if (this._btn === 0) this._pan(dx, dy);
-      else if (this._btn === 2) this._rotate(dx, dy);
+      // locked to the wisp: either button turns; only the chart may glide
+      if (this._btn === 0 && this.mode === 'free') this._pan(dx, dy);
+      else if (this._btn === 0 || this._btn === 2) this._rotate(dx, dy);
     });
     dom.addEventListener('wheel', (e) => {
       e.preventDefault();
@@ -77,6 +84,11 @@ export class AstralControls {
     if (this._focusTo) {
       this.target.lerp(this._focusTo, 1 - Math.exp(-dt * 4));
       if (this.target.distanceTo(this._focusTo) < 0.5) this._focusTo = null;
+    }
+    // a shrinking zoom allowance (entering a smaller region) reels the
+    // camera in smoothly instead of snapping
+    if (this.dist > this.maxDist) {
+      this.dist += (this.maxDist - this.dist) * Math.min(1, dt * 3);
     }
     const cp = Math.cos(this.pitch), sp = Math.sin(this.pitch);
     this.camera.position.set(

@@ -90,7 +90,7 @@ export class Player {
   // Gate blast: hurled across the void between node islets. Same-ring
   // crossings ride the orbit line ('arc'); outward crossings are a straight
   // shot ('line'); rock-chain leaps are short snappy 'hop's.
-  startBlast(destKey, mode = 'line') {
+  startBlast(destKey, mode = 'line', { durMul = 1 } = {}) {
     const from = this._hexPos(this.hexKey);
     const to = this._hexPos(destKey);
     let dist, arc = null;
@@ -109,10 +109,10 @@ export class Player {
     }
     const hop = mode === 'hop';
     this.blast = {
-      from, to, destKey, t: 0, arc,
-      dur: hop
+      from, to, destKey, t: 0, arc, mode,
+      dur: (hop
         ? THREE.MathUtils.clamp(0.3 + dist / 90, 0.45, 0.95)
-        : THREE.MathUtils.clamp(0.7 + dist / 260, 0.9, 2.6),
+        : THREE.MathUtils.clamp(0.7 + dist / 260, 0.9, 2.6)) * durMul,
       height: hop
         ? 2.2 + dist * 0.12
         : arc
@@ -121,6 +121,24 @@ export class Player {
     };
     this.path = [];
     this.stepT = 0;
+  }
+
+  // Position along the current blast's path at raw progress t (0..1), easing
+  // and vertical lift included — the same arc update() flies. The beam fx
+  // samples this to lay its ribbon of light along the route.
+  blastPointAt(t, out = new THREE.Vector3()) {
+    const b = this.blast;
+    if (!b) return out;
+    const u = t * t * (3 - 2 * t);
+    if (b.arc) {
+      const ang = b.arc.a0 + b.arc.da * u;
+      const rad = b.arc.r0 + (b.arc.r1 - b.arc.r0) * u;
+      out.set(Math.cos(ang) * rad, b.from.y + (b.to.y - b.from.y) * u, Math.sin(ang) * rad);
+    } else {
+      out.copy(b.from).lerp(b.to, u);
+    }
+    out.y += Math.sin(t * Math.PI) * b.height;
+    return out;
   }
 
   get isMoving() {

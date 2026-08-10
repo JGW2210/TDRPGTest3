@@ -132,6 +132,40 @@ export const ui = {
     el('seedline').textContent = `${toRunes(title)} ᛫ seed ${seed}`;
   },
 
+  // ---- star chart toggle + teleport panel ----
+  setChartActive(on) {
+    el('chartbtn').classList.toggle('active', on);
+  },
+
+  onChartClick(fn) {
+    el('chartbtn').addEventListener('click', fn);
+  },
+
+  // dests: [{ name, sub }] — onPick(index); onCancel() when 'stay' is chosen
+  showTeleport(dests, onPick, onCancel) {
+    const list = el('tpanel-list');
+    list.innerHTML = '';
+    if (!dests.length) {
+      const none = document.createElement('div');
+      none.className = 'tp-none';
+      none.textContent = 'no islands charted on this orbit yet';
+      list.appendChild(none);
+    }
+    dests.forEach((d, i) => {
+      const row = document.createElement('div');
+      row.className = 'tp-dest';
+      row.textContent = d.name;
+      row.addEventListener('click', () => onPick(i));
+      list.appendChild(row);
+    });
+    el('tpanel-cancel').onclick = () => onCancel();
+    el('tpanel').classList.add('show');
+  },
+
+  hideTeleport() {
+    el('tpanel').classList.remove('show');
+  },
+
   fadeHintLater(ms = 14000) {
     setTimeout(() => el('hint').classList.add('faded'), ms);
   },

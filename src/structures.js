@@ -43,13 +43,18 @@ const compose = (x, y, z, rx = 0, ry = 0, rz = 0) =>
 
 // startLit: a warded (stormbound) gate begins DARK — no veil, no under-glow,
 // rune plates barely embers — until ignite() pours the energy field in.
-export function makeDolmenGate({ rng, gradientMap, glyphTex, glowTex, animators, startLit = true }) {
+// grand: the outward ASCENSION gates are half again as tall and carry a
+// crystal socket in their crown — empty until the stormheart shard seats
+// itself, spent (grey, glowless) once the gate has hurled its one traveler.
+export function makeDolmenGate({ rng, gradientMap, glyphTex, glowTex, animators, startLit = true, grand = false }) {
   const g = new THREE.Group();
   const seed = (rng.float() * 1e6) | 0;
   const lit = { cur: startLit ? 1 : 0, target: startLit ? 1 : 0 };
+  const S = grand ? 1.6 : 1; // the ascension gates loom
 
   const stoneMat = new THREE.MeshToonMaterial({
-    color: new THREE.Color(0x8c8678).offsetHSL((rng.float() - 0.5) * 0.03, 0, (rng.float() - 0.5) * 0.05),
+    color: new THREE.Color(grand ? 0x77719c : 0x8c8678)
+      .offsetHSL((rng.float() - 0.5) * 0.03, 0, (rng.float() - 0.5) * 0.05),
     gradientMap,
   });
   const stoneDark = new THREE.MeshToonMaterial({ color: 0x635e55, gradientMap });
@@ -67,22 +72,34 @@ export function makeDolmenGate({ rng, gradientMap, glyphTex, glowTex, animators,
   }
 
   // two massive rough-hewn pillars, each leaning slightly off true
+  // (the grand gates stand truer — awe wants discipline)
   for (const side of [-1, 1]) {
-    const p = roughen(new THREE.CylinderGeometry(0.82, 1.18, 5.6, 7, 3), seed + side, 0.4);
-    addStone(p, compose(side * 2.9, 2.78, 0, 0, rng.angle(), rng.range(-0.05, 0.05)));
+    const p = roughen(new THREE.CylinderGeometry(0.82 * S, 1.18 * S, 5.6 * S, 7, 3), seed + side, 0.4 * S);
+    addStone(p, compose(side * 2.9 * S, 2.78 * S, 0, 0, rng.angle(), rng.range(-0.05, 0.05) * (grand ? 0.4 : 1)));
   }
   // the cracked capstone: two halves, one slumped a little lower
-  const linA = roughen(new THREE.BoxGeometry(3.35, 0.95, 1.5), seed + 3, 0.22);
-  addStone(linA, compose(-1.52, 6.12, 0, 0, 0, 0.03), [1.08, 1.12, 1.12]);
-  const linB = roughen(new THREE.BoxGeometry(3.3, 0.95, 1.5), seed + 4, 0.22);
-  addStone(linB, compose(1.62, 6.0, 0, 0, 0, -0.055), [1.08, 1.12, 1.12]);
+  const linA = roughen(new THREE.BoxGeometry(3.35 * S, 0.95 * S, 1.5 * S), seed + 3, 0.22 * S);
+  addStone(linA, compose(-1.52 * S, 6.12 * S, 0, 0, 0, grand ? 0.012 : 0.03), [1.08, 1.12, 1.12]);
+  const linB = roughen(new THREE.BoxGeometry(3.3 * S, 0.95 * S, 1.5 * S), seed + 4, 0.22 * S);
+  addStone(linB, compose(1.62 * S, 6.0 * S + (grand ? 0.14 : 0), 0, 0, 0, grand ? -0.02 : -0.055), [1.08, 1.12, 1.12]);
   // a fallen fragment of the old arch, half-buried where it landed
   const shard = roughen(new THREE.BoxGeometry(2.2, 0.62, 1.05), seed + 5, 0.2);
   addStone(
     shard,
-    compose((rng.chance(0.5) ? -1 : 1) * rng.range(2.2, 3.6), 0.26, rng.range(1.6, 3.2), 0, rng.angle(), 0.14),
+    compose((rng.chance(0.5) ? -1 : 1) * rng.range(2.2, 3.6) * S, 0.26, rng.range(1.6, 3.2), 0, rng.angle(), 0.14),
     [1.1, 1.15, 1.15]
   );
+
+  // the crown: a peaked apex stone bearing the crystal socket
+  const crystalY = 6.6 * S + (grand ? 2.75 : 0);
+  if (grand) {
+    const crown = roughen(new THREE.BoxGeometry(2.5, 1.5, 1.9), seed + 6, 0.2);
+    addStone(crown, compose(0, 6.6 * S + 0.75, 0, 0, 0, 0), [1.1, 1.1, 1.1]);
+    for (const side of [-1, 1]) {
+      const prong = roughen(new THREE.ConeGeometry(0.34, 1.7, 5), seed + 7 + side, 0.1);
+      addStone(prong, compose(side * 0.85, 6.6 * S + 2.2, 0, 0, 0, -side * 0.22), [1.2, 1.06, 1.2]);
+    }
+  }
 
   g.add(new THREE.Mesh(mergeGeometries(stoneParts), stoneMat));
   g.add(new THREE.Mesh(
@@ -98,7 +115,7 @@ export function makeDolmenGate({ rng, gradientMap, glyphTex, glowTex, animators,
       const b = new THREE.DodecahedronGeometry(0.28 + rng.float() * 0.3, 0);
       b.scale(1, 0.55 + rng.float() * 0.3, 1);
       const a = rng.angle();
-      const r = 2.4 + rng.float() * 2.2;
+      const r = (2.4 + rng.float() * 2.2) * S;
       b.applyMatrix4(compose(Math.cos(a) * r, 0.16, Math.sin(a) * r, 0, rng.angle(), 0));
       bits.push(b);
     }
@@ -114,9 +131,9 @@ export function makeDolmenGate({ rng, gradientMap, glyphTex, glowTex, animators,
       if (i < 4) {
         const side = i % 2 ? 1 : -1;
         const a = rng.angle();
-        c.applyMatrix4(compose(side * 2.9 + Math.cos(a) * 1.02, 0.5 + rng.float() * 4.6, Math.sin(a) * 1.02));
+        c.applyMatrix4(compose(side * 2.9 * S + Math.cos(a) * 1.02, (0.5 + rng.float() * 4.6) * S, Math.sin(a) * 1.02));
       } else {
-        c.applyMatrix4(compose(rng.range(-2.4, 2.4), 6.62, rng.range(-0.4, 0.4)));
+        c.applyMatrix4(compose(rng.range(-2.4, 2.4) * S, 6.62 * S, rng.range(-0.4, 0.4)));
       }
       clumps.push(c);
     }
@@ -129,8 +146,8 @@ export function makeDolmenGate({ rng, gradientMap, glyphTex, glowTex, animators,
   });
   for (const side of [-1, 1]) {
     for (const face of [1, -1]) {
-      const plate = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 1.3), plateMat);
-      plate.position.set(side * 2.9, 3.25, face * 1.18);
+      const plate = new THREE.Mesh(new THREE.PlaneGeometry(1.3 * S, 1.3 * S), plateMat);
+      plate.position.set(side * 2.9 * S, 3.25 * S, face * 1.18 * S);
       plate.renderOrder = 2; // above the water sheets
       if (face < 0) plate.rotation.y = Math.PI;
       g.add(plate);
@@ -139,8 +156,8 @@ export function makeDolmenGate({ rng, gradientMap, glyphTex, glowTex, animators,
 
   // the energy field hung between the pillars (absent while the gate is dark)
   const veilMat = makeVeilMaterial(0xb89aff, lit.cur);
-  const veil = new THREE.Mesh(new THREE.PlaneGeometry(4.0, 4.8, 1, 10), veilMat);
-  veil.position.set(0, 2.78, 0);
+  const veil = new THREE.Mesh(new THREE.PlaneGeometry(4.0 * S, 4.8 * S, 1, 10), veilMat);
+  veil.position.set(0, 2.78 * S, 0);
   veil.renderOrder = 2;
   g.add(veil);
 
@@ -148,16 +165,50 @@ export function makeDolmenGate({ rng, gradientMap, glyphTex, glowTex, animators,
     map: glowTex, color: 0xb89aff, transparent: true, opacity: 0.22 * lit.cur,
     blending: THREE.AdditiveBlending, depthWrite: false,
   }));
-  under.position.set(0, 3, 0);
-  under.scale.setScalar(7.5);
+  under.position.set(0, 3 * S, 0);
+  under.scale.setScalar(7.5 * S);
   under.renderOrder = 3;
   g.add(under);
+
+  // the crystal in its socket (grand gates only): absent, seated, or spent
+  const crystalState = { cur: 'empty' };
+  let crystal = null, crystalInk = null, crystalGlow = null;
+  if (grand) {
+    crystal = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.62, 0),
+      new THREE.MeshBasicMaterial({ color: 0xcabcff })
+    );
+    crystal.scale.set(0.8, 1.7, 0.8);
+    crystal.position.y = crystalY;
+    crystal.visible = false;
+    crystalInk = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.62, 0),
+      new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide })
+    );
+    crystalInk.scale.set(0.95, 1.85, 0.95);
+    crystalInk.position.y = crystalY;
+    crystalInk.visible = false;
+    crystalGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: glowTex, color: 0x8a76e6, transparent: true, opacity: 0,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    }));
+    crystalGlow.position.y = crystalY;
+    crystalGlow.scale.setScalar(6);
+    crystalGlow.renderOrder = 3;
+    g.add(crystal, crystalInk, crystalGlow);
+  }
+  function setCrystal(state) {
+    if (!grand) return;
+    crystalState.cur = state;
+    crystal.visible = crystalInk.visible = state !== 'empty';
+    if (state === 'spent') crystal.material.color.set(0x6a6478);
+  }
 
   // two warning glyphs still slowly pacing their rounds
   const orbiters = [];
   for (let i = 0; i < 2; i++) {
     const s = new THREE.Sprite(plateMat.clone());
-    s.scale.setScalar(1.4);
+    s.scale.setScalar(1.4 * S);
     s.renderOrder = 3;
     g.add(s);
     orbiters.push(s);
@@ -171,12 +222,21 @@ export function makeDolmenGate({ rng, gradientMap, glyphTex, glowTex, animators,
     plateMat.opacity = (0.68 + 0.22 * Math.sin(t * 1.3 + phase)) * (0.22 + 0.78 * lit.cur);
     orbiters.forEach((s, i) => {
       const a = t * 0.5 + phase + i * Math.PI;
-      s.position.set(Math.cos(a) * 4.5, 4.1 + Math.sin(t * 1.1 + i * 2) * 0.5, Math.sin(a) * 4.5);
+      s.position.set(Math.cos(a) * 4.5 * S, (4.1 + Math.sin(t * 1.1 + i * 2) * 0.5) * S, Math.sin(a) * 4.5 * S);
       s.material.opacity = plateMat.opacity;
     });
+    if (crystalGlow) {
+      if (crystalState.cur === 'filled') {
+        crystal.rotation.y += dt * 0.9;
+        crystalInk.rotation.y = crystal.rotation.y;
+        crystalGlow.material.opacity = 0.4 + 0.22 * Math.sin(t * 4.1 + phase);
+      } else {
+        crystalGlow.material.opacity = Math.max(0, crystalGlow.material.opacity - dt * 0.6);
+      }
+    }
   });
 
-  return { group: g, ignite: () => { lit.target = 1; } };
+  return { group: g, ignite: () => { lit.target = 1; }, setCrystal, crystalY, grand };
 }
 
 // ---------------------------------------------------------------- shrine stone
@@ -685,6 +745,155 @@ export function makeHerald({ rng, glowTex }) {
     g.add(eye);
   }
   g.rotation.y = rng.angle();
+  return g;
+}
+
+// ---------------------------------------------------------------- teleport temple
+// The pillared hut of a teleport concourse: a Parthenon in miniature — a
+// stepped stylobate, a peristyle of marble columns, a gabled roof — keeping
+// the ring's teleport stone on its omphalos.
+export function makeTemple({ rng, gradientMap, glowTex, animators }) {
+  const g = new THREE.Group();
+  const seed = (rng.float() * 1e6) | 0;
+  const marble = new THREE.MeshToonMaterial({ color: 0xe6e0cc, gradientMap });
+  const marbleDim = new THREE.MeshToonMaterial({ color: 0xcfc8b2, gradientMap });
+
+  const parts = [];
+  const inks = [];
+  const add = (geo, m4, hull = 1.06, list = parts) => {
+    const o = geo.clone();
+    o.scale(hull, hull, hull);
+    geo.applyMatrix4(m4);
+    o.applyMatrix4(m4);
+    list.push(geo);
+    inks.push(o);
+  };
+
+  // stepped stylobate
+  add(roughen(new THREE.BoxGeometry(5.2, 0.4, 4.2), seed, 0.08), compose(0, 0.2, 0), 1.03);
+  add(roughen(new THREE.BoxGeometry(4.7, 0.4, 3.7), seed + 1, 0.08), compose(0, 0.58, 0), 1.03);
+  add(roughen(new THREE.BoxGeometry(4.2, 0.4, 3.2), seed + 2, 0.06), compose(0, 0.96, 0), 1.03);
+
+  // the peristyle: fluted-ish columns with plinth and capital
+  const colXs = [-1.55, -0.52, 0.52, 1.55];
+  const colPos = [];
+  for (const x of colXs) for (const z of [-1.15, 1.15]) colPos.push([x, z]);
+  for (const z of [0]) for (const x of [-1.55, 1.55]) colPos.push([x, z]);
+  for (const [x, z] of colPos) {
+    add(new THREE.CylinderGeometry(0.15, 0.18, 1.9, 7), compose(x, 2.1, z, 0, rng.angle(), 0), 1.14);
+    add(new THREE.BoxGeometry(0.42, 0.12, 0.42), compose(x, 3.1, z), 1.1);
+    add(new THREE.BoxGeometry(0.4, 0.1, 0.4), compose(x, 1.2, z), 1.1);
+  }
+
+  // entablature + gabled roof
+  add(roughen(new THREE.BoxGeometry(4.3, 0.34, 3.1), seed + 3, 0.05), compose(0, 3.33, 0), 1.04);
+  const roofA = new THREE.BoxGeometry(4.5, 0.14, 1.95);
+  add(roofA, compose(0, 3.95, -0.82, 0.47, 0, 0), 1.05, parts);
+  const roofB = new THREE.BoxGeometry(4.5, 0.14, 1.95);
+  add(roofB, compose(0, 3.95, 0.82, -0.47, 0, 0), 1.05, parts);
+
+  g.add(new THREE.Mesh(mergeGeometries(parts), marble));
+  g.add(new THREE.Mesh(
+    mergeGeometries(inks),
+    new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide })
+  ));
+
+  // pediment gables closing the roof ends
+  const gableShape = new THREE.Shape();
+  gableShape.moveTo(-1.55, 0);
+  gableShape.lineTo(1.55, 0);
+  gableShape.lineTo(0, 0.85);
+  gableShape.closePath();
+  for (const side of [-1, 1]) {
+    const gable = new THREE.Mesh(
+      new THREE.ExtrudeGeometry(gableShape, { depth: 0.12, bevelEnabled: false }),
+      marbleDim
+    );
+    gable.rotation.y = Math.PI / 2;
+    gable.position.set(side * 2.12, 3.5, side * 0.06);
+    g.add(gable);
+  }
+
+  // the teleport stone: a glowing orb on its omphalos, ringed by runelight
+  const omphalos = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.6, 0.9, 8), marbleDim);
+  omphalos.position.y = 1.6;
+  const orb = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(0.44, 1),
+    new THREE.MeshBasicMaterial({ color: 0x9fd8ff })
+  );
+  orb.position.y = 2.45;
+  const orbGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTex, color: 0x9fd8ff, transparent: true, opacity: 0.5,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  }));
+  orbGlow.position.y = 2.45;
+  orbGlow.scale.setScalar(4.5);
+  orbGlow.renderOrder = 3;
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(0.75, 0.05, 6, 22),
+    new THREE.MeshBasicMaterial({ color: 0xcfe8ff, transparent: true, opacity: 0.6 })
+  );
+  ring.position.y = 2.45;
+  ring.renderOrder = 2;
+  g.add(omphalos, orb, orbGlow, ring);
+
+  const ph = rng.angle();
+  animators.push((t, dt) => {
+    orb.rotation.y += dt * 0.5;
+    orb.position.y = 2.45 + Math.sin(t * 1.3 + ph) * 0.08;
+    orbGlow.position.y = orb.position.y;
+    orbGlow.material.opacity = 0.36 + 0.2 * Math.sin(t * 2.3 + ph);
+    ring.rotation.x = Math.PI / 2 + Math.sin(t * 0.7 + ph) * 0.35;
+    ring.rotation.y = t * 0.4;
+  });
+  return g;
+}
+
+// ---------------------------------------------------------------- stillmoon body
+// The small polygonal rock body hung above a stillmoon's heart: a chunk of
+// void-stone shot through with the moon's crystal colour.
+export function makeStillmoonBody({ rng, gradientMap, color }) {
+  const g = new THREE.Group();
+  const seed = (rng.float() * 1e6) | 0;
+  const coreGeo = new THREE.DodecahedronGeometry(2.1, 0);
+  {
+    const pos = coreGeo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+      const m = 0.85 + posHash(x, y, z, seed) * 0.35;
+      pos.setXYZ(i, x * m, y * m, z * m);
+    }
+    coreGeo.computeVertexNormals();
+  }
+  const core = new THREE.Mesh(
+    coreGeo,
+    new THREE.MeshToonMaterial({ color: 0x716b85, gradientMap })
+  );
+  const ink = new THREE.Mesh(
+    coreGeo.clone(),
+    new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide })
+  );
+  ink.scale.setScalar(1.08);
+  g.add(core, ink);
+
+  // embedded crystal spurs in the moon's colour
+  const spurGeos = [];
+  const n = 5 + rng.int(3);
+  for (let i = 0; i < n; i++) {
+    const dir = new THREE.Vector3(
+      rng.range(-1, 1), rng.range(-1, 1), rng.range(-1, 1)
+    ).normalize();
+    const len = 0.7 + rng.float() * 0.9;
+    const spur = new THREE.OctahedronGeometry(0.32, 0);
+    spur.scale(0.8, len / 0.32 * 0.45, 0.8);
+    spur.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir));
+    spur.translate(dir.x * 1.9, dir.y * 1.9, dir.z * 1.9);
+    spurGeos.push(spur);
+  }
+  g.add(new THREE.Mesh(
+    mergeGeometries(spurGeos),
+    new THREE.MeshBasicMaterial({ color })
+  ));
   return g;
 }
 

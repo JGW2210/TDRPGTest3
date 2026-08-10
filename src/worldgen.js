@@ -11,7 +11,7 @@
 
 import {
   HEX, RINGS, SECRET_RADIUS, BIOMES, SECRET_BIOMES, ASTEROID_BIOMES, GATE_RUNES,
-  TRAPS, HERMITS, WORLD_ADJ, WORLD_NOUN,
+  TELEPORT_BIOMES, STILLMOON_CRYSTALS, TRAPS, HERMITS, WORLD_ADJ, WORLD_NOUN,
 } from './config.js';
 import { Rng, makeNoise2D } from './rng.js';
 import * as Hx from './hexmath.js';
@@ -41,6 +41,7 @@ export function generateWorld(seedStr) {
     const a = {
       id: areas.length, biome, ring, pos, spoke,
       hexKeys: [], secret: !!biome.secretHint, asteroid: !!biome.asteroid,
+      teleport: !!biome.teleport,
       angle: Math.atan2(pos.z, pos.x),
       hexRadius: 13, // scoring scale for port picking
     };
@@ -97,6 +98,27 @@ export function generateWorld(seedStr) {
     });
   }
 
+  // teleport concourses: rings 2-4 each keep ONE marble waystation threaded
+  // into a free gap of the ring's gate chain — its pillared hut holds the
+  // stone that charts crossings to the ring's visited regions
+  const teleportByGap = new Map(); // `${ringNumber}:${gapIndex}` -> area
+  for (let R = 2; R <= RINGS.length; R++) {
+    const sorted = ringGroups[R].slice().sort((a, b) => a.angle - b.angle);
+    const free = [...Array(sorted.length).keys()]
+      .filter((gi) => !(R === RINGS.length && asteroidByGap.has(gi)));
+    if (!free.length) continue;
+    const gi = free[rng.int(free.length)];
+    const a = sorted[gi], b = sorted[(gi + 1) % sorted.length];
+    let da = b.angle - a.angle;
+    while (da <= 0) da += TAU;
+    const ang = a.angle + da / 2;
+    const rad = RINGS[R - 1].radius + rng.range(-20, 20);
+    const area = mkArea(TELEPORT_BIOMES[R - 2], R, {
+      x: Math.cos(ang) * rad, z: Math.sin(ang) * rad,
+    });
+    teleportByGap.set(R + ':' + gi, area);
+  }
+
   // ---------------------------------------------------------------- regions
   function setHex(q, r, rec) {
     const k = Hx.key(q, r);
@@ -112,7 +134,8 @@ export function generateWorld(seedStr) {
   function generateAsteroidRegion(area) {
     const c = area.pos;
     const ch = Hx.toHex(c.x, c.z, HEX);
-    const target = 10 + rng.int(8);
+    // teleport concourses are a little roomier — the temple needs a forecourt
+    const target = area.teleport ? 14 + rng.int(5) : 10 + rng.int(8);
     area.hexRadius = 5;
     const localKey = (q, r) => q + ',' + r;
     const cells = new Set([localKey(ch.q, ch.r)]);
@@ -137,6 +160,22 @@ export function generateWorld(seedStr) {
         gateId: null,
       });
       if (rec.areaId === area.id) area.hexKeys.push(Hx.key(q, r));
+    }
+    // the teleport stone stands at the knot's heart, on levelled ground
+    if (area.teleport) {
+      let bestK = null, bd = Infinity;
+      for (const k of area.hexKeys) {
+        const h = hexes.get(k);
+        const p = Hx.toWorld(h.q, h.r, HEX);
+        const d = Math.hypot(p.x - c.x, p.z - c.z);
+        if (d < bd) { bd = d; bestK = k; }
+      }
+      if (bestK) {
+        const th = hexes.get(bestK);
+        th.teleporter = true;
+        th.elev = 0.6;
+        area.teleportStoneKey = bestK;
+      }
     }
   }
 
@@ -291,6 +330,7 @@ export function generateWorld(seedStr) {
       const h = hexes.get(k);
       if (!h || h.gateId !== null) continue;
       if (h.baseY) continue; // floating cells are not the sea's rim
+      if (h.stillmoon) continue; // satellite rock is not the sea's rim either
       const p = worldOf(h);
       const vx = p.x - c.x, vz = p.z - c.z;
       const L = Math.hypot(vx, vz) || 1;
@@ -416,17 +456,121 @@ export function generateWorld(seedStr) {
     return best;
   };
 
+  // ---------------------------------------------------------------- stillmoons
+  // Every true region grows a STILLMOON off its rim: a 40-50 hex satellite
+  // platform of bare rock seeded with crystals of one colour, a small
+  // polygonal rock body floating over its heart. Ringed regions attach theirs
+  // TANGENTIALLY (along the orbit) so the moon can never poke through a storm
+  // boundary; the sun and the secrets may face anywhere.
+  const moonPalette = rng.shuffle(STILLMOON_CRYSTALS.slice());
+  let moonCursor = 0;
+
+  function placeStillmoon(area) {
+    const ch = Hx.toHex(area.pos.x, area.pos.z, HEX);
+    for (let tries = 0; tries < 12; tries++) {
+      let dirAng;
+      if (area.ring >= 1 && !area.secret) {
+        dirAng = area.angle + (rng.chance(0.5) ? 1 : -1) * (Math.PI / 2) + rng.range(-0.3, 0.3);
+      } else {
+        dirAng = rng.angle();
+      }
+      const rim = pickRim(area, {
+        x: area.pos.x + Math.cos(dirAng) * 4000,
+        z: area.pos.z + Math.sin(dirAng) * 4000,
+      });
+      if (!rim) continue;
+      const rp = worldOf(rim);
+      // the anchor must sit ADJACENT to the rim hex — that adjacency is the
+      // attachment; a gap would strand the moon beyond the wisp's reach
+      const ac = Hx.toHex(
+        rp.x + Math.cos(dirAng) * HEX * Hx.SQRT3,
+        rp.z + Math.sin(dirAng) * HEX * Hx.SQRT3, HEX
+      );
+      if (hexes.has(Hx.key(ac.q, ac.r))) continue;
+      if (Hx.dist(ac.q, ac.r, rim.q, rim.r) !== 1) continue;
+      // no cell of the moon may touch another area's hexes
+      const foreign = (q, r) => {
+        for (const d of Hx.DIRS) {
+          const nh = hexes.get(Hx.key(q + d[0], r + d[1]));
+          if (nh && nh.areaId !== area.id) return true;
+        }
+        return false;
+      };
+      if (foreign(ac.q, ac.r)) continue;
+
+      const target = 40 + rng.int(11);
+      const localKey = (q, r) => q + ',' + r;
+      const cells = new Set([localKey(ac.q, ac.r)]);
+      const frontier = [[ac.q, ac.r]];
+      let guard = 0;
+      while (cells.size < target && guard++ < 8000) {
+        const [fq, fr] = frontier[rng.int(frontier.length)];
+        const d = Hx.DIRS[rng.int(6)];
+        const nq = fq + d[0], nr = fr + d[1];
+        const nk = localKey(nq, nr);
+        if (cells.has(nk) || hexes.has(Hx.key(nq, nr))) continue;
+        if (Hx.dist(nq, nr, ac.q, ac.r) > 5) continue;             // compact
+        if (Hx.dist(nq, nr, ch.q, ch.r) > area.hexRadius + 8) continue; // bounded
+        if (foreign(nq, nr)) continue;
+        cells.add(nk);
+        frontier.push([nq, nr]);
+      }
+      if (cells.size < 40) continue; // cramped sky — try another bearing
+
+      // commit: bare rock, a touch higher toward the heart
+      const keys = [];
+      let cx = 0, cz = 0;
+      for (const k of cells) {
+        const [q, r] = k.split(',').map(Number);
+        const p = Hx.toWorld(q, r, HEX);
+        cx += p.x; cz += p.z;
+      }
+      cx /= cells.size; cz /= cells.size;
+      let coreKey = null, coreD = Infinity;
+      for (const k of cells) {
+        const [q, r] = k.split(',').map(Number);
+        const p = Hx.toWorld(q, r, HEX);
+        const dCore = Math.hypot(p.x - cx, p.z - cz);
+        const rec = setHex(q, r, {
+          kind: 'isle', areaId: area.id,
+          elev: 0.4 + rng.float() * 0.5 + Math.max(0, 1 - dCore / (HEX * 6)) * 0.35,
+          islandId: null, rock: true, stillmoon: true,
+          flow: [0, 0], faint: false, blocked: false, levi: false,
+          gateId: null,
+        });
+        void rec;
+        const kk = Hx.key(q, r);
+        area.hexKeys.push(kk);
+        keys.push(kk);
+        if (dCore < coreD) { coreD = dCore; coreKey = kk; }
+      }
+      hexes.get(coreKey).moonCore = true;
+      area.stillmoon = {
+        centerKey: coreKey, keys,
+        color: moonPalette[moonCursor++ % moonPalette.length],
+      };
+      return area.stillmoon;
+    }
+    return null;
+  }
+  for (const area of areas) {
+    if (area.asteroid) continue; // waystations and concourses stay bare
+    placeStillmoon(area);
+  }
+
   for (let ri = 1; ri < ringGroups.length; ri++) {
     const g = ringGroups[ri].slice().sort((p, q2) => p.angle - q2.angle);
     const isOuter = ri === ringGroups.length - 1;
     for (let i = 0; i < g.length; i++) {
       if (g.length <= 1) continue;
       const nxt = g[(i + 1) % g.length];
-      // an asteroid waystation in this gap splits the crossing in two hops
-      const ast = isOuter ? asteroidByGap.get(i) : undefined;
-      if (ast) {
-        addGate(g[i], ast, 'ring');
-        addGate(ast, nxt, 'ring');
+      // an asteroid waystation or teleport concourse in this gap splits the
+      // crossing in two hops
+      const mid = (isOuter ? asteroidByGap.get(i) : undefined)
+        ?? teleportByGap.get(ri + ':' + i);
+      if (mid) {
+        addGate(g[i], mid, 'ring');
+        addGate(mid, nxt, 'ring');
       } else {
         addGate(g[i], nxt, 'ring');
       }
@@ -776,13 +920,35 @@ export function generateWorld(seedStr) {
 
   // ---------------------------------------------------------------- springs
   // Each asteroid waystation keeps a small healing spring among its rubble.
+  // (Teleport concourses keep marble, not water.)
   for (const area of areas) {
-    if (!area.asteroid) continue;
+    if (!area.asteroid || area.teleport) continue;
     const cand = area.hexKeys.filter((k) => {
       const h = hexes.get(k);
       return h.gateId === null && h.wardId === undefined;
     });
     if (cand.length) hexes.get(cand[rng.int(cand.length)]).spring = true;
+  }
+
+  // ---------------------------------------------------------------- spring stones
+  // Every true region of a teleport-served ring keeps a SPRING STONE: a lone
+  // rock in the empty nestling gap directly beneath the astral body. It is
+  // where the ring's teleport stone drops arriving travelers; from it the
+  // wisp hops out to the nestling waters (the stone touches nothing, so it
+  // can never be sailed to or from).
+  for (const area of areas) {
+    if (area.ring < 2 || area.ring > RINGS.length || area.asteroid || area.secret) continue;
+    const ch = Hx.toHex(area.pos.x, area.pos.z, HEX);
+    const k = Hx.key(ch.q, ch.r);
+    if (hexes.has(k)) continue; // the gap should be empty; if not, no stone
+    setHex(ch.q, ch.r, {
+      kind: 'isle', areaId: area.id, elev: 0.55 + rng.float() * 0.2,
+      islandId: null, rock: true, springStone: true,
+      flow: [0, 0], faint: false, blocked: false, levi: false,
+      gateId: null,
+    });
+    area.hexKeys.push(k);
+    area.springStoneKey = k;
   }
 
   // ---------------------------------------------------------------- leviathans

@@ -254,6 +254,55 @@ export const ASTEROID_BIOMES = [
   },
 ];
 
+// Teleport concourses (Round 10): one bare-rock islet threaded into each of
+// rings 2-4, kin to the waystations but dressed in neoclassical marble — a
+// Parthenon-style pillared hut keeps the ring's teleport stone.
+export const TELEPORT_BIOMES = [
+  {
+    key: 'pilgrimconcourse', area: "The Pilgrims' Concourse", body: 'a marble mooring in the void',
+    bodyKind: 'rubble', bodyShape: 'rubble', bodySize: 3, bodyColor: 0xd8d2c2, bodyColor2: 0x8f8a78,
+    island: { top: 0xd8d2c0, top2: 0xc9c2ae, side: 0x6e6852, glow: 0xfff2cc },
+    water: { name: 'the Quiet Crossing', color: 0x9aa8c9, speed: 0.35 },
+    decor: { kinds: ['saltpillar'], color: 0xfff2cc },
+    terrain: { style: 'mesa' },
+    dread: 0.1, asteroid: true, teleport: true,
+  },
+  {
+    key: 'marblerotunda', area: 'The Marble Rotunda', body: 'a drowned forum, still standing',
+    bodyKind: 'rubble', bodyShape: 'rubble', bodySize: 3, bodyColor: 0xd8d2c2, bodyColor2: 0x8f8a78,
+    island: { top: 0xdcd6c6, top2: 0xcfc8b4, side: 0x736c56, glow: 0xfff2cc },
+    water: { name: 'the Quiet Crossing', color: 0x9aa8c9, speed: 0.35 },
+    decor: { kinds: ['saltpillar'], color: 0xfff2cc },
+    terrain: { style: 'mesa' },
+    dread: 0.15, asteroid: true, teleport: true,
+  },
+  {
+    key: 'argentacropolis', area: 'The Argent Acropolis', body: 'the last stones of a high city',
+    bodyKind: 'rubble', bodyShape: 'rubble', bodySize: 3, bodyColor: 0xd8d2c2, bodyColor2: 0x8f8a78,
+    island: { top: 0xe0daca, top2: 0xd2ccb8, side: 0x787158, glow: 0xfff2cc },
+    water: { name: 'the Quiet Crossing', color: 0x9aa8c9, speed: 0.35 },
+    decor: { kinds: ['saltpillar'], color: 0xfff2cc },
+    terrain: { style: 'mesa' },
+    dread: 0.2, asteroid: true, teleport: true,
+  },
+];
+
+// Stillmoon crystal hues (Round 10): every region grows a small rocky
+// satellite platform off its rim, seeded with crystals of ONE of these
+// colours — no two neighboring stillmoons should read alike.
+export const STILLMOON_CRYSTALS = [
+  0xff8fa8, // rose
+  0x8cf5a6, // spring green
+  0x9fd8ff, // sky
+  0xffd27a, // amber
+  0xc78bff, // violet
+  0x7ce8e0, // ice teal
+  0xff9a66, // ember
+  0xfff6b0, // pale gold
+  0xa8c4ff, // periwinkle
+  0xff9adb, // dusk pink
+];
+
 // Secret bodies far past the rim. secretHint picks the discovery mechanic:
 // 'tide'  — faint tide-path hexes, visible when the sun breathes high
 // 'rumor' — path stays sealed until all rumor-rune obelisks are struck
@@ -390,6 +439,18 @@ export const INTRO_LINES = {
     'Nihil shines darkness the way other stars shine light.',
     'You have found the place the light forgot on purpose.',
   ],
+  pilgrimconcourse: [
+    'Marble, out here. Someone believed the void could be civilised.',
+    'The teleport stone hums in its pillared hut, patient as arithmetic.',
+  ],
+  marblerotunda: [
+    'A forum with no speakers, a rotunda with no roof worth the name.',
+    'The stone remembers every crossing ever made from it.',
+  ],
+  argentacropolis: [
+    'The high city fell upward, and this acropolis is what caught.',
+    'Its columns still hold the sky they were promised.',
+  ],
 };
 
 // ---------------------------------------------------------------------------
@@ -408,22 +469,45 @@ export const STORM = {
 // region is calm). Chosen to clear each ring's region rims + gate islets.
 export const STORM_BOUNDARIES = [145, 400, 668, 938];
 
-// Two lines for the gate-ignition cutscene, per ring boundary.
+// Two lines for the shard-claim cutscene, per ring boundary: the crystal
+// flies to the great gate's crown and ARMS it. The storm holds until the
+// gate is actually used.
+export const SHARD_LINES = [
+  [
+    'The shard leaps from your grasp and seats itself in the great gate’s crown.',
+    'The dolmen wakes beneath it. The storm beyond holds its breath.',
+  ],
+  [
+    'A second stormheart finds its socket, and the crown drinks the crackle whole.',
+    'The gate is armed. The maelstrom watches you decide.',
+  ],
+  [
+    'The gate takes the crystal like a debt long owed, and stands taller for it.',
+    'One launch remains in it. The storm already knows.',
+  ],
+  [
+    'The last stormheart clicks home. The crown blazes like a caught star.',
+    'Beyond the veil the outer dark waits to be won.',
+  ],
+];
+
+// Two lines for the ascension launch — spoken as the beam takes you and the
+// stormfront rolls back. There is no way back through a spent gate.
 export const WARD_LINES = [
   [
-    'The shard leaps from your grasp and buries itself in the lintel.',
-    'Aurora floods the doorway. Beyond, the first ring rides out the last of its storm.',
+    'The crown discharges, and the beam takes you with it.',
+    'Aurora floods the void. The first ring rides out the last of its storm.',
   ],
   [
-    'A second stormheart finds its gate, and the maelstrom unclenches its fist.',
-    'The second ring turns slowly in the calm you have made.',
+    'The crystal burns itself hollow to carry you, and the maelstrom unclenches its fist.',
+    'The second ring turns slowly in the calm you have made. The way back is sealed.',
   ],
   [
-    'The gate takes the shard like a debt long owed.',
+    'Light swallows you whole; the storm parts like torn paper.',
     'Past the calming line, the third ring glitters — and glitters back.',
   ],
   [
-    'The last stormfront breaks upon its own heart.',
+    'The last stormfront breaks upon its own heart as the beam carries you through.',
     'The outer dark lies open. Nothing else stands between you and the deep.',
   ],
 ];
