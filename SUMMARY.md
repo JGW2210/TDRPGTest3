@@ -29,30 +29,72 @@ paper sun in a dark aetherial papercraft cosmos. Everything is seeded
   (`hex.spring` — one heart, once per visit, re-armed on area re-entry).
 - **Gates** = pairs of 7-hex bare-rock node islets on facing rims bearing
   DOLMEN WAYGATES (`structures.js`). Entering (or clicking — invisible
-  hitboxes) one BLASTS the wisp to its twin. Same-ring gates chain neighbors
-  around each ring (through the waystations on ring 4), fly ALONG THE ORBIT,
-  doorways facing the orbit's tangent; radial/secret gates face their twin
-  straight on. Each ring boundary has exactly ONE radial gate
-  (`gate.boundary` = 0..3); 3 secret gates (`gate.secretGate`). First use
-  announces the Warden (boss hook lives in `main.js handleGate`).
-- **STORM PROGRESSION (Round 8)** — the old rune-pedestal locks are GONE.
-  A vast MAELSTROM SHEET (`makeStormMaterial`, ring mesh at renderOrder 5)
-  seals everything beyond the frontier ring; inner calm radii per frontier
-  live in `STORM_BOUNDARIES` (145/400/668/938 — chosen to clear region rims
-  + gate islets; re-check if orbits change). Each boundary's radial gate
-  starts DARK (no veil — `makeDolmenGate({startLit:false})`, veil alpha via
-  `uIgnite`) under a ward (`world.wards[]`: boundary, gateId, shardKey,
-  criterion 'shard', dispelled). A STORMHEART SHARD floats on a rock perch
-  (`hex.wardId`) two hexes from the departure islet. Stepping on it →
-  `main.js handleShardClaim`: ward dispels, `world.progress.frontier`
-  advances, `built.claimShard` flies the shard to the lintel, then
-  `built.igniteGate` + `built.setStormFrontier` (storm eases back; the
-  last ward dissolves the sheet and un-smothers the secrets' surge
-  pillars), all under an ignition cutscene (`WARD_LINES[boundary]`).
-  Dark gates refuse blasts with a flash message. STORM HERALDS — vast
-  horned silhouettes (`makeHerald`, NOT fogged) — pace each sealed
-  boundary near its gate and fade out on dispel. Criterion is pluggable:
-  boss tallies later.
+  hitboxes) one fires a BEAM OF LIGHT along the flight path with an ORB
+  (the wisp, unmade for the crossing) riding it — `main.js`
+  `startFlightBeam` builds a tube along `player.blastPointAt` samples, the
+  wisp mesh hides while `flight.active && player.blast`, and the locked
+  camera follows the orb. Same-ring gates chain neighbors around each ring
+  (through the waystations AND teleport concourses on rings 2-4), fly
+  ALONG THE ORBIT (arc beam), doorways facing the orbit's tangent;
+  radial/secret gates fire a straight beam. Each ring boundary has exactly
+  ONE radial gate (`gate.boundary` = 0..3); 3 secret gates
+  (`gate.secretGate`, still two-way). First use announces the Warden
+  (boss hook lives in `main.js handleGate`).
+- **STORM + ONE-WAY ASCENSION (Round 8, reshaped Round 10)** — A vast
+  MAELSTROM SHEET (`makeStormMaterial`, ring mesh at renderOrder 5) seals
+  everything beyond the frontier ring; inner calm radii per frontier live
+  in `STORM_BOUNDARIES` (145/400/668/938 — chosen to clear region rims +
+  gate islets; re-check if orbits change). Boundary radial gates are GRAND
+  ASCENSION GATES (`makeDolmenGate({grand:true})` — 1.6× scale, violet
+  stone, a crowned CRYSTAL SOCKET, `setCrystal('empty'|'filled'|'spent')`).
+  They start DARK under a ward (`world.wards[]`). Claiming the STORMHEART
+  SHARD (`hex.wardId`, perch 2 hexes from the departure islet) now only
+  ARMS the gate: `handleShardClaim` dispels the ward, flies the shard into
+  the crown (`built.claimShard` → `setGateCrystal('filled')`), ignites the
+  veil, and plays the arming cutscene (`SHARD_LINES[boundary]`) — THE
+  STORM HOLDS. Using the armed gate (`startAscension` in main) is the
+  point of no return: crystal → 'spent', `world.progress.frontier`
+  advances, `run.ringReached` rises, the next bounty posts, a grand launch
+  beam fires (`durMul 1.7`, `WARD_LINES` spoken mid-flight, camera pulls
+  wide) and `built.setStormFrontier` rolls the storm back WHILE the orb
+  flies. The outer port refuses inward travel forever ("the way back is
+  sealed"); timed events (stars/hearts/merchant) only spawn in regions
+  with `ring >= run.ringReached`. The last launch dissolves the sheet and
+  un-smothers the secrets' surge pillars. STORM HERALDS fade per boundary
+  at launch. Criterion is pluggable: boss tallies later.
+- **STILLMOONS (Round 10)** — every true region (sun, rings 1-4, secrets;
+  never waystations/concourses) grows a 40-50 hex bare-rock SATELLITE
+  PLATFORM attached to its sea rim (`worldgen placeStillmoon`,
+  `hex.stillmoon`, `area.stillmoon = {centerKey, keys, color}`). Ringed
+  regions attach theirs TANGENTIALLY (±π/2 of the spoke) so the moon can
+  never breach a storm boundary; `pickRim` skips stillmoon cells so gates,
+  launches and lodestones still anchor on the true rim. Each moon carries
+  instanced crystals in ONE colour (`STILLMOON_CRYSTALS`, shuffled,
+  cycled) and a small polygonal rock body (`makeStillmoonBody`) afloat
+  over its `moonCore` hex. All of it fog-registered per region.
+- **TELEPORT CONCOURSES + SPRING STONES (Round 10)** — rings 2-4 each
+  thread ONE marble waystation (`TELEPORT_BIOMES`, `area.teleport`,
+  biome-flagged `asteroid` so all waystation exclusions apply; no spring)
+  into a free gap of the ring's gate chain. Its central hex
+  (`hex.teleporter`, `area.teleportStoneKey`) bears a Parthenon-style
+  pillared hut (`makeTemple`) with the teleport stone. Stepping on (or
+  clicking under) the stone opens the STAR CHART + a DOM panel (`#tpanel`)
+  listing the ring's DISCOVERED true regions; every ring 2-4 region keeps
+  an isolated SPRING STONE (`hex.springStone`, `area.springStoneKey`) — a
+  lone rock in the empty nestling gap under the astral body, reachable
+  only by hop (`trySpringHop`: ≤6 hexes on/off the stone). The crossing
+  (`beginTeleportTo`/`updateTeleport`): upward beam takes the wisp →
+  camera pans the orbit → downward beam sets it on the spring stone.
+  `damage()` is inert while `teleport.active`.
+- **CAMERA (Round 10)** — `controls.mode`: 'locked' (default) pins the
+  target to the wisp, either drag ROTATES, zoom capped at `zoomCapFor`
+  (region extent × 2.6 + 70; smooth reel-in when the cap shrinks);
+  'free' = the STAR CHART (`#chartbtn` / M key, `enterChart`/`exitChart`
+  in main): pan/zoom the whole system, clicks never move the wisp, normal
+  area labels swap for space-chart labels (name + orbit + body, runic
+  where undiscovered) plus a "your wisp" marker, all rebuilt fresh each
+  open. Ophthal's eye TRACKS the wisp (`built.setTrackTarget`; the 'eye'
+  body slerps toward it instead of spinning).
 - **HAZARDS (Round 8, trap atlas Round 9)** — assigned in worldgen after
   the start hex, scaled by `biome.dread`, skipped on
   gate/ward/shrine/chain/lodestone/spring/platform hexes and a 4-hex cradle
@@ -155,18 +197,18 @@ paper sun in a dark aetherial papercraft cosmos. Everything is seeded
 
 | File | Role |
 | --- | --- |
-| `config.js` | HEX size, RINGS radii, STORM + STORM_BOUNDARIES + WARD_LINES, TRAPS atlas, HERMITS, LODE_LINES, biome tables, ASTEROID_BIOMES, runes |
-| `worldgen.js` | Seeded gen: layout → regions → gates → storm wards → shrines (baseY platform + hidden helix chain + lodestone) → attachment chains (markets/hermits) → springs → start hex → hazards (trap atlas) |
-| `buildWorld.js` | All meshes/décor/animators + runtime API (igniteGate, claimShard, setStormFrontier, triggerSnare, geyserErupting, mawSnapping, claimAltar, revealChain, claimLodestone, claimBoon, merchant, burstAt, landmarkSpots, bounceIsle, boingGate, wobbleBody, revealArea) |
+| `config.js` | HEX size, RINGS radii, STORM + STORM_BOUNDARIES, SHARD_LINES (arming) + WARD_LINES (launch), TRAPS atlas, HERMITS, LODE_LINES, biome tables, ASTEROID_BIOMES, TELEPORT_BIOMES, STILLMOON_CRYSTALS, runes |
+| `worldgen.js` | Seeded gen: layout (+ teleport concourses in ring gaps) → regions (+ teleporter hex) → stillmoons → gates → storm wards → shrines (baseY platform + hidden helix chain + lodestone) → attachment chains (markets/hermits) → springs → spring stones → start hex → hazards (trap atlas) |
+| `buildWorld.js` | All meshes/décor/animators + runtime API (igniteGate, claimShard, setStormFrontier, setGateCrystal, setTrackTarget, triggerSnare, geyserErupting, mawSnapping, claimAltar, revealChain, claimLodestone, claimBoon, merchant, burstAt, landmarkSpots, bounceIsle, boingGate, wobbleBody, revealArea) |
 | `bodies.js` | sculptBody: bespoke per-body geometry archetypes |
-| `structures.js` | makeDolmenGate (startLit/ignite), makeChomper (6 trap archetypes, setOpen), makeSpringboard, makeMarketStall, makeBoonPedestal, makeHermit, makeAltar, makeHerald, makeLandmark, makeShrineStone (retired, unused) |
-| `cutscene.js` | Camera glide + click-through dialogue (discovery + gate ignition) |
+| `structures.js` | makeDolmenGate (startLit/ignite; grand + setCrystal for ascension gates), makeTemple (Parthenon hut + teleport stone), makeStillmoonBody, makeChomper (6 trap archetypes, setOpen), makeSpringboard, makeMarketStall, makeBoonPedestal, makeHermit, makeAltar, makeHerald, makeLandmark, makeShrineStone (retired, unused) |
+| `cutscene.js` | Camera glide + click-through dialogue (discovery + gate arming) |
 | `decorSets.js` | buildDecorLibrary: ~40 merged decor geometries |
 | `materials.js` | Water shader, energy veil (uIgnite), storm sheet shader, canvas textures |
-| `player.js` | Click-to-sail BFS stepping, `startBlast(destKey, 'arc'\|'line'\|'hop')`, baseY-aware heights |
-| `controls.js` | LMB-drag glide, RMB-drag rotate, wheel zoom (max 3600) |
-| `main.js` | Wiring: run state (hearts/charm/voucher/death), hop logic (tryHop/pendingHops), hazard checks, storm strikes + surges, heart-sprites, falling stars, merchant visits, bounties, shard/lodestone/altar/boon/hermit/spring handlers, hover+path UI, `window.__astral` |
-| `pathfind.js`, `hexmath.js`, `rng.js`, `labels.js`, `ui.js` | Support (ui: renderHearts/renderCharm/setBounty/hurt/deathFade) |
+| `player.js` | Click-to-sail BFS stepping, `startBlast(destKey, 'arc'\|'line'\|'hop', {durMul})`, `blastPointAt(t)` path sampler, baseY-aware heights |
+| `controls.js` | mode 'locked' (either-drag rotate, capped zoom, no pan) \| 'free' (LMB glide), RMB rotate, wheel zoom (max 3600), smooth cap reel-in |
+| `main.js` | Wiring: run state (hearts/charm/voucher/death/ringReached), beam flights + ascension launches, star chart + map labels, teleport sequence, hop logic (tryHop/pendingHops/trySpringHop), hazard checks, storm strikes + surges, heart-sprites, falling stars, merchant visits, bounties, shard/lodestone/altar/boon/hermit/spring/teleporter handlers, hover+path UI, `window.__astral` |
+| `pathfind.js`, `hexmath.js`, `rng.js`, `labels.js`, `ui.js` | Support (ui adds setChartActive/onChartClick/showTeleport/hideTeleport) |
 
 ## Dev workflow
 
@@ -244,7 +286,28 @@ paper sun in a dark aetherial papercraft cosmos. Everything is seeded
   `revealedAreas`; ward/shrine/heart state lives in `world.wards`,
   `world.shrines`, `world.progress`, and main's `run` — none persisted; a
   reload is a fresh run (by design: death reloads with a new seed).
-- `INTRO_LINES` keyed by `biome.key`; `WARD_LINES` indexed by boundary.
+- `INTRO_LINES` keyed by `biome.key`; `SHARD_LINES` (arming cutscene) and
+  `WARD_LINES` (launch dialogue) indexed by boundary.
+- STILLMOON GEOMETRY CONTRACT: moons grow ≤5 hexes from an anchor that is
+  ADJACENT to a rim hex, bounded to `hexRadius + 8` from the region
+  center, tangential on ringed regions — the absolute worst case
+  (rim 98.7u + moon 26u + tile 3u) stays inside every `STORM_BOUNDARIES`
+  gap. `pickRim` MUST keep skipping `hex.stillmoon` (like `baseY`) or
+  gate islets will anchor off moon tips and break the boundary math.
+  Moon cells reject any candidate adjacent to ANOTHER area's hexes.
+- SPRING STONES touch nothing (the nestling gap guarantees ≥`clear` empty
+  hexes around them): BFS can never reach one, only `trySpringHop`
+  (≤6 hex leap on/off). Don't grow anything into the nestling gap.
+- Frontier now advances at LAUNCH, not shard claim: `ward.dispelled` means
+  "armed", `gate.spent` means "used". Surges still key off
+  `world.progress.frontier`, so an armed-but-unlaunched frontier ring
+  keeps its storm and its surges — intended.
+- The chart (`mapFx.active`) blocks sailing clicks and hides hover; it
+  refuses to open while `player.isMoving`/cutscene/teleport. Teleport
+  destinations must be `discovered` AND hold a `springStoneKey`.
+- Locked camera: `controls.maxDist` is rewritten EVERY FRAME in main
+  (zoomCapFor / 3600 in chart / uncapped during launch cinema) — set it
+  nowhere else, it will be overwritten.
 - The cutscene owns the camera by nulling `controls._focusTo` every
   frame; anything else wanting camera control must check `cutscene.active`
   (sail-follow and storm strikes in main do).
@@ -287,9 +350,20 @@ orbiting islets; shrine teleport stones replaced by lodestone-revealed
 helix chains; ward-charms + bounty vouchers; falling stars, storm surges,
 the merchant leviathan, cartographer bounties).
 
+→ Round 10 (single spec, no polls): gate crossings became beam-and-orb
+flights with the camera in tow; the camera locked to the wisp (rotate +
+capped zoom) with a UI star-chart free camera and space-view labels;
+STILLMOONS — 40-50 hex crystal-seeded satellite platforms on every true
+region's rim with a floating rock body; ring progression made ONE-WAY
+through grand crystal-socket ascension gates (shard claim arms, launch
+spends the crystal and dispels the storm mid-flight); Ophthal's eye now
+tracks the wisp; teleport concourses on rings 2-4 — marble waystations
+with a Parthenon temple whose stone teleports (beam up, pan, beam down)
+to any visited same-ring region's spring stone under its astral body.
+
 Dev branch convention: work happens on a `claude/...` branch, PR'd to
 `main` and merged; this round's branch is
-`claude/roguelike-progression-world-bvsh25`. NOTE: GitHub Pages deploys
+`claude/audit-map-progression-elements-jpfcbh`. NOTE: GitHub Pages deploys
 from `main` only — dev branches must NOT be added to the deploy workflow
 triggers (the `github-pages` environment rejects them, and via the shared
 concurrency group a failing dev run can cancel the real deploy).

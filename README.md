@@ -37,12 +37,16 @@ any mount path.
 | Input | Action |
 | --- | --- |
 | **Click** a hex | Sail there, step by step |
-| **Hold left-drag** | Glide the camera across the sea |
-| **Hold right-drag** | Rotate / tilt |
-| **Scroll** | Soar between hex-level and the full orrery |
+| **Hold either drag** | Rotate / tilt (the camera stays locked on your wisp) |
+| **Scroll** | Zoom, out to just beyond the current region |
+| **M** / the ✦ star chart ✦ button | Toggle the free camera: glide the whole orrery under space-chart labels (no sailing while open) |
+| **Esc** | Close the star chart |
 | **F** | Find your wisp |
 | **R** | Generate a new cosmos (random seed) |
 | **H** | Re-show the controls hint |
+
+In the star chart, **left-drag** glides, **right-drag** rotates, and
+**scroll** soars out to the full orrery.
 
 ## What's in the world
 
@@ -55,14 +59,31 @@ any mount path.
   serpents. Threaded between the outermost regions drift three **asteroid
   waystations** — bare-rock reefs with no body and no sea, just stone,
   rubble, and two doorways.
-- **Dolmen waygate blasts** — regions on the same ring are chained by gates:
+- **Dolmen waygate beams** — regions on the same ring are chained by gates:
   pairs of 7-hex rocky node islets bearing ancient dolmen doorways — rough
   mossy pillars, a cracked capstone, rubble, and a shimmering energy field
-  hung between the stones. Same-ring doorways face along the orbit's tangent
-  and their blasts ride the LINE OF ORBIT in a sweeping curve; each ring has
-  exactly ONE randomly-placed passage outward to the next ring, and those
-  gates face their twin for a straight shot across the void. First crossing
-  stirs the gate's named Warden (the boss-fight hook).
+  hung between the stones. Stepping in unmakes the wisp into an ORB OF
+  LIGHT that rides a beam to the twin doorway, camera in tow: same-ring
+  beams sweep the LINE OF ORBIT in a glowing arc, outward beams lance
+  straight across the void. First crossing stirs the gate's named Warden
+  (the boss-fight hook).
+- **One-way ascension gates** — each ring boundary keeps exactly one
+  passage outward: a grand crowned dolmen half again as tall as its kin,
+  with an empty crystal socket in its crown. Claiming the stormheart shard
+  beside it seats the crystal and ARMS the gate; using the gate spends the
+  crystal forever — a great launch beam hurls the orb outward while the
+  maelstrom rolls back around it. There is no way back: outward is the
+  run.
+- **Stillmoons** — every region trails a small satellite platform off its
+  rim: 40-50 hexes of bare rock seeded with crystals in a single colour
+  (each moon its own), beneath a small polygonal rock body floating over
+  the platform's heart.
+- **Teleport concourses** — threaded into rings 2-4 like the waystations,
+  but dressed marble: a Parthenon-style pillared hut keeps a teleport
+  stone. Step up and the star chart unfolds with every charted island on
+  the orbit; choose one and a beam takes you skyward, the camera pans the
+  ring, and a second beam sets you down on the region's spring stone — a
+  lone rock beneath its astral body, a short hop from the nestling waters.
 - **Astral waters with depth** — every region has its own named water (the
   Heliotide, the Quicksilver Race, the Lidless Calm…). Hexes sink to
   different levels of the cosmic deep, near-borderless, with soft light-bands

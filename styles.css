@@ -243,3 +243,99 @@ html, body {
   color: #9aa3cc;
   opacity: 0.85;
 }
+
+/* ---- star chart (free camera) toggle ---- */
+#chartbtn {
+  position: absolute;
+  top: 18px;
+  right: 20px;
+  pointer-events: auto;
+  cursor: pointer;
+  font-family: 'Cinzel', serif;
+  font-size: 13px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: #c9d4ef;
+  padding: 7px 14px;
+  border: 1px solid rgba(159, 216, 255, 0.28);
+  border-radius: 2px;
+  background: rgba(20, 23, 46, 0.55);
+  text-shadow: 0 2px 0 rgba(43, 38, 74, 0.85);
+  transition: color 0.3s ease, border-color 0.3s ease, background 0.3s ease;
+  user-select: none;
+}
+#chartbtn:hover { color: #fff0cf; border-color: rgba(255, 227, 176, 0.5); }
+#chartbtn.active {
+  color: #14172e;
+  background: rgba(255, 227, 176, 0.85);
+  border-color: rgba(255, 227, 176, 0.9);
+  text-shadow: none;
+}
+
+/* ---- teleport stone panel ---- */
+#tpanel {
+  position: absolute;
+  top: 50%;
+  right: 34px;
+  transform: translateY(-50%) translateX(24px);
+  width: 250px;
+  padding: 18px 20px 14px;
+  background: rgba(16, 19, 40, 0.82);
+  border: 1px solid rgba(159, 216, 255, 0.3);
+  border-radius: 3px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.45s ease, transform 0.45s ease;
+}
+#tpanel.show {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(-50%) translateX(0);
+}
+#tpanel-title {
+  font-family: 'Cinzel', serif;
+  font-size: 15px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #cfe8ff;
+  text-shadow: 0 0 12px rgba(159, 216, 255, 0.5);
+}
+#tpanel-sub {
+  margin-top: 4px;
+  font-size: 13px;
+  font-style: italic;
+  letter-spacing: 0.1em;
+  color: #9aa3cc;
+}
+#tpanel-list { margin-top: 12px; }
+#tpanel-list .tp-dest {
+  padding: 7px 8px;
+  margin: 3px -8px;
+  font-size: 16px;
+  letter-spacing: 0.08em;
+  color: #eaf2ff;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+#tpanel-list .tp-dest:hover {
+  background: rgba(159, 216, 255, 0.12);
+  border-left-color: rgba(159, 216, 255, 0.7);
+}
+#tpanel-list .tp-none {
+  padding: 7px 0;
+  font-size: 14px;
+  font-style: italic;
+  color: #9aa3cc;
+}
+#tpanel-cancel {
+  margin-top: 12px;
+  text-align: center;
+  font-size: 12px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: #9aa3cc;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+#tpanel-cancel:hover { color: #fff0cf; }

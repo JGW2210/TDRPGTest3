@@ -15,6 +15,7 @@ import { sculptBody } from './bodies.js';
 import {
   makeDolmenGate, makeLandmark, makeAltar, makeHerald, makeChomper,
   makeSpringboard, makeMarketStall, makeBoonPedestal, makeHermit,
+  makeTemple, makeStillmoonBody,
 } from './structures.js';
 import { buildDecorLibrary } from './decorSets.js';
 import { makeLabel } from './labels.js';
@@ -53,6 +54,10 @@ export function buildWorld(world, rng) {
   const animators = [];
   const glowTex = makeGlowSpriteTexture();
   const gradientMap = makeToonGradient();
+
+  // a live position (the wisp's) that watching things may follow
+  let trackRef = null;
+  const setTrackTarget = (v) => { trackRef = v; };
 
   // ------------------------------------------------------------ water hexes
   const waterKeys = [];
@@ -219,6 +224,13 @@ export function buildWorld(world, rng) {
     if (h.astral) {
       // shrine platform stone: pale violet, unclaimed by any biome
       col = tone(jitterColor(0x9a8fd4, rng, 0.06), 0.7, 0.85);
+    } else if (h.rock && area.teleport) {
+      // teleport concourses are dressed marble, not raw void-rock
+      col = tone(jitterColor(0xd8d2c0, rng, 0.05), 0.4, 0.95);
+    } else if (h.rock && h.stillmoon) {
+      // stillmoon rock leans toward its crystal's colour
+      col = tone(jitterColor(0x77718c, rng, 0.07), 0.55, 0.8);
+      if (area.stillmoon) col.lerp(new THREE.Color(area.stillmoon.color), 0.14);
     } else if (h.rock) {
       // gate node islets and asteroid reefs are bare rock, unclaimed by any biome
       col = tone(jitterColor(0x6e6e80, rng, 0.08), 0.5, 0.75);
@@ -684,10 +696,24 @@ export function buildWorld(world, rng) {
       bodyGroup.add(planet);
       if (outline) bodyGroup.add(outline);
       const spin = 0.02 + rng.float() * 0.05;
-      animators.push((t, dt) => {
-        planet.rotation.y += dt * spin;
-        if (outline) outline.rotation.y = planet.rotation.y;
-      });
+      if (b.bodyShape === 'eye') {
+        // Ophthal does not idle: the eye turns to FOLLOW the wisp wherever
+        // it sails (main hands us the live position via setTrackTarget)
+        const qFrom = new THREE.Quaternion();
+        const qTo = new THREE.Quaternion();
+        animators.push((t, dt) => {
+          if (!trackRef) return;
+          qFrom.copy(planet.quaternion);
+          planet.lookAt(trackRef.x, trackRef.y, trackRef.z);
+          qTo.copy(planet.quaternion);
+          planet.quaternion.copy(qFrom).slerp(qTo, Math.min(1, dt * 1.6));
+        });
+      } else {
+        animators.push((t, dt) => {
+          planet.rotation.y += dt * spin;
+          if (outline) outline.rotation.y = planet.rotation.y;
+        });
+      }
 
       const halo = new THREE.Sprite(new THREE.SpriteMaterial({
         map: glowTex, color: b.island.glow, transparent: true,
@@ -812,6 +838,8 @@ export function buildWorld(world, rng) {
   const labelsByGate = new Map();
   const gatePortGroups = new Map();
   const gateIgniters = new Map(); // gateId -> [ignite fns]
+  const gateCrystalFns = new Map(); // gateId -> [setCrystal fns] (grand gates)
+  const gateCrystalY = new Map(); // gateId -> local socket height
   const portHitboxes = []; // invisible click targets over each doorway
 
   for (const gate of world.gates) {
@@ -823,17 +851,25 @@ export function buildWorld(world, rng) {
     const groupsForGate = [];
     const gateLabels = [];
     const igniters = [];
+    const crystalFns = [];
     for (const port of ports) {
       const h = world.hexes.get(port.key);
       const other = world.hexes.get(port.otherKey);
       const p = Hx.toWorld(h.q, h.r, HEX);
       const po = Hx.toWorld(other.q, other.r, HEX);
-      // stormbound outward gates begin dark: the veil arrives with the shard
-      const { group: g, ignite } = makeDolmenGate({
+      // stormbound outward gates begin dark: the veil arrives with the shard.
+      // Ring-boundary crossings get the GRAND ascension gate — taller, truer,
+      // crowned with the socket that takes the stormheart crystal.
+      const { group: g, ignite, setCrystal, crystalY } = makeDolmenGate({
         rng, gradientMap, glyphTex, glowTex, animators,
         startLit: gate.wardId === undefined,
+        grand: gate.boundary !== undefined,
       });
       igniters.push(ignite);
+      if (gate.boundary !== undefined) {
+        crystalFns.push(setCrystal);
+        gateCrystalY.set(gate.id, crystalY);
+      }
       g.position.set(p.x, Math.max(0, h.elev - 0.25), p.z);
       if (gate.kind === 'ring') {
         // same-ring doorways open along the orbit's tangent (signed toward
@@ -880,6 +916,12 @@ export function buildWorld(world, rng) {
     labelsByGate.set(gate.id, gateLabels);
     gatePortGroups.set(gate.id, groupsForGate);
     gateIgniters.set(gate.id, igniters);
+    if (crystalFns.length) gateCrystalFns.set(gate.id, crystalFns);
+  }
+
+  // seat / spend the crystal in a grand gate's crown (both doorways agree)
+  function setGateCrystal(gateId, state) {
+    for (const fn of gateCrystalFns.get(gateId) ?? []) fn(state);
   }
 
   // ------------------------------------------------------------ effect bursts
@@ -942,11 +984,17 @@ export function buildWorld(world, rng) {
     fx.group.userData.claimed = true;
     const gh = world.hexes.get(world.gates[ward.gateId].portA);
     const gp = Hx.toWorld(gh.q, gh.r, HEX);
+    // the shard streaks to the grand gate's crown and seats itself there
+    const socketY = gateCrystalY.get(ward.gateId) ?? 6.1;
     shardFlights.push({
       obj: fx.group,
       from: fx.group.position.clone(),
-      to: new THREE.Vector3(gp.x, Math.max(0, gh.elev - 0.25) + 6.1, gp.z),
-      t: 0, dur: 1.15, onDone,
+      to: new THREE.Vector3(gp.x, Math.max(0, gh.elev - 0.25) + socketY, gp.z),
+      t: 0, dur: 1.15,
+      onDone: () => {
+        setGateCrystal(ward.gateId, 'filled');
+        onDone?.();
+      },
     });
   }
 
@@ -1189,6 +1237,118 @@ export function buildWorld(world, rng) {
       pool.material.opacity = 0.36 + 0.18 * Math.sin(t * 1.3 + ph);
       glow.material.opacity = 0.3 + 0.14 * Math.sin(t * 2.1 + ph);
     });
+  }
+
+  // ------------------------------------------------------------ stillmoons
+  // Crystals seeded through each stillmoon's rock — one colour per moon —
+  // and the small polygonal rock body afloat above its heart.
+  {
+    const placements = []; // { m, c, a }
+    for (const area of world.areas) {
+      if (!area.stillmoon) continue;
+      const moonCol = new THREE.Color(area.stillmoon.color);
+      for (const k of area.stillmoon.keys) {
+        const h = world.hexes.get(k);
+        if (h.moonCore || !rng.chance(0.55)) continue;
+        const p = Hx.toWorld(h.q, h.r, HEX);
+        const n = 1 + rng.int(3);
+        for (let j = 0; j < n; j++) {
+          DUMMY.position.set(
+            p.x + (rng.float() - 0.5) * HEX * 1.2,
+            h.elev,
+            p.z + (rng.float() - 0.5) * HEX * 1.2
+          );
+          DUMMY.rotation.set((rng.float() - 0.5) * 0.7, rng.angle(), (rng.float() - 0.5) * 0.7);
+          const s = 0.3 + rng.float() * 0.5;
+          DUMMY.scale.set(s, s * (1.6 + rng.float() * 1.6), s);
+          DUMMY.updateMatrix();
+          placements.push({
+            m: DUMMY.matrix.clone(),
+            c: tone(jitterColor(area.stillmoon.color, rng, 0.08), 0.95, 0.8),
+            a: area.id,
+          });
+        }
+      }
+      // the floating rock body over the moon's central hex
+      const ch = world.hexes.get(area.stillmoon.centerKey);
+      const cp = Hx.toWorld(ch.q, ch.r, HEX);
+      const body = makeStillmoonBody({ rng, gradientMap, color: area.stillmoon.color });
+      const hoverY = ch.elev + 9;
+      body.position.set(cp.x, hoverY, cp.z);
+      const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: glowTex, color: moonCol, transparent: true, opacity: 0.22,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      }));
+      halo.scale.setScalar(11);
+      halo.renderOrder = 3;
+      body.add(halo);
+      group.add(body);
+      regFx(area.id, body);
+      const ph = rng.angle();
+      const spin = 0.06 + rng.float() * 0.08;
+      animators.push((t, dt) => {
+        body.rotation.y += dt * spin;
+        body.position.y = hoverY + Math.sin(t * 0.7 + ph) * 0.6;
+      });
+    }
+    if (placements.length) {
+      const geo = new THREE.OctahedronGeometry(0.5, 0);
+      const mesh = new THREE.InstancedMesh(geo, new THREE.MeshBasicMaterial(), placements.length);
+      const byArea = new Map();
+      placements.forEach((it, i) => {
+        mesh.setMatrixAt(i, it.m);
+        mesh.setColorAt(i, it.c);
+        if (!byArea.has(it.a)) byArea.set(it.a, []);
+        byArea.get(it.a).push(i);
+      });
+      group.add(mesh);
+      instanceGroups.push({ mesh, base: mesh.instanceMatrix.array.slice(), byArea });
+    }
+  }
+
+  // ------------------------------------------------------------ teleport temples
+  // The Parthenon-hut over each concourse's teleport stone, and the spring
+  // stones its crossings arrive on — a soft rising beacon under each body.
+  for (const area of world.areas) {
+    if (area.teleportStoneKey) {
+      const h = world.hexes.get(area.teleportStoneKey);
+      const p = Hx.toWorld(h.q, h.r, HEX);
+      const temple = makeTemple({ rng, gradientMap, glowTex, animators });
+      temple.position.set(p.x, h.elev, p.z);
+      temple.rotation.y = rng.angle();
+      group.add(temple);
+      regFx(area.id, temple);
+    }
+    if (area.springStoneKey) {
+      const h = world.hexes.get(area.springStoneKey);
+      const p = Hx.toWorld(h.q, h.r, HEX);
+      const g = new THREE.Group();
+      const pad = new THREE.Mesh(
+        new THREE.CircleGeometry(1.5, 20).rotateX(-Math.PI / 2),
+        new THREE.MeshBasicMaterial({
+          color: 0x9fd8ff, transparent: true, opacity: 0.3,
+          blending: THREE.AdditiveBlending, depthWrite: false,
+        })
+      );
+      pad.position.y = h.elev + 0.08;
+      pad.renderOrder = 2;
+      const mote = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: glowTex, color: 0x9fd8ff, transparent: true, opacity: 0.35,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      }));
+      mote.position.y = h.elev + 1.6;
+      mote.scale.setScalar(4);
+      mote.renderOrder = 3;
+      g.add(pad, mote);
+      g.position.set(p.x, 0, p.z);
+      group.add(g);
+      regFx(area.id, g);
+      const ph = rng.angle();
+      animators.push((t) => {
+        pad.material.opacity = 0.22 + 0.14 * Math.sin(t * 1.6 + ph);
+        mote.position.y = h.elev + 1.6 + Math.sin(t * 1.1 + ph) * 0.4;
+      });
+    }
   }
 
   // ------------------------------------------------------------ astral shrines
@@ -2128,9 +2288,9 @@ export function buildWorld(world, rng) {
     group, animate,
     waterMesh, isleMesh, waterKeys, isleKeys, portHitboxes,
     labelsByArea, labelsByGate, labelsByLandmark, landmarkSpots,
-    igniteGate, claimShard, setStormFrontier,
+    igniteGate, claimShard, setStormFrontier, setGateCrystal,
     triggerSnare, geyserErupting, mawSnapping, claimAltar,
     revealChain, claimLodestone, claimBoon, merchant, burstAt,
-    bounceIsle, boingGate, wobbleBody, revealArea,
+    bounceIsle, boingGate, wobbleBody, revealArea, setTrackTarget,
   };
 }
