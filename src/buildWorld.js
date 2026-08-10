@@ -13,7 +13,7 @@ import {
 } from './materials.js';
 import { sculptBody } from './bodies.js';
 import {
-  makeDolmenGate, makeLandmark, makeAltar, makeHerald, makeChomper,
+  makeDolmenGate, makeLandmark, makeAltar, makeChomper,
   makeSpringboard, makeMarketStall, makeBoonPedestal, makeHermit,
   makeTemple, makeStillmoonBody,
 } from './structures.js';
@@ -1024,35 +1024,11 @@ export function buildWorld(world, rng) {
   stormMesh.renderOrder = 5;
   group.add(stormMesh);
 
-  // vast wardens pace the storm beside each sealed outward gate — deliberately
-  // NOT fogged: silhouettes through the maelstrom are the invitation
-  const heraldFx = new Map(); // boundary -> group
-  for (const ward of world.wards) {
-    const gate = world.gates[ward.gateId];
-    const ph = world.hexes.get(gate.portB);
-    const pw = Hx.toWorld(ph.q, ph.r, HEX);
-    const ang = Math.atan2(pw.z, pw.x);
-    const R = STORM_BOUNDARIES[ward.boundary] + 55;
-    const herald = makeHerald({ rng, glowTex });
-    const ph0 = rng.angle();
-    group.add(herald);
-    heraldFx.set(ward.boundary, herald);
-    animators.push((t) => {
-      if (herald.userData.gone) return;
-      const a = ang + Math.sin(t * 0.05 + ph0) * 0.2;
-      herald.position.set(Math.cos(a) * R, 2 + Math.sin(t * 0.4 + ph0) * 1.5, Math.sin(a) * R);
-      herald.rotation.y = -a + Math.PI / 2; // it watches the calm within
-    });
-  }
+  // (the storm heralds are retired — the maelstrom speaks for itself)
 
   function setStormFrontier(frontier) {
     if (frontier >= STORM_BOUNDARIES.length) stormState.fadeTarget = 0;
     else stormState.target = STORM_BOUNDARIES[frontier];
-    const herald = heraldFx.get(frontier - 1);
-    if (herald && !herald.userData.gone) {
-      herald.userData.gone = true;
-      fadeOuts.push({ obj: herald, t: 0 });
-    }
   }
 
   // ------------------------------------------------------------ hazards
@@ -2286,7 +2262,7 @@ export function buildWorld(world, rng) {
 
   return {
     group, animate,
-    waterMesh, isleMesh, waterKeys, isleKeys, portHitboxes,
+    waterMesh, isleMesh, waterKeys, isleKeys, portHitboxes, bodyGroups,
     labelsByArea, labelsByGate, labelsByLandmark, landmarkSpots,
     igniteGate, claimShard, setStormFrontier, setGateCrystal,
     triggerSnare, geyserErupting, mawSnapping, claimAltar,

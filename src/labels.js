@@ -23,7 +23,11 @@ function drawLabel(ctx, w, h, title, sub, color, subColor) {
   }
 }
 
-export function makeLabel({ title, sub = '', color = '#ffe3b0', subColor = '#9fd8ff', scale = 40, startHidden = false }) {
+// screenSpace: true renders the label at a CONSTANT SCREEN SIZE regardless
+// of camera distance (sizeAttenuation off) — scale is then a fraction of the
+// viewport height rather than world units. Used by the star chart, whose
+// labels must stay readable from the full orrery zoom.
+export function makeLabel({ title, sub = '', color = '#ffe3b0', subColor = '#9fd8ff', scale = 40, startHidden = false, screenSpace = false }) {
   const w = 640, h = 160;
   const canvas = document.createElement('canvas');
   canvas.width = w;
@@ -40,6 +44,7 @@ export function makeLabel({ title, sub = '', color = '#ffe3b0', subColor = '#9fd
   // depthTest off + high renderOrder: name text always reads above the tiles
   const mat = new THREE.SpriteMaterial({
     map: tex, transparent: true, depthWrite: false, depthTest: false, toneMapped: false,
+    sizeAttenuation: !screenSpace,
   });
   const sprite = new THREE.Sprite(mat);
   sprite.renderOrder = 30;

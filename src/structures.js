@@ -720,8 +720,8 @@ export function makeHermit({ rng, gradientMap, glowTex, animators }) {
 }
 
 // ---------------------------------------------------------------- storm herald
-// A vast slow warden pacing the maelstrom beside a sealed outward gate —
-// a dark silhouette glimpsed through the storm, gone when the gate ignites.
+// RETIRED (Round 10.1): the warden silhouettes no longer pace the storm.
+// Kept for reference, like makeShrineStone — nothing imports it.
 export function makeHerald({ rng, glowTex }) {
   const g = new THREE.Group();
   const dark = new THREE.MeshBasicMaterial({ color: 0x0e0b1e });

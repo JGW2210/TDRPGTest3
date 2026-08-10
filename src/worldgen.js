@@ -456,108 +456,6 @@ export function generateWorld(seedStr) {
     return best;
   };
 
-  // ---------------------------------------------------------------- stillmoons
-  // Every true region grows a STILLMOON off its rim: a 40-50 hex satellite
-  // platform of bare rock seeded with crystals of one colour, a small
-  // polygonal rock body floating over its heart. Ringed regions attach theirs
-  // TANGENTIALLY (along the orbit) so the moon can never poke through a storm
-  // boundary; the sun and the secrets may face anywhere.
-  const moonPalette = rng.shuffle(STILLMOON_CRYSTALS.slice());
-  let moonCursor = 0;
-
-  function placeStillmoon(area) {
-    const ch = Hx.toHex(area.pos.x, area.pos.z, HEX);
-    for (let tries = 0; tries < 12; tries++) {
-      let dirAng;
-      if (area.ring >= 1 && !area.secret) {
-        dirAng = area.angle + (rng.chance(0.5) ? 1 : -1) * (Math.PI / 2) + rng.range(-0.3, 0.3);
-      } else {
-        dirAng = rng.angle();
-      }
-      const rim = pickRim(area, {
-        x: area.pos.x + Math.cos(dirAng) * 4000,
-        z: area.pos.z + Math.sin(dirAng) * 4000,
-      });
-      if (!rim) continue;
-      const rp = worldOf(rim);
-      // the anchor must sit ADJACENT to the rim hex — that adjacency is the
-      // attachment; a gap would strand the moon beyond the wisp's reach
-      const ac = Hx.toHex(
-        rp.x + Math.cos(dirAng) * HEX * Hx.SQRT3,
-        rp.z + Math.sin(dirAng) * HEX * Hx.SQRT3, HEX
-      );
-      if (hexes.has(Hx.key(ac.q, ac.r))) continue;
-      if (Hx.dist(ac.q, ac.r, rim.q, rim.r) !== 1) continue;
-      // no cell of the moon may touch another area's hexes
-      const foreign = (q, r) => {
-        for (const d of Hx.DIRS) {
-          const nh = hexes.get(Hx.key(q + d[0], r + d[1]));
-          if (nh && nh.areaId !== area.id) return true;
-        }
-        return false;
-      };
-      if (foreign(ac.q, ac.r)) continue;
-
-      const target = 40 + rng.int(11);
-      const localKey = (q, r) => q + ',' + r;
-      const cells = new Set([localKey(ac.q, ac.r)]);
-      const frontier = [[ac.q, ac.r]];
-      let guard = 0;
-      while (cells.size < target && guard++ < 8000) {
-        const [fq, fr] = frontier[rng.int(frontier.length)];
-        const d = Hx.DIRS[rng.int(6)];
-        const nq = fq + d[0], nr = fr + d[1];
-        const nk = localKey(nq, nr);
-        if (cells.has(nk) || hexes.has(Hx.key(nq, nr))) continue;
-        if (Hx.dist(nq, nr, ac.q, ac.r) > 5) continue;             // compact
-        if (Hx.dist(nq, nr, ch.q, ch.r) > area.hexRadius + 8) continue; // bounded
-        if (foreign(nq, nr)) continue;
-        cells.add(nk);
-        frontier.push([nq, nr]);
-      }
-      if (cells.size < 40) continue; // cramped sky — try another bearing
-
-      // commit: bare rock, a touch higher toward the heart
-      const keys = [];
-      let cx = 0, cz = 0;
-      for (const k of cells) {
-        const [q, r] = k.split(',').map(Number);
-        const p = Hx.toWorld(q, r, HEX);
-        cx += p.x; cz += p.z;
-      }
-      cx /= cells.size; cz /= cells.size;
-      let coreKey = null, coreD = Infinity;
-      for (const k of cells) {
-        const [q, r] = k.split(',').map(Number);
-        const p = Hx.toWorld(q, r, HEX);
-        const dCore = Math.hypot(p.x - cx, p.z - cz);
-        const rec = setHex(q, r, {
-          kind: 'isle', areaId: area.id,
-          elev: 0.4 + rng.float() * 0.5 + Math.max(0, 1 - dCore / (HEX * 6)) * 0.35,
-          islandId: null, rock: true, stillmoon: true,
-          flow: [0, 0], faint: false, blocked: false, levi: false,
-          gateId: null,
-        });
-        void rec;
-        const kk = Hx.key(q, r);
-        area.hexKeys.push(kk);
-        keys.push(kk);
-        if (dCore < coreD) { coreD = dCore; coreKey = kk; }
-      }
-      hexes.get(coreKey).moonCore = true;
-      area.stillmoon = {
-        centerKey: coreKey, keys,
-        color: moonPalette[moonCursor++ % moonPalette.length],
-      };
-      return area.stillmoon;
-    }
-    return null;
-  }
-  for (const area of areas) {
-    if (area.asteroid) continue; // waystations and concourses stay bare
-    placeStillmoon(area);
-  }
-
   for (let ri = 1; ri < ringGroups.length; ri++) {
     const g = ringGroups[ri].slice().sort((p, q2) => p.angle - q2.angle);
     const isOuter = ri === ringGroups.length - 1;
@@ -627,6 +525,126 @@ export function generateWorld(seedStr) {
     wards.push(ward);
   }
   wards.sort((a, b) => a.boundary - b.boundary);
+
+  // ---------------------------------------------------------------- stillmoons
+  // ~30% of the RING regions (never the sun, the secrets, or the bare
+  // waystations) grow a STILLMOON off their rim: a 25-30 hex satellite
+  // platform of bare rock seeded with crystals of one colour, a small
+  // polygonal rock body floating over its heart. Moons are placed AFTER the
+  // gates and wards so they can keep well away from them: no moon cell may
+  // come within 3 hexes of a gate islet or a shard perch.
+  const moonPalette = rng.shuffle(STILLMOON_CRYSTALS.slice());
+  let moonCursor = 0;
+
+  // keep-out zone: every hex within 3 of a doorway or a stormheart perch
+  const gateZone = new Set();
+  for (const [k, h] of hexes) {
+    if (h.gateId === null && h.wardId === undefined) continue;
+    const { q, r } = Hx.parseKey(k);
+    for (let dq = -3; dq <= 3; dq++) {
+      for (let dr = Math.max(-3, -dq - 3); dr <= Math.min(3, -dq + 3); dr++) {
+        gateZone.add(Hx.key(q + dq, r + dr));
+      }
+    }
+  }
+
+  function placeStillmoon(area) {
+    const ch = Hx.toHex(area.pos.x, area.pos.z, HEX);
+    for (let tries = 0; tries < 16; tries++) {
+      // any bearing dodges the gates best; ring 1 only may not face the sun
+      // (a sunward moon there could poke inside the innermost calm circle)
+      const dirAng = rng.angle();
+      if (area.ring === 1) {
+        let dIn = dirAng - (area.angle + Math.PI);
+        while (dIn > Math.PI) dIn -= TAU;
+        while (dIn < -Math.PI) dIn += TAU;
+        if (Math.abs(dIn) < 0.9) continue;
+      }
+      const rim = pickRim(area, {
+        x: area.pos.x + Math.cos(dirAng) * 4000,
+        z: area.pos.z + Math.sin(dirAng) * 4000,
+      });
+      if (!rim) continue;
+      const rp = worldOf(rim);
+      // the anchor must sit ADJACENT to the rim hex — that adjacency is the
+      // attachment; a gap would strand the moon beyond the wisp's reach
+      const ac = Hx.toHex(
+        rp.x + Math.cos(dirAng) * HEX * Hx.SQRT3,
+        rp.z + Math.sin(dirAng) * HEX * Hx.SQRT3, HEX
+      );
+      if (hexes.has(Hx.key(ac.q, ac.r))) continue;
+      if (Hx.dist(ac.q, ac.r, rim.q, rim.r) !== 1) continue;
+      if (gateZone.has(Hx.key(ac.q, ac.r))) continue;
+      // no cell of the moon may touch another area's hexes
+      const foreign = (q, r) => {
+        for (const d of Hx.DIRS) {
+          const nh = hexes.get(Hx.key(q + d[0], r + d[1]));
+          if (nh && nh.areaId !== area.id) return true;
+        }
+        return false;
+      };
+      if (foreign(ac.q, ac.r)) continue;
+
+      const target = 25 + rng.int(6);
+      const localKey = (q, r) => q + ',' + r;
+      const cells = new Set([localKey(ac.q, ac.r)]);
+      const frontier = [[ac.q, ac.r]];
+      let guard = 0;
+      while (cells.size < target && guard++ < 8000) {
+        const [fq, fr] = frontier[rng.int(frontier.length)];
+        const d = Hx.DIRS[rng.int(6)];
+        const nq = fq + d[0], nr = fr + d[1];
+        const nk = localKey(nq, nr);
+        if (cells.has(nk) || hexes.has(Hx.key(nq, nr))) continue;
+        if (Hx.dist(nq, nr, ac.q, ac.r) > 4) continue;             // compact
+        if (Hx.dist(nq, nr, ch.q, ch.r) > area.hexRadius + 8) continue; // bounded
+        if (gateZone.has(Hx.key(nq, nr))) continue;                // clear of gates
+        if (foreign(nq, nr)) continue;
+        cells.add(nk);
+        frontier.push([nq, nr]);
+      }
+      if (cells.size < 25) continue; // cramped sky — try another bearing
+
+      // commit: bare rock, a touch higher toward the heart
+      const keys = [];
+      let cx = 0, cz = 0;
+      for (const k of cells) {
+        const [q, r] = k.split(',').map(Number);
+        const p = Hx.toWorld(q, r, HEX);
+        cx += p.x; cz += p.z;
+      }
+      cx /= cells.size; cz /= cells.size;
+      let coreKey = null, coreD = Infinity;
+      for (const k of cells) {
+        const [q, r] = k.split(',').map(Number);
+        const p = Hx.toWorld(q, r, HEX);
+        const dCore = Math.hypot(p.x - cx, p.z - cz);
+        setHex(q, r, {
+          kind: 'isle', areaId: area.id,
+          elev: 0.4 + rng.float() * 0.5 + Math.max(0, 1 - dCore / (HEX * 5)) * 0.35,
+          islandId: null, rock: true, stillmoon: true,
+          flow: [0, 0], faint: false, blocked: false, levi: false,
+          gateId: null,
+        });
+        const kk = Hx.key(q, r);
+        area.hexKeys.push(kk);
+        keys.push(kk);
+        if (dCore < coreD) { coreD = dCore; coreKey = kk; }
+      }
+      hexes.get(coreKey).moonCore = true;
+      area.stillmoon = {
+        centerKey: coreKey, keys,
+        color: moonPalette[moonCursor++ % moonPalette.length],
+      };
+      return area.stillmoon;
+    }
+    return null;
+  }
+  for (const area of areas) {
+    if (area.asteroid || area.secret || area.ring === 0) continue;
+    if (!rng.chance(0.3)) continue;
+    placeStillmoon(area);
+  }
 
   // ---------------------------------------------------------------- rock-hop helpers
   // A single new rock cell just off the region's rim, facing `toward` —

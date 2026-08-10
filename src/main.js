@@ -367,6 +367,13 @@ function startFlightBeam(isLaunch = false) {
   if (!player.blast) return;
   const pts = [];
   for (let i = 0; i <= 64; i++) pts.push(player.blastPointAt(i / 64, new THREE.Vector3()));
+  // end-to-end framing: a bounding sphere of the whole path lets the camera
+  // hold the beam in view from doorway to doorway while the orb flies
+  const center = new THREE.Box3().setFromPoints(pts).getCenter(new THREE.Vector3());
+  let radius = 0;
+  for (const p of pts) radius = Math.max(radius, center.distanceTo(p));
+  flight.frameCenter = center;
+  flight.frameDist = THREE.MathUtils.clamp(radius * 2.5, 200, 3400);
   const curve = new THREE.CatmullRomCurve3(pts);
   const geo = new THREE.TubeGeometry(curve, 96, isLaunch ? 1.15 : 0.5, 7, false);
   const beam = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
@@ -497,6 +504,20 @@ function handleGate(hex, hexKey) {
 const cam = { mode: 'locked' };
 const camFocus = new THREE.Vector3();
 const mapFx = { active: false, sprites: [], you: null };
+// the chart's own machinery: auto-glide, swollen hover-reactive bodies
+const CHART_HOME = new THREE.Vector3(0, 0, 0);
+const CHART_DIST = 2800;
+const chartFx = { bodies: [], hitboxes: [], hovered: -1, easing: false, openedPerf: 0 };
+const chartHitMat = new THREE.MeshBasicMaterial();
+// teleport selection: violet-lit bodies on the current orbit are the picker
+const tpSelect = { active: false, ring: 0, dests: [], fx: [] };
+
+function chartScaleFor(area) {
+  const b = area.biome;
+  if (b.bodyKind === 'sun') return 2.5;
+  if (b.bodyKind === 'rubble') return 5;
+  return 6;
+}
 
 function buildMapLabels() {
   const romans = ['·', 'I', 'II', 'III', 'IV', '✧'];
@@ -509,19 +530,23 @@ function buildMapLabels() {
     else if (area.teleport) sub = `orbit ${romans[area.ring]} ᛫ teleport concourse`;
     else if (area.asteroid) sub = `orbit ${romans[area.ring]} ᛫ waystation`;
     else sub = disc ? `orbit ${romans[area.ring]} ᛫ ${b.body}` : `orbit ${romans[area.ring]} ᛫ uncharted`;
+    // screen-space labels: constant on-screen size, readable from the full
+    // orrery zoom (scale is a fraction of the viewport height)
     const label = makeLabel({
       title: disc ? b.area : toRunes(b.area),
       sub,
       color: disc ? '#ffe3b0' : '#8f9ac2',
       subColor: disc ? '#9fd8ff' : '#6f7aa6',
-      scale: area.asteroid ? 26 : 40,
+      scale: area.asteroid ? 0.17 : 0.23,
+      screenSpace: true,
     });
-    const y = (b.bodyKind === 'sun' ? 20 : b.bodySize + 7) + b.bodySize + 24;
+    const y = (b.bodyKind === 'sun' ? 20 : b.bodySize + 7)
+      + b.bodySize * chartScaleFor(area) + 16;
     label.sprite.position.set(area.pos.x, y, area.pos.z);
     scene.add(label.sprite);
     mapFx.sprites.push(label.sprite);
   }
-  const you = makeLabel({ title: '✦ your wisp ✦', color: '#ffe9c4', scale: 24 });
+  const you = makeLabel({ title: '✦ your wisp ✦', color: '#ffe9c4', scale: 0.14, screenSpace: true });
   scene.add(you.sprite);
   mapFx.sprites.push(you.sprite);
   mapFx.you = you.sprite;
@@ -537,6 +562,17 @@ function destroyMapLabels() {
   mapFx.you = null;
 }
 
+function clearTpSelect() {
+  for (const o of tpSelect.fx) {
+    scene.remove(o);
+    o.material?.dispose?.();
+    o.geometry?.dispose?.();
+  }
+  tpSelect.fx = [];
+  tpSelect.active = false;
+  tpSelect.dests = [];
+}
+
 function enterChart() {
   if (mapFx.active || cutscene.active || teleport.active || run.dead || player.isMoving) return false;
   mapFx.active = true;
@@ -546,6 +582,30 @@ function enterChart() {
   ui.hideHover();
   for (const l of built.labelsByArea.values()) l.sprite.visible = false;
   buildMapLabels();
+  // the chart glides out to the full orrery by itself (until it arrives,
+  // or the user takes over the pan) — completion-based, not timed, so it
+  // finishes at any frame rate
+  chartFx.easing = true;
+  chartFx.openedPerf = performance.now() / 1000;
+  chartFx.hovered = -1;
+  chartFx.bodies = [];
+  chartFx.hitboxes = [];
+  for (const area of world.areas) {
+    if (!area.discovered) continue;
+    const g = built.bodyGroups.get(area.id);
+    if (!g) continue;
+    chartFx.bodies.push({ areaId: area.id, g, y0: g.position.y, f: chartScaleFor(area) });
+    // a generous invisible bubble makes each swollen body easy to hover
+    const hit = new THREE.Mesh(
+      new THREE.SphereGeometry(Math.max(45, area.biome.bodySize * chartScaleFor(area) * 1.25), 8, 6),
+      chartHitMat
+    );
+    hit.visible = false;
+    hit.position.copy(g.position);
+    hit.userData.areaId = area.id;
+    scene.add(hit);
+    chartFx.hitboxes.push(hit);
+  }
   return true;
 }
 
@@ -555,7 +615,20 @@ function exitChart() {
   cam.mode = controls.mode = 'locked';
   ui.setChartActive(false);
   ui.hideTeleport();
+  ui.hideHover();
   destroyMapLabels();
+  clearTpSelect();
+  for (const b of chartFx.bodies) {
+    b.g.scale.setScalar(1);
+    b.g.position.y = b.y0;
+  }
+  chartFx.bodies = [];
+  for (const h of chartFx.hitboxes) {
+    scene.remove(h);
+    h.geometry.dispose();
+  }
+  chartFx.hitboxes = [];
+  chartFx.hovered = -1;
   for (const area of world.areas) {
     if (!area.discovered) continue;
     const l = built.labelsByArea.get(area.id);
@@ -594,14 +667,39 @@ function verticalBeam(x, z) {
 function openTeleport(hex) {
   const area = areaOf(hex);
   if (!enterChart()) return;
-  // soar out until the whole orbit fits, centered on the sun
-  controls.dist = Math.min(3600, RINGS[area.ring - 1].radius * 2.35);
-  controls.focus(new THREE.Vector3(0, 0, 0));
-  const dests = world.areas.filter((a) =>
+  tpSelect.active = true;
+  tpSelect.ring = area.ring;
+  tpSelect.dests = world.areas.filter((a) =>
     a.ring === area.ring && !a.asteroid && !a.secret && a.discovered && a.springStoneKey);
-  ui.showTeleport(
-    dests.map((a) => ({ name: a.biome.area })),
-    (i) => { ui.hideTeleport(); beginTeleportTo(dests[i]); },
+  // the current orbit burns violet — those are the islands that answer
+  const R = RINGS[area.ring - 1].radius;
+  const band = new THREE.Mesh(
+    new THREE.RingGeometry(R - 6, R + 6, 160).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({
+      color: 0x8a76e6, transparent: true, opacity: 0.4,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+    })
+  );
+  band.position.y = 1.2;
+  band.renderOrder = 4;
+  scene.add(band);
+  tpSelect.fx.push(band);
+  for (const d of tpSelect.dests) {
+    const g = built.bodyGroups.get(d.id);
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: heartGlowTex, color: 0x9a86ff, transparent: true, opacity: 0.55,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    }));
+    halo.position.copy(g.position);
+    halo.scale.setScalar(Math.max(70, d.biome.bodySize * chartScaleFor(d) * 3));
+    halo.renderOrder = 4;
+    scene.add(halo);
+    tpSelect.fx.push(halo);
+  }
+  ui.showTeleportPrompt(
+    tpSelect.dests.length
+      ? 'the violet-lit islands answer ᛫ click one to cross'
+      : 'no islands charted on this orbit yet',
     () => exitChart()
   );
 }
@@ -805,7 +903,23 @@ function hexKeyAt(clientX, clientY) {
 controls.onClick = (x, y) => {
   if (run.dead || teleport.active || launch.active) return;
   if (cutscene.advance()) return; // clicks progress the cutscene dialogue
-  if (cam.mode === 'free') return; // the chart is for looking, not sailing
+  if (cam.mode === 'free') {
+    // on the chart, a click may pick a violet-lit island to cross to
+    if (tpSelect.active) {
+      pointer.set((x / innerWidth) * 2 - 1, -(y / innerHeight) * 2 + 1);
+      raycaster.setFromCamera(pointer, camera);
+      const hits = raycaster.intersectObjects(chartFx.hitboxes, false);
+      if (hits.length) {
+        const area = world.areas[hits[0].object.userData.areaId];
+        if (tpSelect.dests.includes(area)) {
+          beginTeleportTo(area);
+          return;
+        }
+        flashLocation('✦ only the violet-lit islands answer the stone ✦', 2200);
+      }
+    }
+    return; // otherwise the chart is for looking, not sailing
+  }
   const key = hexKeyAt(x, y);
   if (!key) return;
   const cur = world.hexes.get(player.hexKey);
@@ -827,14 +941,34 @@ controls.onClick = (x, y) => {
   }
 };
 
-// hover labels
+// hover labels: the label GLIDES with the cursor on every pointermove (a
+// cheap transform write); only the raycast + text lookup is throttled, so
+// nothing hops or lags
 let hoverCooldown = 0;
 addEventListener('pointermove', (e) => {
+  ui.moveHover(e.clientX, e.clientY);
   if (hoverCooldown > 0) return;
-  hoverCooldown = 0.08;
-  if (cutscene.active || mapFx.active || teleport.active) {
+  hoverCooldown = 0.06;
+  if (cutscene.active || teleport.active) {
     ui.hideHover();
     hoverMarker.visible = false;
+    return;
+  }
+  if (mapFx.active) {
+    // the chart: hovering a charted body swells it (and names it)
+    hoverMarker.visible = false;
+    pointer.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+    raycaster.setFromCamera(pointer, camera);
+    const hits = raycaster.intersectObjects(chartFx.hitboxes, false);
+    if (hits.length) {
+      const area = world.areas[hits[0].object.userData.areaId];
+      chartFx.hovered = area.id;
+      const pickable = tpSelect.active && tpSelect.dests.includes(area);
+      ui.hover(pickable ? `${area.biome.area} ᛫ click to cross` : area.biome.area);
+    } else {
+      chartFx.hovered = -1;
+      ui.hideHover();
+    }
     return;
   }
   const key = hexKeyAt(e.clientX, e.clientY);
@@ -911,7 +1045,7 @@ addEventListener('pointermove', (e) => {
   } else {
     text = area.discovered ? b.area : toRunes(b.area);
   }
-  ui.hover(text, e.clientX, e.clientY);
+  ui.hover(text);
 });
 
 // ---------------------------------------------------------------- storm strikes
@@ -1225,8 +1359,8 @@ window.__astral = {
   world, player, controls, built, cutscene, run, damage, heal,
   debug: {
     spawnFallingStar, bounty, newBounty, merchantVisit, surge, grantBoon, tryHop,
-    cam, mapFx, enterChart, exitChart, toggleChart, openTeleport, beginTeleportTo,
-    teleport, launch, flight, startAscension, trySpringHop,
+    cam, mapFx, chartFx, tpSelect, enterChart, exitChart, toggleChart, openTeleport,
+    beginTeleportTo, teleport, launch, flight, startAscension, trySpringHop,
   },
 };
 
@@ -1281,35 +1415,54 @@ function frame() {
   player.mesh.visible = run.dead || t >= run.invulnUntil || Math.sin(t * 34) > -0.35;
   if ((flight.active && player.blast) || teleport.active) player.mesh.visible = false;
 
-  // camera: the locked mode pins the view to the wisp (or to the orb of
-  // light mid-blast) — rotation and capped zoom only. Cutscenes and the
-  // teleport sequence steer for themselves; the free chart roams at will.
+  // camera: the locked mode pins the view to the wisp — except while a gate
+  // beam flies, when it pulls back to FRAME THE BEAM END TO END, returning
+  // to the locked view once the orb lands. Cutscenes and the teleport
+  // sequence steer for themselves; the free chart roams at will.
   if (cam.mode === 'locked' && !cutscene.active && !teleport.active) {
-    const curHex = world.hexes.get(player.blast?.destKey ?? player.hexKey);
-    camFocus.set(player.mesh.position.x, curHex?.baseY || 0, player.mesh.position.z);
-    controls.target.lerp(camFocus, 1 - Math.exp(-dt * 5));
-    const curArea = curHex ? world.areas[curHex.areaId] : null;
-    controls.maxDist = launch.active ? 3600 : curArea ? zoomCapFor(curArea) : 300;
-    if (launch.active && player.blast) {
-      // the ascension cinema: pull wide so the breaking storm reads
-      controls.dist += (430 - controls.dist) * Math.min(1, dt * 1.4);
-      controls.pitch += (0.65 - controls.pitch) * Math.min(1, dt * 1.2);
-      if (player.blast.t > 0.55 && launch.shown < 2) {
-        launch.shown = 2;
-        ui.dialogue(launch.lines[1]);
+    if (flight.active && player.blast) {
+      controls.maxDist = 3600;
+      controls.target.lerp(flight.frameCenter, 1 - Math.exp(-dt * 2.6));
+      controls.dist += (flight.frameDist - controls.dist) * Math.min(1, dt * 2.2);
+      if (launch.active) {
+        controls.pitch += (0.78 - controls.pitch) * Math.min(1, dt * 1.2);
+        if (player.blast.t > 0.55 && launch.shown < 2) {
+          launch.shown = 2;
+          ui.dialogue(launch.lines[1]);
+        }
       }
+    } else {
+      // hops still follow the wisp itself (lifted to the destination's baseY)
+      const curHex = world.hexes.get(player.blast?.destKey ?? player.hexKey);
+      camFocus.set(player.mesh.position.x, curHex?.baseY || 0, player.mesh.position.z);
+      controls.target.lerp(camFocus, 1 - Math.exp(-dt * 5));
+      const curArea = curHex ? world.areas[curHex.areaId] : null;
+      controls.maxDist = curArea ? zoomCapFor(curArea) : 300;
     }
   } else if (cam.mode === 'free') {
     controls.maxDist = 3600;
   }
   cutscene.update(dt);
 
-  // space-chart labels swell with altitude and the wisp marker keeps place
+  // the star chart: glide out to the full orrery on open, swell the charted
+  // bodies (the hovered one further), keep the wisp marker in place
   if (mapFx.active) {
-    const chartZoom = THREE.MathUtils.clamp(controls.dist / 320, 1, 5.5);
-    for (const s of mapFx.sprites) {
-      const b = s.userData.baseScale;
-      s.scale.set(b * chartZoom, b * chartZoom * 0.25, 1);
+    if (chartFx.easing) {
+      if (controls.lastPanTime >= chartFx.openedPerf
+        || Math.abs(controls.dist - CHART_DIST) < 40) {
+        chartFx.easing = false; // arrived, or the user took the wheel
+      } else {
+        controls._focusTo = null;
+        controls.target.lerp(CHART_HOME, 1 - Math.exp(-dt * 3));
+        controls.dist += (CHART_DIST - controls.dist) * Math.min(1, dt * 2.6);
+        controls.pitch += (1.15 - controls.pitch) * Math.min(1, dt * 2.4);
+      }
+    }
+    for (const b of chartFx.bodies) {
+      const goal = b.areaId === chartFx.hovered ? b.f * 1.45 : b.f;
+      const s = b.g.scale.x + (goal - b.g.scale.x) * Math.min(1, dt * 6);
+      b.g.scale.setScalar(s);
+      b.g.position.y = Math.max(b.y0, world.areas[b.areaId].biome.bodySize * s * 0.85);
     }
     mapFx.you?.position.set(player.mesh.position.x, player.mesh.position.y + 13, player.mesh.position.z);
   }

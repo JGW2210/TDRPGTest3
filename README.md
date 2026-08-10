@@ -74,16 +74,18 @@ In the star chart, **left-drag** glides, **right-drag** rotates, and
   crystal forever — a great launch beam hurls the orb outward while the
   maelstrom rolls back around it. There is no way back: outward is the
   run.
-- **Stillmoons** — every region trails a small satellite platform off its
-  rim: 40-50 hexes of bare rock seeded with crystals in a single colour
-  (each moon its own), beneath a small polygonal rock body floating over
-  the platform's heart.
+- **Stillmoons** — about a third of the ring regions trail a small
+  satellite platform off their rim, always well clear of the gates: 25-30
+  hexes of bare rock seeded with crystals in a single colour (each moon
+  its own), beneath a small polygonal rock body floating over the
+  platform's heart.
 - **Teleport concourses** — threaded into rings 2-4 like the waystations,
   but dressed marble: a Parthenon-style pillared hut keeps a teleport
-  stone. Step up and the star chart unfolds with every charted island on
-  the orbit; choose one and a beam takes you skyward, the camera pans the
-  ring, and a second beam sets you down on the region's spring stone — a
-  lone rock beneath its astral body, a short hop from the nestling waters.
+  stone. Step up and the star chart unfolds with the current orbit lit
+  violet — hover a charted island's body and it swells; click it and a
+  beam takes you skyward, the camera pans the ring, and a second beam sets
+  you down on the region's spring stone — a lone rock beneath its astral
+  body, a short hop from the nestling waters.
 - **Astral waters with depth** — every region has its own named water (the
   Heliotide, the Quicksilver Race, the Lidless Calm…). Hexes sink to
   different levels of the cosmic deep, near-borderless, with soft light-bands
@@ -102,13 +104,13 @@ In the star chart, **left-drag** glides, **right-drag** rotates, and
   cartographer's whisper delivers its arrival lines, advanced click by
   click, before returning you to your wisp.
 - **The stormfront** — a vast maelstrom sheet seals everything beyond the
-  ring you've earned: churning violet storm-bands, lightning, and vast
-  horned **storm heralds** pacing beside each sealed passage. Every outward
-  gate begins dark — no energy veil — until you seize the **stormheart
-  shard** crackling on a perch beside it: the shard streaks into the lintel,
-  the veil pours down between the pillars, and the storm rolls back one ring
-  in a retreating wave, all watched by an ignition cutscene. The final shard
-  dissolves the maelstrom entirely and bares the secret deep.
+  ring you've earned: churning violet storm-bands, debris-dark curds, and
+  constant lightning. Every outward gate begins dark — no energy veil —
+  until you seize the **stormheart shard** crackling on a perch beside it:
+  the shard streaks into the gate's crown and arms it, the veil pours down
+  between the pillars, and the storm waits for you to commit. The launch
+  itself rolls the maelstrom back one ring in a retreating wave; the final
+  launch dissolves it entirely and bares the secret deep.
 - **Three papercraft hearts, halved** — trapped hexes cost half a heart:
   one-shot **snare runes** on the isles, telegraphed **void geysers** in the
   waters, and (from ring 2 out) wandering **storm strikes** — all denser
@@ -189,7 +191,7 @@ archipelago shapes, gate runes, shard perches, hazards, shrine platforms).
 | `src/worldgen.js` | Seeded generation: areas, hexes, asteroids, gates, storm wards, hazards, shrines, rock-hop chains, leviathans |
 | `src/buildWorld.js` | Turns world data into instanced meshes + stormfront, traps, chains, markets, merchant, cosmos décor |
 | `src/bodies.js` | Sculpted astral-body archetypes (eye, maw, gas giant, husk…) |
-| `src/structures.js` | Dolmen waygates, chomper trap atlas, springboards, market stalls, hermits, altars, heralds, landmarks |
+| `src/structures.js` | Dolmen waygates (grand ascension variant), teleport temples, stillmoon bodies, chomper trap atlas, springboards, market stalls, hermits, altars, landmarks |
 | `src/cutscene.js` | Discovery cutscene: camera glide + click-through dialogue |
 | `src/decorSets.js` | Bespoke per-biome island decor geometry library |
 | `src/materials.js` | Water/veil shaders, canvas textures |
