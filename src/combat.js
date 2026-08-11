@@ -7,17 +7,23 @@
 // brims, acts. The player's attack is a three-step challenge — pick a target
 // square on the foe's board (attack patterns from items widen the footprint),
 // SPELL the magical word against the clock, then land an Undertale-style
-// timing bar. The foe's turn telegraphs danger squares (amber, tracking),
-// locks them red, and gives the player a 0.3-0.8s react window (ring-scaled)
-// to move off with WASD — melee bites one square, ranged shots run two
-// squares toward the camera. Deep-ring foes also throw control-hexes:
-// reversed keys, scrambled keys, or a locked lane that only a PERFECT strike
-// clears. Statuses (burn / freeze / slow) ride on imbued attacks, and the
-// single RELIC slot fires on Q when its kill-charge is full.
+// timing bar. Round 12: EVERY foe steps its patrol once at the moment the
+// target locks (frozen foes hold still) — aiming is a prediction, and the
+// idle end-of-turn shuffle is gone. The foe's turn telegraphs danger squares
+// (amber, tracking), locks them red, and gives the player a ~0.5s react
+// window (0.55s at the sun easing to 0.43s deep, + dodge items) to move off
+// with WASD — melee bites one square, ranged shots run two squares toward
+// the camera. Attacks land with a mesh FX kit: spikes snapping out of struck
+// tiles, staff-bolt projectiles, arc swings, falling bolts. Deep-ring foes
+// also throw control-hexes: reversed keys, scrambled keys, or a locked lane
+// that only a PERFECT strike clears. Statuses (burn / freeze / slow) ride on
+// imbued attacks, and the single RELIC slot fires on Q when its kill-charge
+// is full.
 
 import * as THREE from 'three';
 import { SPELL_WORDS } from './config.js';
 import { magicianCanvas, makePaperFigure } from './sprites.js';
+import { makeGlowSpriteTexture } from './materials.js';
 
 const INK = 0x1f1a36;
 
@@ -78,6 +84,8 @@ export class Combat {
     this.phase = 'off';
     this.raycaster = new THREE.Raycaster();
     this.pointer = new THREE.Vector2();
+    this.fx = []; // live attack effects (spikes / shots / swings / bolts)
+    this.fxGlow = makeGlowSpriteTexture();
 
     addEventListener('keydown', (e) => this._onKey(e));
   }
@@ -109,6 +117,7 @@ export class Combat {
     this.strikes = [];
     this.dash = null;
     this.pendingEcho = null;
+    this.fx = [];
     this._buildStage(worldPos, biome);
     this.cui.combatShow(true);
     this.cui.foePanel(enemy);
@@ -121,6 +130,7 @@ export class Combat {
   end(victory) {
     this.active = false;
     this.phase = 'off';
+    this.fx = []; // fx meshes are stage children — the teardown sweeps them
     this.cui.combatShow(false);
     this.cui.spellHide();
     this.cui.barHide();
@@ -145,22 +155,26 @@ export class Combat {
     this.stageYaw = this.controls.yaw;
 
     // papercraft footing: a torn disc in the biome's isle colors
+    // (sized so the backdrop arc stands WELL clear of the back rank — the
+    // billboard figures must never share depth with the scenery)
     const disc = new THREE.Mesh(
-      new THREE.CylinderGeometry(12.5, 13.2, 0.7, 22),
+      new THREE.CylinderGeometry(16.6, 17.3, 0.7, 22),
       new THREE.MeshStandardMaterial({ color: biome.island.top, flatShading: true })
     );
     disc.position.y = -0.55;
     g.add(disc);
     const rim = new THREE.Mesh(
-      new THREE.CylinderGeometry(12.9, 13.4, 0.25, 22),
+      new THREE.CylinderGeometry(17.0, 17.5, 0.25, 22),
       new THREE.MeshBasicMaterial({ color: INK })
     );
     rim.position.y = -0.95;
     g.add(rim);
 
-    // a paper backdrop arc behind the foe: cut peaks in the biome's colors
+    // a paper backdrop arc behind the foe: cut peaks in the biome's colors.
+    // The back rank sits at z ≈ -9.4; the nearest cone surface stays past
+    // z ≈ -12 so even a boss cutout (and its lunge sway) never intersects.
     for (let i = 0; i < 7; i++) {
-      const a = Math.PI + (i - 3) * 0.28; // behind the enemy board (local -Z)
+      const a = Math.PI + (i - 3) * 0.26; // behind the enemy board (local -Z)
       const h = 3.2 + Math.abs(3 - i) * -0.4 + (i % 2) * 1.1 + 2.4;
       const peak = new THREE.Mesh(
         new THREE.ConeGeometry(1.7 + (i % 3) * 0.5, h, 4),
@@ -168,7 +182,7 @@ export class Combat {
           color: i % 2 ? biome.island.top2 : biome.island.side, flatShading: true,
         })
       );
-      peak.position.set(Math.sin(a) * 11.2, h / 2 - 0.4, Math.cos(a) * 11.2);
+      peak.position.set(Math.sin(a) * 14.6, h / 2 - 0.4, Math.cos(a) * 14.6);
       peak.rotation.y = (i * Math.PI) / 3.5;
       g.add(peak);
     }
@@ -358,6 +372,13 @@ export class Combat {
     // the challenge begins: the word first
     this.lockedTarget = this.targetCell;
     this.lockedCells = this._patternCells(this.targetCell);
+    // Round 12: EVERY foe takes its patrol step the moment the target locks
+    // — aiming is a prediction, answered here (a frozen foe holds still).
+    // The step eases visibly while the spell and bar play out.
+    if (this.enemy.statuses.freezeTurns <= 0) {
+      this.enemy.patrolIdx = (this.enemy.patrolIdx + 1) % this.enemy.patrol.length;
+      this.enemyCell = this.enemy.patrol[this.enemy.patrolIdx];
+    }
     if (this.run.stats.flags.autoSpell) {
       this.spell = { score: 1, done: true };
       this._beginBar();
@@ -446,14 +467,8 @@ export class Combat {
   _resolveAttack(barMult, barCls) {
     this.phase = 'resolve';
     this.phaseT = 0;
-    // a planned sidestep: a dodger takes its next patrol step the moment
-    // the strike commits — predictable, if you've read its habits
-    if (this.enemy.dodges) {
-      this.enemy.patrolIdx = (this.enemy.patrolIdx + 1) % this.enemy.patrol.length;
-      this.enemyCell = this.enemy.patrol[this.enemy.patrolIdx];
-      const ep = this._cellLocal('e', this.enemyCell);
-      this.enemyFig.position.set(ep.x, 0.5, ep.z);
-    }
+    // (Round 12: the foe already stepped at target-lock — the strike lands
+    // on whatever square the prediction earned)
     const cells = this._patternCells(this.lockedTarget);
     const hit = cells.includes(this.enemyCell);
     const spellScore = this.spell.score || 0.45;
@@ -462,6 +477,32 @@ export class Combat {
     dmg = Math.round(dmg * 10) / 10;
     this.lastResult = { hit, dmg, barCls, crit, cells, swift: !!this.spell.swift, perfect: barCls === 'perfect' };
 
+    // the cast is a THING now: a bolt leaps from the staff and the strike
+    // lands where it bursts (still within the resolve pause)
+    const pp = this._cellLocal('p', this.playerCell);
+    this._fxShot(
+      'e', this.lockedTarget,
+      new THREE.Vector3(pp.x + 0.55, 2.35, pp.z),
+      crit ? 0xfff6b0 : 0x9fd8ff, 0.22,
+      () => this._landStrike(cells, hit, dmg, barCls, crit)
+    );
+
+    // a perfect strike shatters any lane-hex
+    if (barCls === 'perfect') {
+      const had = this.debuffs.some((d) => d.kind === 'lanelock');
+      this.debuffs = this.debuffs.filter((d) => d.kind !== 'lanelock');
+      if (had) this.hooks.flash('✦ the hexed lane swings open ✦');
+      this._refreshDebuffUi();
+    }
+    this.hooks.onStrike?.(this.lastResult);
+  }
+
+  _landStrike(cells, hit, dmg, barCls, crit) {
+    if (!this.active || this.phase === 'reward') return;
+    // spikes snap out of every covered square; wide patterns add a slash arc
+    const tint = hit ? (crit ? 0xfff6b0 : 0x9fd8ff) : 0x8f96b8;
+    this._fxSpikes('e', cells, tint);
+    if (cells.length > 1) this._fxSwing('e', this.lockedTarget, tint);
     if (hit && dmg > 0) {
       this._damageEnemy(dmg);
       this._burstAtCell('e', this.enemyCell, crit ? 0xfff6b0 : 0x9fd8ff);
@@ -480,14 +521,6 @@ export class Combat {
     } else if (!hit) {
       this.cui.combatBanner('IT SLIPS ASIDE', 'read its habits — it steps when you strike');
     }
-    // a perfect strike shatters any lane-hex
-    if (barCls === 'perfect') {
-      const had = this.debuffs.some((d) => d.kind === 'lanelock');
-      this.debuffs = this.debuffs.filter((d) => d.kind !== 'lanelock');
-      if (had) this.hooks.flash('✦ the hexed lane swings open ✦');
-      this._refreshDebuffUi();
-    }
-    this.hooks.onStrike?.(this.lastResult);
   }
 
   _damageEnemy(dmg) {
@@ -564,8 +597,10 @@ export class Combat {
   }
 
   _reactWindow() {
+    // Round 12: ~0.5s wind-up everywhere, nudged by depth — 0.55s at the
+    // sun easing to 0.43s in the deep rings (dodge items and clarity add)
     const ring = this.enemy.ring;
-    let w = Math.max(0.3, Math.min(0.8, 0.8 - 0.115 * ring));
+    let w = Math.max(0.42, 0.55 - 0.03 * ring);
     w += this.run.stats.dodge;
     if (this.clarity) w += 0.25;
     return w;
@@ -628,8 +663,14 @@ export class Combat {
           : `lane ${['left', 'middle', 'right'][d.lane]} hexed`));
   }
 
-  _strikeImpact(cells) {
+  _strikeImpact(cells, type = 'melee') {
     for (const cell of cells) this._burstAtCell('p', cell, 0xff8f8f);
+    // the blow itself: a slash for melee, a spike row for sweeps, stone
+    // bolts for the cross, a bursting shot where the ranged roll lands
+    if (type === 'melee') this._fxSwing('p', cells[0], 0xff5f6d);
+    else if (type === 'sweep') this._fxSpikes('p', cells, 0xff5f6d);
+    else if (type === 'cross') this._fxFall('p', cells, 0xff5f6d);
+    else if (type === 'ranged') this._fxSpikes('p', cells, 0xff8f6d);
     if (!cells.includes(this.playerCell)) return;
     if (this.run.stats.flags.glassStep && !this.glassStepUsed) {
       this.glassStepUsed = true;
@@ -654,6 +695,136 @@ export class Combat {
     over.material.color.setHex(color);
     over.material.opacity = 0.9;
     over.userData.flashDecay = 3.2;
+  }
+
+  // ------------------------------------------------------------ attack FX kit
+  // Round 12: strikes are things you SEE — ink-tinted spikes snapping out of
+  // struck tiles, glowing bolts flying caster to square, arc slashes for
+  // melee, stone bolts dropping on cross patterns. All stage-local children,
+  // torn down with the diorama. The tile overlays stay as an impact underlay.
+
+  _fxSpikes(side, cells, color) {
+    if (!this.stage) return;
+    for (const c of cells) {
+      const pos = this._cellLocal(side, c);
+      const m = new THREE.Mesh(
+        new THREE.ConeGeometry(0.42, 2.1, 5),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95 })
+      );
+      m.position.set(pos.x + (Math.random() - 0.5) * 0.5, 0.5, pos.z + (Math.random() - 0.5) * 0.5);
+      m.rotation.z = (Math.random() - 0.5) * 0.22;
+      m.scale.y = 0.05;
+      this.stage.add(m);
+      this.fx.push({ kind: 'spike', obj: m, t: 0 });
+    }
+  }
+
+  _fxShot(side, cell, from, color, dur = 0.22, onArrive = null) {
+    if (!this.stage) return;
+    const to = this._cellLocal(side, cell);
+    const orb = new THREE.Mesh(
+      new THREE.SphereGeometry(0.26, 8, 6),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95 })
+    );
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: this.fxGlow, color, transparent: true, opacity: 0.7,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    }));
+    glow.scale.setScalar(2.0);
+    glow.renderOrder = 6;
+    orb.add(glow);
+    orb.position.copy(from);
+    this.stage.add(orb);
+    this.fx.push({
+      kind: 'shot', obj: orb, t: 0, dur,
+      from: from.clone(), to: new THREE.Vector3(to.x, 0.75, to.z),
+      arc: 0.5 + dur * 2.2, onArrive,
+    });
+  }
+
+  _fxSwing(side, cell, color) {
+    if (!this.stage) return;
+    const pos = this._cellLocal(side, cell);
+    const m = new THREE.Mesh(
+      new THREE.TorusGeometry(1.3, 0.11, 6, 18, Math.PI * 1.2),
+      new THREE.MeshBasicMaterial({
+        color, transparent: true, opacity: 0.9,
+        blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+      })
+    );
+    m.position.set(pos.x, 1.15, pos.z);
+    m.rotation.x = -Math.PI / 2 + 0.4;
+    m.renderOrder = 6;
+    this.stage.add(m);
+    this.fx.push({ kind: 'swing', obj: m, t: 0, dur: 0.26 });
+  }
+
+  _fxFall(side, cells, color) {
+    if (!this.stage) return;
+    for (const c of cells) {
+      const pos = this._cellLocal(side, c);
+      const m = new THREE.Mesh(
+        new THREE.BoxGeometry(0.36, 2.4, 0.36),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95 })
+      );
+      m.position.set(pos.x, 7.5, pos.z);
+      m.rotation.y = Math.random() * Math.PI;
+      this.stage.add(m);
+      this.fx.push({ kind: 'fall', obj: m, t: 0 });
+    }
+  }
+
+  _fxUpdate(dt) {
+    for (let i = this.fx.length - 1; i >= 0; i--) {
+      const f = this.fx[i];
+      f.t += dt;
+      let done = false;
+      if (f.kind === 'spike') {
+        const UP = 0.1, HOLD = 0.18, DOWN = 0.22;
+        if (f.t < UP) {
+          const u = f.t / UP;
+          f.obj.scale.y = 0.05 + 0.95 * (1 - (1 - u) * (1 - u)); // snap out
+        } else if (f.t < UP + HOLD) {
+          f.obj.scale.y = 1;
+        } else if (f.t < UP + HOLD + DOWN) {
+          const u = (f.t - UP - HOLD) / DOWN;
+          f.obj.scale.y = 1 - u * 0.95;
+          f.obj.material.opacity = 0.95 * (1 - u);
+        } else done = true;
+      } else if (f.kind === 'shot') {
+        const u = Math.min(1, f.t / f.dur);
+        f.obj.position.lerpVectors(f.from, f.to, u);
+        f.obj.position.y += Math.sin(u * Math.PI) * f.arc;
+        if (u >= 1) done = true;
+      } else if (f.kind === 'swing') {
+        const u = Math.min(1, f.t / f.dur);
+        f.obj.rotation.z = -1.5 + u * 3.0;
+        f.obj.material.opacity = 0.9 * (1 - u * u);
+        if (u >= 1) done = true;
+      } else if (f.kind === 'fall') {
+        const FALL = 0.14, SQ = 0.22;
+        if (f.t < FALL) {
+          const u = f.t / FALL;
+          f.obj.position.y = 7.5 - 6.3 * u * u;
+        } else if (f.t < FALL + SQ) {
+          const u = (f.t - FALL) / SQ;
+          f.obj.position.y = 1.2 - u * 0.5;
+          f.obj.scale.set(1 + u * 0.7, Math.max(0.08, 1 - u), 1 + u * 0.7);
+          f.obj.material.opacity = 0.95 * (1 - u);
+        } else done = true;
+      }
+      if (done) {
+        // tear down BEFORE any arrival callback — it may end the combat
+        this.stage?.remove(f.obj);
+        f.obj.traverse((o) => {
+          o.geometry?.dispose?.();
+          o.material?.dispose?.();
+        });
+        this.fx.splice(i, 1);
+        f.onArrive?.();
+        if (!this.active) return; // the arrival may have ended the combat
+      }
+    }
   }
 
   // ------------------------------------------------------------ relic
@@ -803,23 +974,33 @@ export class Combat {
           if (s.type === 'melee' || s.type === 'sweep') {
             this.dash = { until: this.t + s.react + 0.2, cell: s.cells[0] };
           }
+          // a ranged shot is VISIBLE for the whole react window: the bolt
+          // arcs from the foe and lands exactly as the red square bites
+          if (s.type === 'ranged') {
+            const ep = this._cellLocal('e', this.enemyCell);
+            this._fxShot('p', s.cells[0], new THREE.Vector3(ep.x, 1.9, ep.z), 0xff8f6d, s.react);
+          }
         }
         if (s.cells && !s.struck && this.phaseT >= s.impactAt) {
           s.struck = true;
-          this._strikeImpact(s.type === 'ranged' ? [s.cells[0]] : s.cells);
+          this._strikeImpact(s.type === 'ranged' ? [s.cells[0]] : s.cells, s.type);
           if (!this.active) return;
+          // the shot rolls on toward the camera for its second bite
+          if (s.type === 'ranged' && s.cells[1] !== undefined) {
+            const c0 = this._cellLocal('p', s.cells[0]);
+            this._fxShot('p', s.cells[1], new THREE.Vector3(c0.x, 0.9, c0.z), 0xff8f6d, 0.2);
+          }
         }
         // ranged shots roll toward the camera: the near square lands late
         if (s.type === 'ranged' && s.struck && !s.secondStruck && this.phaseT >= s.impactAt + 0.22) {
           s.secondStruck = true;
-          this._strikeImpact([s.cells[1]]);
+          this._strikeImpact([s.cells[1]], 'ranged');
           if (!this.active) return;
         }
       }
       if (this.phaseT >= this.turnEndsAt) {
-        // the patrol advances — periodic, readable
-        this.enemy.patrolIdx = (this.enemy.patrolIdx + 1) % this.enemy.patrol.length;
-        this.enemyCell = this.enemy.patrol[this.enemy.patrolIdx];
+        // (Round 12: no idle patrol shuffle — the foe only steps when the
+        // player's strike commits, so the aim phase stays a prediction)
         if (this.enemy.statuses.slowTurns > 0) this.enemy.statuses.slowTurns -= 1;
         if (this.eclipseTurns > 0) this.eclipseTurns -= 1;
         this.strikes = [];
@@ -828,6 +1009,8 @@ export class Combat {
       }
     }
 
+    this._fxUpdate(dt);
+    if (!this.active) return;
     this._updateVisuals(dt);
     this._updateCamera(dt);
     void camera;
@@ -881,17 +1064,16 @@ export class Combat {
         o.material.color.setHex(0x9fd8ff);
         o.material.opacity = Math.max(o.material.opacity, c === this.targetCell ? 0.4 + pulse * 0.25 : 0.28);
       }
-      // foresight: where the foe will stand when the strike lands
+      // foresight: where the foe will stand when the strike lands — every
+      // foe steps its patrol once at target-lock now (Round 12)
       const fs = this.run.stats.foresight;
       if (fs >= 1) {
-        const predicted = this.enemy.dodges
-          ? this.enemy.patrol[(this.enemy.patrolIdx + 1) % this.enemy.patrol.length]
-          : this.enemyCell;
+        const predicted = this.enemy.patrol[(this.enemy.patrolIdx + 1) % this.enemy.patrol.length];
         const o = this.overlays.e[predicted];
         o.material.color.setHex(0x8cf5a6);
         o.material.opacity = Math.max(o.material.opacity, 0.35);
         if (fs >= 2) {
-          const after = this.enemy.patrol[(this.enemy.patrolIdx + (this.enemy.dodges ? 2 : 1)) % this.enemy.patrol.length];
+          const after = this.enemy.patrol[(this.enemy.patrolIdx + 2) % this.enemy.patrol.length];
           const o2 = this.overlays.e[after];
           o2.material.color.setHex(0x8cf5a6);
           o2.material.opacity = Math.max(o2.material.opacity, 0.16);

@@ -42,6 +42,13 @@ export const ui = {
     c.classList.toggle('show', n > 0);
   },
 
+  // the stardust pouch (Round 12): coin for the bazaar pedestals
+  renderStardust(n) {
+    const s = el('stardust');
+    s.textContent = n > 0 ? `✦ ${n}` : '';
+    s.classList.toggle('show', n > 0);
+  },
+
   // the cartographer's standing errand, under the location line
   setBounty(text) {
     const b = el('bounty');
@@ -261,13 +268,15 @@ export const ui = {
     el('timebar').classList.remove('show');
   },
 
-  // ---- item card (drops are always optional) ----
-  itemCard({ name, tier, desc, dataUrl, takeLabel = '✦ take it ✦', leaveLabel = 'leave it' }, onTake, onLeave) {
+  // ---- item card (drops are always optional; bazaar sales add a note) ----
+  itemCard({ name, tier, desc, dataUrl, note = '', takeLabel = '✦ take it ✦', leaveLabel = 'leave it' }, onTake, onLeave) {
     el('item-img').src = dataUrl;
     el('item-tier').textContent = tier === 'superrare' ? 'super rare' : tier;
     el('item-tier').className = tier;
     el('item-name').textContent = name;
     el('item-desc').textContent = desc;
+    el('item-note').textContent = note;
+    el('item-note').classList.toggle('show', !!note);
     el('item-take').textContent = takeLabel;
     el('item-leave').textContent = leaveLabel;
     el('item-take').onclick = () => { this.hideItemCard(); onTake(); };

@@ -135,8 +135,9 @@ export function generateWorld(seedStr) {
   function generateAsteroidRegion(area) {
     const c = area.pos;
     const ch = Hx.toHex(c.x, c.z, HEX);
-    // teleport concourses are a little roomier — the temple needs a forecourt
-    const target = area.teleport ? 14 + rng.int(5) : 10 + rng.int(8);
+    // (Round 12: the temple lives on an annex court now, not in the knot —
+    // concourses no longer need a levelled forecourt inside the rubble)
+    const target = 10 + rng.int(8);
     area.hexRadius = 5;
     const localKey = (q, r) => q + ',' + r;
     const cells = new Set([localKey(ch.q, ch.r)]);
@@ -161,22 +162,6 @@ export function generateWorld(seedStr) {
         gateId: null,
       });
       if (rec.areaId === area.id) area.hexKeys.push(Hx.key(q, r));
-    }
-    // the teleport stone stands at the knot's heart, on levelled ground
-    if (area.teleport) {
-      let bestK = null, bd = Infinity;
-      for (const k of area.hexKeys) {
-        const h = hexes.get(k);
-        const p = Hx.toWorld(h.q, h.r, HEX);
-        const d = Math.hypot(p.x - c.x, p.z - c.z);
-        if (d < bd) { bd = d; bestK = k; }
-      }
-      if (bestK) {
-        const th = hexes.get(bestK);
-        th.teleporter = true;
-        th.elev = 0.6;
-        area.teleportStoneKey = bestK;
-      }
     }
   }
 
@@ -416,6 +401,73 @@ export function generateWorld(seedStr) {
     return null;
   }
 
+  // A 7-hex ANNEX COURT (Round 12): a level flower pad — a heart hex and six
+  // petals — stamped just off a waystation knot's rim and stone-paved back to
+  // it, exactly like a gate islet. Teleport concourses grow one on the side
+  // BETWEEN their two gate islets (the temple stands on it); spring
+  // waystations grow one wherever the rock allows (the fountain court).
+  // Tries each angle in order; returns { centerKey, keys, angle } or null.
+  function placeCourt(area, angles) {
+    const c = area.pos;
+    const cc0 = Hx.toHex(c.x, c.z, HEX);
+    for (const ang of angles) {
+      const toward = { x: c.x + Math.cos(ang) * 500, z: c.z + Math.sin(ang) * 500 };
+      const rim = pickRim(area, toward);
+      if (!rim) continue;
+      const rp = worldOf(rim);
+      let dx = toward.x - rp.x, dz = toward.z - rp.z;
+      const dl = Math.hypot(dx, dz) || 1;
+      dx /= dl; dz /= dl;
+      for (const shift of [2, 3, 4]) {
+        const cc = Hx.toHex(rp.x + dx * HEX * Hx.SQRT3 * shift, rp.z + dz * HEX * Hx.SQRT3 * shift, HEX);
+        const cells = [[cc.q, cc.r]];
+        for (const d of Hx.DIRS) cells.push([cc.q + d[0], cc.r + d[1]]);
+        let ok = true;
+        for (const [q, r] of cells) {
+          if (hexes.has(Hx.key(q, r))) { ok = false; break; }
+          // never bridge to a NEIGHBORING region — BFS is elevation-blind
+          for (const d of Hx.DIRS) {
+            const nh = hexes.get(Hx.key(q + d[0], r + d[1]));
+            if (nh && nh.areaId !== area.id) { ok = false; break; }
+          }
+          if (!ok) break;
+        }
+        if (!ok) continue;
+        // commit the pad: levelled ground, the heart a step proud
+        const keys = [];
+        cells.forEach(([q, r], i) => {
+          setHex(q, r, {
+            kind: 'isle', areaId: area.id,
+            elev: i === 0 ? 0.6 : 0.45 + rng.float() * 0.08,
+            islandId: null, rock: true, court: true,
+            flow: [0, 0], faint: false, blocked: false, levi: false,
+            gateId: null,
+          });
+          const k = Hx.key(q, r);
+          area.hexKeys.push(k);
+          keys.push(k);
+        });
+        // pave the way from the rim (waystation knots pave stone)
+        for (const step of Hx.line(rim.q, rim.r, cc.q, cc.r)) {
+          const sk = Hx.key(step.q, step.r);
+          if (!hexes.has(sk)) {
+            setHex(step.q, step.r, {
+              kind: 'isle', areaId: area.id, elev: 0.3 + rng.float() * 0.3,
+              islandId: null, rock: true,
+              flow: [0, 0], faint: false, blocked: false, levi: false,
+              gateId: null,
+            });
+            area.hexKeys.push(sk);
+          }
+        }
+        // the pad may out-reach the knot: keep the camera cap honest
+        area.hexRadius = Math.max(area.hexRadius, Hx.dist(cc.q, cc.r, cc0.q, cc0.r) + 2);
+        return { centerKey: Hx.key(cc.q, cc.r), keys, angle: ang };
+      }
+    }
+    return null;
+  }
+
   // A WARDEN CAUSEWAY (Round 11): a ring boundary's ascension gate no longer
   // perches 2-4 hexes off the rim — its platform reaches ~20 tiles straight
   // out toward the next ring. Near the rim a THRESHOLD boss-gate bars the
@@ -649,6 +701,59 @@ export function generateWorld(seedStr) {
     wards.push(ward);
   }
   wards.sort((a, b) => a.boundary - b.boundary);
+
+  // ---------------------------------------------------------------- temple courts
+  // Round 12: each teleport concourse grows a 7-hex ANNEX COURT on the side
+  // between its two gate islets — the Parthenon temple spans the pad and the
+  // teleport stone stands at its heart. Placed after gates so the bearing
+  // can bisect the two doorways.
+  for (const area of areas) {
+    if (!area.teleport) continue;
+    const portAngles = [];
+    for (const g of gates) {
+      const pk = g.a === area.id ? g.portA : g.b === area.id ? g.portB : null;
+      if (!pk) continue;
+      const p = worldOf(hexes.get(pk));
+      portAngles.push(Math.atan2(p.z - area.pos.z, p.x - area.pos.x));
+    }
+    const angles = [];
+    if (portAngles.length >= 2) {
+      // the bisector of the two gate bearings — and its far twin as fallback
+      const vx = Math.cos(portAngles[0]) + Math.cos(portAngles[1]);
+      const vz = Math.sin(portAngles[0]) + Math.sin(portAngles[1]);
+      const bis = Math.hypot(vx, vz) > 1e-4
+        ? Math.atan2(vz, vx)
+        : portAngles[0] + Math.PI / 2; // opposed gates: either flank works
+      angles.push(bis, bis + Math.PI);
+    } else if (portAngles.length === 1) {
+      angles.push(portAngles[0] + Math.PI);
+    }
+    for (let i = 0; i < 8; i++) angles.push(rng.angle());
+    const court = placeCourt(area, angles);
+    if (court) {
+      const th = hexes.get(court.centerKey);
+      th.teleporter = true;
+      area.teleportStoneKey = court.centerKey;
+      area.court = { kind: 'temple', ...court };
+    } else {
+      // no room anywhere (shouldn't happen): fall back to the knot's heart
+      // so the ring never loses its teleport stone
+      let bestK = null, bd = Infinity;
+      for (const k of area.hexKeys) {
+        const h = hexes.get(k);
+        if (h.gateId !== null) continue;
+        const p = worldOf(h);
+        const d = Math.hypot(p.x - area.pos.x, p.z - area.pos.z);
+        if (d < bd) { bd = d; bestK = k; }
+      }
+      if (bestK) {
+        const th = hexes.get(bestK);
+        th.teleporter = true;
+        th.elev = 0.6;
+        area.teleportStoneKey = bestK;
+      }
+    }
+  }
 
   // ---------------------------------------------------------------- stillmoons
   // ~30% of the RING regions (never the sun, the secrets, or the bare
@@ -957,8 +1062,10 @@ export function generateWorld(seedStr) {
   // ---------------------------------------------------------------- rock-hop attachments
   // ~40% of regions grow a chain of floating rocks off their rim: a launch
   // springboard, a few isolated hop-rocks bowing sideways over the void, and
-  // a small orbiting islet at the end — the Curio Peddler's gift market, or
-  // a hermit squatting on an astral curio. Visible from region discovery.
+  // an orbiting islet at the end. Round 12: markets are a hand-authored
+  // 12-hex BAZAAR — a dock stone, a walkable aisle, three sale PEDESTALS one
+  // hex apart (blocked: taken from beside, never stood on), and a tent row
+  // where the Curio Peddler waits. Hermits keep their small 5-cell curio.
   function placeChain(area, kind) {
     for (let tries = 0; tries < 12; tries++) {
       const tk = makeTracker(area);
@@ -968,12 +1075,39 @@ export function generateWorld(seedStr) {
         area.pos.x + Math.cos(pa) * rad,
         area.pos.z + Math.sin(pa) * rad, HEX
       );
-      // the islet: the anchor plus four of its neighbors
-      const cells = [[anchor.q, anchor.r]];
-      const skip = rng.int(6);
-      for (let i = 0; i < 6; i++) {
-        if (i === skip || i === (skip + 1) % 6) continue;
-        cells.push([anchor.q + Hx.DIRS[i][0], anchor.r + Hx.DIRS[i][1]]);
+      let cells, layout = null;
+      if (kind === 'market') {
+        // the bazaar stamp: rows march along F (away from the region, so the
+        // dock faces home), lateral cells along L. Pedestals sit at lateral
+        // offsets -2/0/+2 — one walkable gap hex between each pair.
+        const aw0 = Hx.toWorld(anchor.q, anchor.r, HEX);
+        let ux = aw0.x - area.pos.x, uz = aw0.z - area.pos.z;
+        const ul = Math.hypot(ux, uz) || 1;
+        ux /= ul; uz /= ul;
+        let o = 0, bestDot = -Infinity;
+        Hx.DIRS.forEach((d, i) => {
+          const w = Hx.toWorld(d[0], d[1], HEX);
+          const dd = (w.x * ux + w.z * uz) / (Math.hypot(w.x, w.z) || 1);
+          if (dd > bestDot) { bestDot = dd; o = i; }
+        });
+        const F = Hx.DIRS[o], L = Hx.DIRS[(o + 2) % 6];
+        const at = (fr, c2) => [anchor.q + F[0] * fr + L[0] * c2, anchor.r + F[1] * fr + L[1] * c2];
+        layout = {
+          dock: at(0, 0),
+          aisle: [at(1, -1), at(1, 0), at(1, 1)],
+          pedestals: [at(2, -2), at(2, 0), at(2, 2)],
+          gaps: [at(2, -1), at(2, 1)],
+          tent: [at(3, -1), at(3, 0), at(3, 1)], // the heart holds the trader
+        };
+        cells = [layout.dock, ...layout.aisle, ...layout.pedestals, ...layout.gaps, ...layout.tent];
+      } else {
+        // the hermit's islet: the anchor plus four of its neighbors
+        cells = [[anchor.q, anchor.r]];
+        const skip = rng.int(6);
+        for (let i = 0; i < 6; i++) {
+          if (i === skip || i === (skip + 1) % 6) continue;
+          cells.push([anchor.q + Hx.DIRS[i][0], anchor.r + Hx.DIRS[i][1]]);
+        }
       }
       let ok = true;
       for (const [q, r] of cells) {
@@ -987,11 +1121,19 @@ export function generateWorld(seedStr) {
       if (!ok) continue;
 
       const destY = 2.5 + rng.float() * 4.5;
+      const cellKey = ([q, r]) => Hx.key(q, r);
+      const pedKeys = layout ? layout.pedestals.map(cellKey) : [];
+      const traderKey = layout ? cellKey(layout.tent[1]) : null;
       for (const [q, r] of cells) {
+        const k = Hx.key(q, r);
+        const pi = pedKeys.indexOf(k);
+        const isTrader = k === traderKey;
         tk.commit(q, r, {
-          kind: 'isle', areaId: area.id, elev: 0.4 + rng.float() * 0.3,
+          kind: 'isle', areaId: area.id,
+          // the bazaar is a levelled terrace; pedestals stand a step proud
+          elev: layout ? (pi >= 0 ? 0.55 : 0.42) : 0.4 + rng.float() * 0.3,
           islandId: null, rock: true, baseY: destY,
-          flow: [0, 0], faint: false, blocked: false, levi: false,
+          flow: [0, 0], faint: false, blocked: pi >= 0 || isTrader, levi: false,
           gateId: null,
         });
       }
@@ -1024,14 +1166,20 @@ export function generateWorld(seedStr) {
       }
       if (hopKeys.length < nHops) { tk.rollback(); continue; }
 
-      // dock = the islet cell nearest the last hop; boon/hermit = farthest
-      const lastW = worldOf(hexes.get(hopKeys[hopKeys.length - 1]));
-      let dockKey = null, dockD = Infinity, farKey = null, farD = -Infinity;
-      for (const [q, r] of cells) {
-        const w = Hx.toWorld(q, r, HEX);
-        const d2 = Math.hypot(w.x - lastW.x, w.z - lastW.z);
-        if (d2 < dockD) { dockD = d2; dockKey = Hx.key(q, r); }
-        if (d2 > farD) { farD = d2; farKey = Hx.key(q, r); }
+      // dock: markets always dock on the stamp's near stone; hermit islets
+      // dock on the cell nearest the last hop, gift farthest
+      let dockKey = null, farKey = null;
+      if (layout) {
+        dockKey = cellKey(layout.dock);
+      } else {
+        const lastW = worldOf(hexes.get(hopKeys[hopKeys.length - 1]));
+        let dockD = Infinity, farD = -Infinity;
+        for (const [q, r] of cells) {
+          const w = Hx.toWorld(q, r, HEX);
+          const d2 = Math.hypot(w.x - lastW.x, w.z - lastW.z);
+          if (d2 < dockD) { dockD = d2; dockKey = Hx.key(q, r); }
+          if (d2 > farD) { farD = d2; farKey = Hx.key(q, r); }
+        }
       }
       const chain = {
         id: chains.length, kind, areaId: area.id,
@@ -1040,6 +1188,10 @@ export function generateWorld(seedStr) {
         hidden: false, claimed: false, visited: false,
         hermit: kind === 'event' ? rng.int(HERMITS.length) : null,
         boonKey: farKey, dockKey,
+        // Round 12 bazaar: three sale pedestals + the trader's tent heart.
+        // stock (the three items + prices) is rolled at runtime by main.
+        pedestalKeys: layout ? pedKeys : null,
+        traderKey, stock: null,
       };
       const launchHex = hexes.get(launchKey);
       launchHex.chainId = chain.id; launchHex.chainRole = 'launch';
@@ -1049,7 +1201,16 @@ export function generateWorld(seedStr) {
       }
       for (const [q, r] of cells) hexes.get(Hx.key(q, r)).chainId = chain.id;
       hexes.get(dockKey).chainRole = 'dock';
-      hexes.get(farKey).chainRole = kind === 'market' ? 'boon' : 'hermit';
+      if (layout) {
+        pedKeys.forEach((pk, pi) => {
+          const ph2 = hexes.get(pk);
+          ph2.chainRole = 'pedestal';
+          ph2.pedestal = pi;
+        });
+        hexes.get(traderKey).chainRole = 'trader';
+      } else {
+        hexes.get(farKey).chainRole = 'hermit';
+      }
       chains.push(chain);
       return chain;
     }
@@ -1062,15 +1223,31 @@ export function generateWorld(seedStr) {
   }
 
   // ---------------------------------------------------------------- springs
-  // Each asteroid waystation keeps a small healing spring among its rubble.
-  // (Teleport concourses keep marble, not water.)
+  // Each asteroid waystation keeps a healing spring — Round 12: a 7-hex
+  // FOUNTAIN COURT annexed off the knot's rim, the tiered fountain (and its
+  // guardian statue) at the heart. (Teleport concourses keep marble, not
+  // water.)
   for (const area of areas) {
     if (!area.asteroid || area.teleport) continue;
-    const cand = area.hexKeys.filter((k) => {
-      const h = hexes.get(k);
-      return h.gateId === null && h.wardId === undefined;
-    });
-    if (cand.length) hexes.get(cand[rng.int(cand.length)]).spring = true;
+    const angles = [];
+    for (let i = 0; i < 10; i++) angles.push(rng.angle());
+    const court = placeCourt(area, angles);
+    if (court) {
+      hexes.get(court.centerKey).spring = true;
+      area.springKey = court.centerKey;
+      area.court = { kind: 'spring', ...court };
+    } else {
+      // cramped rock: fall back to a spring hex among the rubble
+      const cand = area.hexKeys.filter((k) => {
+        const h = hexes.get(k);
+        return h.gateId === null && h.wardId === undefined;
+      });
+      if (cand.length) {
+        const k = cand[rng.int(cand.length)];
+        hexes.get(k).spring = true;
+        area.springKey = k;
+      }
+    }
   }
 
   // ---------------------------------------------------------------- spring stones
@@ -1154,7 +1331,7 @@ export function generateWorld(seedStr) {
       const h = hexes.get(k);
       if (h.gateId !== null || h.wardId !== undefined || h.shrineId !== undefined
         || h.chainId !== undefined || h.lodeChain !== undefined
-        || h.baseY || h.spring) continue;
+        || h.baseY || h.spring || h.court) continue;
       if (area.ring === 0 && Hx.dist(h.q, h.r, startHex.q, startHex.r) < 4) continue;
       if (h.kind === 'water') {
         if (rng.chance(geyserP)) {

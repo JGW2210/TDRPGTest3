@@ -109,6 +109,9 @@ const run = {
   // taken ids leave the pool, one relic rides the belt, kills charge it
   mods: freshMods(), stats: {}, items: [], taken: new Set(),
   relic: null, relicTaken: new Set(), transmute: false, kills: 0,
+  // Round 12 — STARDUST: coin shaken from felled foes, spent at the
+  // bazaar pedestals (bounty vouchers still buy one ware free)
+  stardust: 0,
 };
 computeStats(run);
 meta.bump('runs');
@@ -293,22 +296,94 @@ function handleLodestone(hex) {
   });
 }
 
-function handleBoon(hex) {
-  const chain = world.chains[hex.chainId];
-  if (!chain) return;
-  if (!chain.claimed) {
-    if (grantBoon("the peddler's gift")) {
-      chain.claimed = true;
-      built.claimBoon(chain.id);
-    }
-  } else if (run.voucher > 0) {
-    if (grantBoon('the bounty boon')) {
-      run.voucher -= 1;
-      refreshBountyLine();
-    }
-  } else {
-    flashLocation('✦ the peddler has nothing more for you ✦', 2200);
+// ---------------------------------------------------------------- the bazaar
+// Round 12: markets SELL. Each bazaar's three pedestals stock items from the
+// run's pool, tier-priced in stardust; the trader haggles through the item
+// card. A pedestal is never stood on — only clicked from an adjacent tile.
+const STARDUST_PRICES = { common: 8, rare: 14, superrare: 22, legendary: 30 };
+const TRADER_LINES = [
+  'found it drifting past the third ring, cold as a promise',
+  'a fair price for a thing that wants to be yours',
+  'the void gives, the void takes — I merely arrange the meeting',
+  'no refunds ᛫ the currents keep what they are given',
+  'careful — that one hums when the storm is close',
+];
+
+// roll every bazaar's stock once, at world-wake (no duplicate wares between
+// markets; bought ids leave the run's pool as if taken)
+function rollMarketStock() {
+  const stocked = new Set();
+  for (const chain of world.chains) {
+    if (chain.kind !== 'market' || !chain.pedestalKeys) continue;
+    chain.stock = [];
+    chain.pedestalKeys.forEach((pk, i) => {
+      const taken = new Set([...run.taken, ...stocked]);
+      const item = rollDrop({ luck: run.stats.luck, tierBoost: 0, taken });
+      if (!item) { chain.stock.push(null); return; }
+      stocked.add(item.id);
+      chain.stock.push({ item, price: STARDUST_PRICES[item.tier] ?? 10, sold: false });
+      built.stockPedestal(chain.id, i, item.tint);
+      void pk;
+    });
   }
+}
+
+function gainStardust(n) {
+  if (n <= 0) return;
+  run.stardust += n;
+  ui.renderStardust(run.stardust);
+}
+
+// clicking a pedestal from an adjacent tile opens the trader's sale prompt
+function tryPedestal(hex) {
+  const chain = world.chains[hex.chainId];
+  const entry = chain?.stock?.[hex.pedestal];
+  const cur = world.hexes.get(player.hexKey);
+  if (!cur || Hx.dist(cur.q, cur.r, hex.q, hex.r) > 1 || player.isMoving) {
+    flashLocation('✦ step beside the pedestal to bargain ✦', 2200);
+    return;
+  }
+  if (!entry || entry.sold) {
+    flashLocation('✦ a bare pedestal ᛫ its ware is gone ✦', 2200);
+    return;
+  }
+  const item = entry.item;
+  const free = run.voucher > 0;
+  const canPay = free || run.stardust >= entry.price;
+  const patter = TRADER_LINES[(chain.id + hex.pedestal) % TRADER_LINES.length];
+  ui.itemCard(
+    {
+      name: item.name, tier: item.tier, desc: item.desc, dataUrl: itemDataUrl(item),
+      note: free
+        ? `“${patter}” ᛫ your bounty voucher covers it`
+        : `“${patter}” ᛫ ${entry.price} ✦ stardust (you carry ${run.stardust})`,
+      takeLabel: free ? '✦ redeem the voucher ✦'
+        : canPay ? `✦ buy ᛫ ${entry.price} ✦` : `⊘ ${entry.price} ✦ needed`,
+      leaveLabel: 'walk away',
+    },
+    () => {
+      if (!canPay) {
+        flashLocation('⊘ your pouch is too light ᛫ the peddler tuts', 2400);
+        return;
+      }
+      if (free) {
+        run.voucher -= 1;
+        refreshBountyLine();
+      } else {
+        run.stardust -= entry.price;
+        ui.renderStardust(run.stardust);
+      }
+      entry.sold = true;
+      built.claimPedestal(chain.id, hex.pedestal);
+      const inst = applyItem(run, item);
+      applyInstant(inst);
+      meta.bump('itemsTaken');
+      refreshStatsUi();
+      applyStatsToOverworld();
+      ui.announce('A Bargain Struck', `✦ ᛫ ${item.name} is yours`);
+    },
+    () => {}
+  );
 }
 
 function handleHermit(hex) {
@@ -342,7 +417,7 @@ const bounty = { active: null };
 
 function refreshBountyLine() {
   if (bounty.active) ui.setBounty(`bounty ᛫ set foot on ${bounty.active.text}`);
-  else if (run.voucher > 0) ui.setBounty(`✶ ${run.voucher} boon${run.voucher > 1 ? 's' : ''} owed at any market`);
+  else if (run.voucher > 0) ui.setBounty(`✶ ${run.voucher} voucher${run.voucher > 1 ? 's' : ''} ᛫ any bazaar pedestal honors it`);
   else ui.setBounty('');
 }
 
@@ -378,8 +453,10 @@ function handleAltar(hex) {
 function handleSpring(hex) {
   if (springRested.has(hex.areaId)) return;
   springRested.add(hex.areaId);
-  if (heal(2) > 0) ui.announce('The Spring Mends You', '✦ rest, traveler — nothing else does');
-  else flashLocation('✦ the spring murmurs — you are already whole ✦');
+  // the fountain runs dry: water darkens, jets die, the guardian bows
+  built.exhaustSpring(hex.areaId, true);
+  if (heal(2) > 0) ui.announce('The Fountain Mends You', '✦ the guardian pours ᛫ rest, traveler');
+  else flashLocation('✦ the fountain murmurs — you are already whole ✦');
 }
 
 // ---------------------------------------------------------------- combat (Round 11)
@@ -500,6 +577,10 @@ let activeBoss = null; // the world.wardens entry while a boss fight runs
 function onCombatVictory({ enemy, boss, flawless }) {
   run.kills += 1;
   meta.bump('kills');
+  // stardust shakes loose from every felled foe — coin for the bazaars
+  const dust = 2 + (enemy.ring ?? 0) + (enemy.elite ? 2 : 0) + (boss ? 8 : 0);
+  gainStardust(dust);
+  flashLocation(`✦ +${dust} stardust shakes loose ✦`, 2400);
   // a warden's fall unlocks deeper tiers BEFORE its spoils are rolled
   if (boss && activeBoss) meta.setMax('wardens', activeBoss.boundary + 1);
   if (run.relic && run.relic.charge < run.relic.def.cd) {
@@ -576,10 +657,15 @@ const combat = new Combat({
 });
 
 // ---------------------------------------------------------------- roamers
-// Paper beasts drifting through discovered regions. Sharing a tile with one
-// begins combat outright; an ELDER (challenger) holds its ground and asks
-// first — a floating choice, Isaac-style optional.
+// Paper beasts drifting through discovered regions. Round 12: they HUNT —
+// a beast that spots the pilgrim within its sight radius steps toward them,
+// on a cadence that starts well below sail speed in the early rings and
+// quickens with depth. Rings 0-1 beasts are WATER-BOUND: they never set
+// foot on an isle, so land is safe ground early. Sharing a tile begins
+// combat outright; an ELDER (challenger) holds its ground and asks first —
+// a floating choice, Isaac-style optional.
 const roamers = { list: [], nextSpawn: 16 };
+const CHASE_RADIUS = 6;
 
 function hexTopY(h) {
   return (h.baseY || 0) + (h.kind === 'isle' ? h.elev : 0);
@@ -597,11 +683,58 @@ function roamerCanvas(area, elite) {
   });
 }
 
-function roamerHexOk(h, areaId) {
+function roamerHexOk(h, areaId, waterOnly = false) {
   return h && h.areaId === areaId && !h.blocked && !h.hazard && !h.baseY
+    && (!waterOnly || h.kind === 'water')
     && h.gateId === null && h.wardId === undefined && h.chainId === undefined
     && h.lodeChain === undefined && !h.spring && !h.springStone && !h.teleporter
-    && h.thresholdGate === undefined && h.causewayGate === undefined && !h.stillmoon;
+    && h.thresholdGate === undefined && h.causewayGate === undefined && !h.stillmoon
+    && !h.court;
+}
+
+// the next single step of a hunt: shortest legal road to the pilgrim's hex,
+// or failing that (they are ashore and the beast is water-bound), the legal
+// neighbor that closes the gap — the beast paces the shoreline
+function chaseStep(r, h, ph) {
+  const goalK = Hx.key(ph.q, ph.r);
+  const allowed = (nk) => {
+    const nh = world.hexes.get(nk);
+    if (!nh || nh.areaId !== r.areaId || nh.blocked) return false;
+    // the pilgrim's own hex is a legal destination (that's the ambush) as
+    // long as the terrain rule holds
+    if (nk === goalK) return !r.waterOnly || nh.kind === 'water';
+    return roamerHexOk(nh, r.areaId, r.waterOnly);
+  };
+  const seen = new Set();
+  const queue = []; // [q, r, firstStepKey]
+  for (const d of Hx.DIRS) {
+    const nq = h.q + d[0], nr = h.r + d[1];
+    const nk = Hx.key(nq, nr);
+    if (!allowed(nk)) continue;
+    seen.add(nk);
+    queue.push([nq, nr, nk]);
+  }
+  for (let qi = 0; qi < queue.length && qi < 160; qi++) {
+    const [cq, cr, first] = queue[qi];
+    if (Hx.key(cq, cr) === goalK) return first;
+    if (Hx.dist(cq, cr, ph.q, ph.r) > CHASE_RADIUS + 3) continue;
+    for (const d of Hx.DIRS) {
+      const nq = cq + d[0], nr = cr + d[1];
+      const nk = Hx.key(nq, nr);
+      if (seen.has(nk) || !allowed(nk)) continue;
+      seen.add(nk);
+      queue.push([nq, nr, first]);
+    }
+  }
+  let best = null, bd = Hx.dist(h.q, h.r, ph.q, ph.r);
+  for (const d of Hx.DIRS) {
+    const nq = h.q + d[0], nr = h.r + d[1];
+    const nk = Hx.key(nq, nr);
+    if (!roamerHexOk(world.hexes.get(nk), r.areaId, r.waterOnly)) continue;
+    const nd = Hx.dist(nq, nr, ph.q, ph.r);
+    if (nd < bd) { bd = nd; best = nk; }
+  }
+  return best;
 }
 
 function spawnRoamer() {
@@ -611,9 +744,10 @@ function spawnRoamer() {
   if (!cands.length) return;
   const area = cands[(Math.random() * cands.length) | 0];
   const startHex = world.hexes.get(world.startKey);
+  const waterOnly = area.ring <= 1; // early beasts never leave the sea
   const keys = area.hexKeys.filter((k) => {
     const h = world.hexes.get(k);
-    if (!roamerHexOk(h, area.id) || k === player.hexKey) return false;
+    if (!roamerHexOk(h, area.id, waterOnly) || k === player.hexKey) return false;
     if (area.ring === 0 && Hx.dist(h.q, h.r, startHex.q, startHex.r) < 6) return false;
     const ph = world.hexes.get(player.hexKey);
     return Hx.dist(h.q, h.r, ph.q, ph.r) > 3; // never materialize on top of the wisp
@@ -630,7 +764,9 @@ function spawnRoamer() {
   fig.position.set(p.x, hexTopY(h) + 0.25, p.z);
   scene.add(fig);
   roamers.list.push({
-    fig, hexKey: key, areaId: area.id, elite,
+    fig, hexKey: key, areaId: area.id, elite, waterOnly,
+    // hunt cadence: rings 0-1 lumber far below sail speed, deep rings close in
+    stepEvery: Math.max(0.55, 1.6 - 0.25 * area.ring),
     name: elite ? `Elder ${spec.name}` : spec.name,
     nextMove: clockTime + 2 + Math.random() * 3,
     phase: Math.random() * 9, prompted: false,
@@ -678,13 +814,21 @@ function updateRoamers(t, dt) {
     r.fig.position.z += (p.z - r.fig.position.z) * Math.min(1, dt * 3.2);
     r.fig.position.y += (wantY - r.fig.position.y) * Math.min(1, dt * 4);
     if (!r.elite && t > r.nextMove && !busy) {
-      r.nextMove = t + 2.5 + Math.random() * 2.5;
-      const dirs = Hx.DIRS.filter((d) =>
-        roamerHexOk(world.hexes.get(Hx.key(h.q + d[0], h.r + d[1])), r.areaId));
-      if (dirs.length) {
-        const d = dirs[(Math.random() * dirs.length) | 0];
-        r.hexKey = Hx.key(h.q + d[0], h.r + d[1]);
+      // the hunt: within sight, step toward the pilgrim at the beast's own
+      // cadence; otherwise drift as before
+      const chasing = h.areaId === ph.areaId && !player.blast
+        && Hx.dist(h.q, h.r, ph.q, ph.r) <= CHASE_RADIUS;
+      r.nextMove = t + (chasing ? r.stepEvery : 2.5 + Math.random() * 2.5);
+      let stepKey = chasing ? chaseStep(r, h, ph) : null;
+      if (!stepKey && !chasing) {
+        const dirs = Hx.DIRS.filter((d) =>
+          roamerHexOk(world.hexes.get(Hx.key(h.q + d[0], h.r + d[1])), r.areaId, r.waterOnly));
+        if (dirs.length) {
+          const d = dirs[(Math.random() * dirs.length) | 0];
+          stepKey = Hx.key(h.q + d[0], h.r + d[1]);
+        }
       }
+      if (stepKey) r.hexKey = stepKey;
     }
     if (busy) continue;
     // sharing a tile is a fight, no questions asked
@@ -1228,7 +1372,10 @@ player.onEnterHex = (hex) => {
   const area = areaOf(hex);
   if (area.id !== lastAreaId) {
     lastAreaId = area.id;
-    springRested.delete(area.id); // springs re-arm on each fresh visit
+    if (springRested.has(area.id)) {
+      springRested.delete(area.id); // springs re-arm on each fresh visit
+      built.exhaustSpring(area.id, false); // the guardian lifts its head
+    }
   }
   if (!area.discovered) discoverArea(area);
   setLocationFor(hex);
@@ -1249,13 +1396,12 @@ player.onEnterHex = (hex) => {
   if (hex.spring) handleSpring(hex);
   if (hex.teleporter) openTeleport(hex);
   if (hex.shrineRole === 'altar') handleAltar(hex);
-  if (hex.chainRole === 'boon') handleBoon(hex);
   if (hex.chainRole === 'hermit') handleHermit(hex);
   if (bounty.active && k === bounty.active.hexKey) {
     bounty.active = null;
     run.voucher += 1;
     refreshBountyLine();
-    ui.announce('Bounty Honored', '✶ ᛫ the cartographer credits you a boon — any market keeps it');
+    ui.announce('Bounty Honored', '✶ ᛫ the cartographer credits you a voucher — any bazaar pedestal honors it');
   }
   if (merchantVisit.state === 'parked' && k === merchantVisit.hexKey) {
     grantBoon("the merchant's favor");
@@ -1364,6 +1510,16 @@ controls.onClick = (x, y) => {
     if (cur?.teleporter) openTeleport(cur); // re-consult the stone underfoot
     return;
   }
+  // bazaar pedestals are never walked on — only bargained with from beside
+  const clicked = world.hexes.get(key);
+  if (clicked?.chainRole === 'pedestal') {
+    tryPedestal(clicked);
+    return;
+  }
+  if (clicked?.chainRole === 'trader') {
+    flashLocation('✦ the peddler minds the tent ᛫ the wares wait on the pedestals ✦', 2400);
+    return;
+  }
   if (!player.blast && cur && tryHop(cur, player.hexKey, key)) return;
   if (cur && trySpringHop(cur, key)) return;
   if (!player.requestMove(key)) {
@@ -1466,17 +1622,20 @@ addEventListener('pointermove', (e) => {
     text = 'a hop-rock adrift ᛫ leap along the chain';
   } else if (hex.chainRole === 'dock') {
     text = 'the dock stone ᛫ the chain home begins here';
-  } else if (hex.chainRole === 'boon') {
+  } else if (hex.chainRole === 'pedestal') {
     const bc = world.chains[hex.chainId];
-    text = !bc.claimed
-      ? "the peddler's gift ᛫ step up and take it"
+    const entry = bc?.stock?.[hex.pedestal];
+    text = !entry || entry.sold
+      ? 'a bare pedestal ᛫ its ware is gone'
       : run.voucher > 0
-        ? 'the pedestal waits ᛫ your bounty boon is owed'
-        : 'a bare pedestal ᛫ the gift is given';
+        ? `${entry.item.name} ᛫ your voucher covers it ᛫ click from beside`
+        : `${entry.item.name} ᛫ ${entry.price} ✦ stardust ᛫ click from beside`;
+  } else if (hex.chainRole === 'trader') {
+    text = 'the Curio Peddler ᛫ the wares wait on the pedestals';
   } else if (hex.chainRole === 'hermit') {
     text = 'a hermit of the void ᛫ approach';
   } else if (hex.chainId !== undefined && world.chains[hex.chainId]?.kind === 'market') {
-    text = "the Curio Peddler's islet";
+    text = "the Curio Peddler's bazaar";
   } else if (hex.chainId !== undefined && world.chains[hex.chainId]?.kind === 'event') {
     text = "a hermit's curio, adrift";
   } else if (hex.shrineRole === 'pad') {
@@ -1486,7 +1645,9 @@ addEventListener('pointermove', (e) => {
       ? 'a spent altar'
       : 'an astral altar ᛫ its trial sleeps, its gift does not';
   } else if (hex.spring) {
-    text = 'a healing spring rises here';
+    text = springRested.has(hex.areaId)
+      ? 'the fountain lies exhausted ᛫ its guardian bows'
+      : 'a guardian fountain ᛫ drink and be mended';
   } else if (hex.kind === 'water') {
     text = area.discovered ? b.water.name : toRunes(b.water.name);
   } else {
@@ -1655,7 +1816,7 @@ function spawnFallingStar() {
     const h = world.hexes.get(k);
     return !h.hazard && !h.baseY && h.gateId === null && h.wardId === undefined
       && h.chainId === undefined && h.lodeChain === undefined && !h.spring
-      && !h.springStone;
+      && !h.springStone && !h.court;
   });
   if (!keys.length) return null;
   const key = keys[(Math.random() * keys.length) | 0];
@@ -1817,6 +1978,7 @@ window.__astral = {
     roamers, spawnRoamer, startCombatWith, bossFx, handleThreshold, wardenFalls,
     offerItem, offerRelic, onCombatVictory, ITEMS, RELICS, POOL_COUNTS,
     makeEnemy, makeWardenEnemy, ACHIEVEMENTS,
+    tryPedestal, rollMarketStock, gainStardust, STARDUST_PRICES, handleSpring,
   },
 };
 
@@ -1824,9 +1986,11 @@ window.__astral = {
 ui.setSeed(seed, world.title);
 ui.renderHearts(run.halves, run.maxHalves);
 ui.renderCharm(run.charm);
+ui.renderStardust(run.stardust);
 refreshStatsUi();
 refreshRelicUi();
 applyStatsToOverworld();
+rollMarketStock(); // the bazaars lay out their wares for this run
 newBounty(0); // the cartographer's first errand, close to home
 const startArea = areaOf(world.hexes.get(world.startKey));
 lastAreaId = startArea.id;
