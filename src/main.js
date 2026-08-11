@@ -10,7 +10,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 
 import {
   HEX, RINGS, toRunes, INTRO_LINES, SHARD_LINES, WARD_LINES, LODE_LINES, HERMITS,
-  WARDENS,
+  WARDENS, GRIMOIRE_WORDS, WORD_TIERS, WORD_BY_ID,
 } from './config.js';
 import * as Hx from './hexmath.js';
 import { Rng } from './rng.js';
@@ -112,6 +112,13 @@ const run = {
   // Round 12 — STARDUST: coin shaken from felled foes, spent at the
   // bazaar pedestals (bounty vouchers still buy one ware free)
   stardust: 0,
+  // Round 13 — THE GRIMOIRE: the pilgrim's own spell words. Five 5-letter
+  // starters; rune stones teach more; up to 8 ACTIVE words form the hand
+  // combat draws from (word length = strength, power scales the atk stat)
+  grimoire: {
+    owned: GRIMOIRE_WORDS.filter((w) => w.starter).map((w) => w.id),
+    active: GRIMOIRE_WORDS.filter((w) => w.starter).map((w) => w.id),
+  },
 };
 computeStats(run);
 meta.bump('runs');
@@ -316,7 +323,14 @@ function rollMarketStock() {
   for (const chain of world.chains) {
     if (chain.kind !== 'market' || !chain.pedestalKeys) continue;
     chain.stock = [];
+    // Round 13: about a third of bazaars keep a RUNE STONE on one pedestal
+    const runeIdx = Math.random() < 0.35 ? (Math.random() * 3) | 0 : -1;
     chain.pedestalKeys.forEach((pk, i) => {
+      if (i === runeIdx) {
+        chain.stock.push({ runestone: true, price: 12, sold: false });
+        built.stockPedestal(chain.id, i, 0xb9a6ff);
+        return;
+      }
       const taken = new Set([...run.taken, ...stocked]);
       const item = rollDrop({ luck: run.stats.luck, tierBoost: 0, taken });
       if (!item) { chain.stock.push(null); return; }
@@ -334,6 +348,129 @@ function gainStardust(n) {
   ui.renderStardust(run.stardust);
 }
 
+// ---------------------------------------------------------------- the grimoire
+// Round 13: rune stones teach WORDS. learnWord picks an unowned word with
+// its tier weighted around the ring it was found in; new words auto-join
+// the active hand while there's room (the panel rearranges the rest).
+function learnWord(ring = 0, { quiet = false } = {}) {
+  const owned = new Set(run.grimoire.owned);
+  const cands = GRIMOIRE_WORDS.filter((w) => !owned.has(w.id));
+  if (!cands.length) {
+    gainStardust(10);
+    flashLocation('ᚱ ✦ the stone crumbles — every word is yours ᛫ +10 stardust ✦', 2600);
+    return null;
+  }
+  const want = Math.max(0, Math.min(4,
+    1 + ring + (Math.random() < 0.35 ? 1 : 0) - (Math.random() < 0.3 ? 1 : 0)));
+  let best = null, bd = Infinity;
+  for (const w of cands) {
+    const d = Math.abs(w.tier - want) + Math.random() * 0.4;
+    if (d < bd) { bd = d; best = w; }
+  }
+  run.grimoire.owned.push(best.id);
+  if (run.grimoire.active.length < 8) run.grimoire.active.push(best.id);
+  const tier = WORD_TIERS[best.tier];
+  if (quiet) {
+    flashLocation(`ᚱ ✦ ${best.text} joins your grimoire (${tier.name}) ✦`, 3000);
+  } else {
+    ui.announce('A Word Wakes in the Stone', `ᚱ ᛫ ${best.text} joins your grimoire ᛫ a ${tier.name} word`);
+  }
+  refreshGrimoireBtn();
+  if (ui.grimoireOpen) openGrimoire();
+  return best;
+}
+
+function refreshGrimoireBtn() {
+  ui.setGrimoireCount(run.grimoire.active.length, run.grimoire.owned.length);
+}
+
+function openGrimoire() {
+  ui.showGrimoire(
+    run.grimoire.owned
+      .map((id) => WORD_BY_ID.get(id))
+      .filter(Boolean)
+      .map((w) => ({
+        ...w,
+        tierName: WORD_TIERS[w.tier].name,
+        tierColor: WORD_TIERS[w.tier].color,
+      })),
+    new Set(run.grimoire.active),
+    (id) => {
+      const a = run.grimoire.active;
+      const i = a.indexOf(id);
+      if (i >= 0) {
+        if (a.length > 1) a.splice(i, 1);
+        else flashLocation('✦ keep at least one word on your tongue ✦', 2200);
+      } else if (a.length < 8) {
+        a.push(id);
+      } else {
+        flashLocation('✦ eight words is all a tongue can hold ✦', 2200);
+      }
+      refreshGrimoireBtn();
+      openGrimoire(); // re-render with the new hand
+    }
+  );
+}
+
+function toggleGrimoire() {
+  if (ui.grimoireOpen) ui.hideGrimoire();
+  else if (!combat.active && !bossFx.active && !cutscene.active && !run.dead) openGrimoire();
+}
+
+// drifting RUNE STONES over discovered seas — sail onto one to learn
+const runeDrops = [];
+let nextRuneAt = 40;
+
+function spawnRuneDrop() {
+  const cands = world.areas.filter((a) => a.discovered && !a.asteroid && a.ring >= run.ringReached);
+  if (!cands.length) return;
+  const area = cands[(Math.random() * cands.length) | 0];
+  const keys = area.hexKeys.filter((k) => {
+    const h = world.hexes.get(k);
+    return !h.hazard && !h.baseY && h.gateId === null && h.wardId === undefined
+      && h.chainId === undefined && h.lodeChain === undefined && !h.spring
+      && !h.springStone && !h.court && !h.stillmoon;
+  });
+  if (!keys.length) return;
+  const key = keys[(Math.random() * keys.length) | 0];
+  const h = world.hexes.get(key);
+  const p = Hx.toWorld(h.q, h.r, HEX);
+  const g = new THREE.Group();
+  const stone = new THREE.Mesh(
+    new THREE.OctahedronGeometry(0.7, 0),
+    new THREE.MeshBasicMaterial({ color: 0xb9a6ff })
+  );
+  stone.scale.set(0.85, 1.3, 0.85);
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: heartGlowTex, color: 0xb9a6ff, transparent: true, opacity: 0.5,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  }));
+  glow.scale.setScalar(4.6);
+  glow.renderOrder = 3;
+  g.add(stone, glow);
+  g.position.set(p.x, (h.kind === 'isle' ? h.elev : 0) + 2.1, p.z);
+  scene.add(g);
+  runeDrops.push({ g, stone, key, areaId: area.id, born: clockTime, phase: Math.random() * 9 });
+}
+
+function updateRuneDrops(t, dt) {
+  if (!run.dead && t > nextRuneAt) {
+    nextRuneAt = t + 50 + Math.random() * 40;
+    if (runeDrops.length < 2) spawnRuneDrop();
+  }
+  for (let i = runeDrops.length - 1; i >= 0; i--) {
+    const rd = runeDrops[i];
+    rd.stone.rotation.y += dt * 1.4;
+    rd.g.position.y += Math.sin(t * 1.6 + rd.phase) * dt * 0.4;
+    const caught = player.hexKey === rd.key && !player.blast && !run.dead && !combat.active;
+    if (caught) learnWord(world.areas[rd.areaId].ring);
+    if (caught || t - rd.born > 120) {
+      scene.remove(rd.g);
+      runeDrops.splice(i, 1);
+    }
+  }
+}
+
 // clicking a pedestal from an adjacent tile opens the trader's sale prompt
 function tryPedestal(hex) {
   const chain = world.chains[hex.chainId];
@@ -347,7 +484,13 @@ function tryPedestal(hex) {
     flashLocation('✦ a bare pedestal ᛫ its ware is gone ✦', 2200);
     return;
   }
-  const item = entry.item;
+  const item = entry.runestone
+    ? {
+      name: 'A Rune Stone', tier: 'rare',
+      desc: 'a word sleeps in the stone ᛫ crack it and the word joins your grimoire',
+      glyph: 'rune', tint: 0xb9a6ff, id: 'runestone',
+    }
+    : entry.item;
   const free = run.voucher > 0;
   const canPay = free || run.stardust >= entry.price;
   const patter = TRADER_LINES[(chain.id + hex.pedestal) % TRADER_LINES.length];
@@ -375,6 +518,10 @@ function tryPedestal(hex) {
       }
       entry.sold = true;
       built.claimPedestal(chain.id, hex.pedestal);
+      if (entry.runestone) {
+        learnWord(world.areas[world.hexes.get(player.hexKey).areaId].ring);
+        return;
+      }
       const inst = applyItem(run, item);
       applyInstant(inst);
       meta.bump('itemsTaken');
@@ -581,6 +728,11 @@ function onCombatVictory({ enemy, boss, flawless }) {
   const dust = 2 + (enemy.ring ?? 0) + (enemy.elite ? 2 : 0) + (boss ? 8 : 0);
   gainStardust(dust);
   flashLocation(`✦ +${dust} stardust shakes loose ✦`, 2400);
+  // Round 13: a quarter of felled foes cough up a RUNE STONE (elders and
+  // wardens always carry one) — the word joins the grimoire on the spot
+  if (enemy.elite || boss || Math.random() < 0.25) {
+    learnWord(enemy.ring ?? 0, { quiet: true });
+  }
   // a warden's fall unlocks deeper tiers BEFORE its spoils are rolled
   if (boss && activeBoss) meta.setMax('wardens', activeBoss.boundary + 1);
   if (run.relic && run.relic.charge < run.relic.def.cd) {
@@ -738,9 +890,10 @@ function chaseStep(r, h, ph) {
 }
 
 function spawnRoamer() {
+  // Round 13: regions run DENSE — five beasts at the sun, one more per ring
   const cands = world.areas.filter((a) =>
     a.discovered && !a.teleport && a.ring >= run.ringReached
-    && roamers.list.filter((r) => r.areaId === a.id).length < (a.ring === 0 ? 1 : 3));
+    && roamers.list.filter((r) => r.areaId === a.id).length < 5 + a.ring);
   if (!cands.length) return;
   const area = cands[(Math.random() * cands.length) | 0];
   const startHex = world.hexes.get(world.startKey);
@@ -800,8 +953,8 @@ function startCombatWith(roamer) {
 
 function updateRoamers(t, dt) {
   if (!run.dead && t > roamers.nextSpawn) {
-    roamers.nextSpawn = t + 7 + Math.random() * 6;
-    if (roamers.list.length < 22) spawnRoamer();
+    roamers.nextSpawn = t + 2.2 + Math.random() * 2;
+    if (roamers.list.length < 60) spawnRoamer();
   }
   const busy = combat.active || bossFx.active || cutscene.active
     || teleport.active || launch.active || run.dead;
@@ -1625,11 +1778,12 @@ addEventListener('pointermove', (e) => {
   } else if (hex.chainRole === 'pedestal') {
     const bc = world.chains[hex.chainId];
     const entry = bc?.stock?.[hex.pedestal];
+    const wareName = entry?.runestone ? 'a rune stone' : entry?.item?.name;
     text = !entry || entry.sold
       ? 'a bare pedestal ᛫ its ware is gone'
       : run.voucher > 0
-        ? `${entry.item.name} ᛫ your voucher covers it ᛫ click from beside`
-        : `${entry.item.name} ᛫ ${entry.price} ✦ stardust ᛫ click from beside`;
+        ? `${wareName} ᛫ your voucher covers it ᛫ click from beside`
+        : `${wareName} ᛫ ${entry.price} ✦ stardust ᛫ click from beside`;
   } else if (hex.chainRole === 'trader') {
     text = 'the Curio Peddler ᛫ the wares wait on the pedestals';
   } else if (hex.chainRole === 'hermit') {
@@ -1752,7 +1906,7 @@ const heartGeo = (() => {
 })();
 const heartGlowTex = makeGlowSpriteTexture();
 const heartDrops = [];
-let nextHeartAt = 26;
+let nextHeartAt = 18;
 
 function spawnHeartDrop() {
   // only regions the wisp can still reach (ascension is one-way)
@@ -1784,7 +1938,7 @@ function spawnHeartDrop() {
 
 function updateHeartDrops(t, dt) {
   if (t > nextHeartAt) {
-    nextHeartAt = t + 16 + Math.random() * 10;
+    nextHeartAt = t + 11 + Math.random() * 7;
     if (heartDrops.length < 3) spawnHeartDrop();
   }
   for (let i = heartDrops.length - 1; i >= 0; i--) {
@@ -1806,7 +1960,7 @@ function updateHeartDrops(t, dt) {
 // Every couple of minutes a star falls onto a discovered region: a streak,
 // an impact glow, and a 60-second crash-light. Reach it in time for a mend —
 // or, out in the dread rings, a ward-charm.
-const stars = { next: 75, live: [] };
+const stars = { next: 45, live: [] };
 
 function spawnFallingStar() {
   const cands = world.areas.filter((a) => a.discovered && !a.asteroid && a.ring >= run.ringReached);
@@ -1842,7 +1996,7 @@ function spawnFallingStar() {
 
 function updateStars(t, dt) {
   if (!run.dead && t > stars.next) {
-    stars.next = t + 100 + Math.random() * 60;
+    stars.next = t + 60 + Math.random() * 40;
     spawnFallingStar();
   }
   for (let i = stars.live.length - 1; i >= 0; i--) {
@@ -1892,7 +2046,7 @@ function updateStars(t, dt) {
 // ---------------------------------------------------------------- the merchant
 // Now and then the merchant leviathan surfaces alongside a discovered
 // region's rim, howdah lamp lit. Step onto the marked hex for its favor.
-const merchantVisit = { next: 210, state: 'idle', hexKey: null, until: 0, marker: null };
+const merchantVisit = { next: 140, state: 'idle', hexKey: null, until: 0, marker: null };
 
 function departMerchant() {
   merchantVisit.state = 'idle';
@@ -1906,7 +2060,7 @@ function departMerchant() {
 
 function updateMerchant(t) {
   if (merchantVisit.state === 'idle' && t > merchantVisit.next && !run.dead) {
-    merchantVisit.next = t + 220 + Math.random() * 90;
+    merchantVisit.next = t + 150 + Math.random() * 70;
     const cands = world.areas.filter((a) => a.discovered && !a.asteroid && a.ring >= run.ringReached);
     if (!cands.length) return;
     const area = cands[(Math.random() * cands.length) | 0];
@@ -1949,8 +2103,14 @@ function updateMerchant(t) {
 addEventListener('keydown', (e) => {
   // combat and its overlays own the keyboard (typing spells hits every key)
   if (combat.active || bossFx.active || ui.itemCardOpen || ui.choiceOpen) return;
+  // the grimoire swallows everything except its own toggles
+  if (ui.grimoireOpen) {
+    if (e.key === 'g' || e.key === 'G' || e.key === 'Escape') ui.hideGrimoire();
+    return;
+  }
   if (e.key === 'f' || e.key === 'F') controls.focus(player.mesh.position);
   if (e.key === 'm' || e.key === 'M') toggleChart();
+  if (e.key === 'g' || e.key === 'G') toggleGrimoire();
   if (e.key === 'Escape' && mapFx.active) exitChart();
   if (e.key === 'r' || e.key === 'R') {
     const s = Math.random().toString(36).slice(2, 8).toUpperCase();
@@ -1979,6 +2139,8 @@ window.__astral = {
     offerItem, offerRelic, onCombatVictory, ITEMS, RELICS, POOL_COUNTS,
     makeEnemy, makeWardenEnemy, ACHIEVEMENTS,
     tryPedestal, rollMarketStock, gainStardust, STARDUST_PRICES, handleSpring,
+    learnWord, openGrimoire, toggleGrimoire, runeDrops, spawnRuneDrop,
+    GRIMOIRE_WORDS,
   },
 };
 
@@ -1989,6 +2151,8 @@ ui.renderCharm(run.charm);
 ui.renderStardust(run.stardust);
 refreshStatsUi();
 refreshRelicUi();
+refreshGrimoireBtn();
+ui.onGrimoireClick(toggleGrimoire);
 applyStatsToOverworld();
 rollMarketStock(); // the bazaars lay out their wares for this run
 newBounty(0); // the cartographer's first errand, close to home
@@ -2029,6 +2193,7 @@ function frame() {
   }
   updateStrikes(t, dt);
   updateHeartDrops(t, dt);
+  updateRuneDrops(t, dt);
   updateStars(t, dt);
   updateMerchant(t);
   updateFlight(dt);

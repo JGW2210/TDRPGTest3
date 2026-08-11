@@ -606,24 +606,58 @@ export const WARDENS = [
   },
 ];
 
-// Magical words for the spell-casting challenge, by difficulty tier.
+// THE GRIMOIRE (Round 13) — spell words belong to the PLAYER now. A word's
+// LENGTH is its strength: 5-letter starters through 9-letter finishers.
+// power multiplies the attack stat; effect is a status chance rolled on a
+// landed strike (burn gnaws, freeze skips a turn, slow drags the meter).
+// The pilgrim starts with the five starters, learns more from RUNE STONES
+// (felled foes, drifting stones, bazaar pedestals), and CHOOSES up to
+// eight active words in the grimoire panel — combat draws from that hand.
 // Uppercase A-Z only — they are typed against the clock.
-export const SPELL_WORDS = {
-  short: [
-    'IGNIS', 'ASTRA', 'LUMEN', 'VELUM', 'RUNA', 'ORBIS', 'PYRA', 'UMBRA',
-    'FLUX', 'AURA', 'NIMBA', 'SIDUS', 'VIVAX', 'MICA', 'FONS', 'NOX',
-  ],
-  medium: [
-    'FULGOR', 'GLACIES', 'VORTEX', 'STELLA', 'CORONA', 'AETHER', 'ZEPHYRUS',
-    'ARCANUM', 'TEMPESTA', 'SOLARIS', 'NOCTURNE', 'MERIDIA', 'OBSIDIA',
-    'CANTARIS', 'VESPERUM', 'AURELION',
-  ],
-  long: [
-    'TONITRUS', 'MAELSTROM', 'INCANDESSA', 'CRYSTALLIS', 'VELUMBRA',
-    'PYROCLASMUS', 'UMBRAVORTEX', 'ASTRAPHOBOS', 'LUMINIFERA', 'HELIOTROPUS',
-    'STELLANOVAE', 'AETHERION',
-  ],
-};
+export const WORD_TIERS = [
+  { name: 'lesser', len: 5, color: '#8f96b8' },
+  { name: 'keen', len: 6, color: '#9fd8ff' },
+  { name: 'greater', len: 7, color: '#8cf5a6' },
+  { name: 'exalted', len: 8, color: '#c78bff' },
+  { name: 'sovereign', len: 9, color: '#ffd27a' },
+];
+
+export const GRIMOIRE_WORDS = [
+  // tier 0 — the five starters (5 letters, plain but quick on the tongue)
+  { id: 'w00', text: 'IGNIS', tier: 0, power: 1.0, effect: null, starter: true },
+  { id: 'w01', text: 'ASTRA', tier: 0, power: 1.0, effect: null, starter: true },
+  { id: 'w02', text: 'LUMEN', tier: 0, power: 1.0, effect: null, starter: true },
+  { id: 'w03', text: 'VELUM', tier: 0, power: 1.0, effect: null, starter: true },
+  { id: 'w04', text: 'UMBRA', tier: 0, power: 1.0, effect: null, starter: true },
+  // tier 1 — keen words (6 letters)
+  { id: 'w10', text: 'CINDER', tier: 1, power: 1.25, effect: { kind: 'burn', chance: 0.25 } },
+  { id: 'w11', text: 'FULGOR', tier: 1, power: 1.25, effect: { kind: 'burn', chance: 0.25 } },
+  { id: 'w12', text: 'FRIGUS', tier: 1, power: 1.25, effect: { kind: 'freeze', chance: 0.22 } },
+  { id: 'w13', text: 'BOREAS', tier: 1, power: 1.25, effect: { kind: 'freeze', chance: 0.22 } },
+  { id: 'w14', text: 'TORPOR', tier: 1, power: 1.25, effect: { kind: 'slow', chance: 0.3 } },
+  { id: 'w15', text: 'ZEPHYR', tier: 1, power: 1.25, effect: { kind: 'slow', chance: 0.3 } },
+  // tier 2 — greater words (7 letters)
+  { id: 'w20', text: 'INFERNO', tier: 2, power: 1.55, effect: { kind: 'burn', chance: 0.35 } },
+  { id: 'w21', text: 'PYROSIS', tier: 2, power: 1.55, effect: { kind: 'burn', chance: 0.35 } },
+  { id: 'w22', text: 'GLACIES', tier: 2, power: 1.55, effect: { kind: 'freeze', chance: 0.3 } },
+  { id: 'w23', text: 'HIBERNA', tier: 2, power: 1.55, effect: { kind: 'freeze', chance: 0.3 } },
+  { id: 'w24', text: 'LANGUOR', tier: 2, power: 1.55, effect: { kind: 'slow', chance: 0.4 } },
+  { id: 'w25', text: 'VESPERA', tier: 2, power: 1.55, effect: { kind: 'slow', chance: 0.4 } },
+  // tier 3 — exalted words (8 letters)
+  { id: 'w30', text: 'VOLCANUS', tier: 3, power: 1.9, effect: { kind: 'burn', chance: 0.45 } },
+  { id: 'w31', text: 'SOLARIUM', tier: 3, power: 1.9, effect: { kind: 'burn', chance: 0.45 } },
+  { id: 'w32', text: 'GLACIALE', tier: 3, power: 1.9, effect: { kind: 'freeze', chance: 0.38 } },
+  { id: 'w33', text: 'PRUINOSA', tier: 3, power: 1.9, effect: { kind: 'freeze', chance: 0.38 } },
+  { id: 'w34', text: 'OBSIDIAN', tier: 3, power: 1.9, effect: { kind: 'slow', chance: 0.5 } },
+  { id: 'w35', text: 'TONITRUS', tier: 3, power: 2.0, effect: null },
+  // tier 4 — sovereign words (9 letters)
+  { id: 'w40', text: 'PYROCLASM', tier: 4, power: 2.3, effect: { kind: 'burn', chance: 0.55 } },
+  { id: 'w41', text: 'CRYSTALIS', tier: 4, power: 2.3, effect: { kind: 'freeze', chance: 0.45 } },
+  { id: 'w42', text: 'MAELSTROM', tier: 4, power: 2.3, effect: { kind: 'slow', chance: 0.6 } },
+  { id: 'w43', text: 'VELUMBRAE', tier: 4, power: 2.3, effect: { kind: 'slow', chance: 0.6 } },
+  { id: 'w44', text: 'AETHERION', tier: 4, power: 2.5, effect: null },
+];
+export const WORD_BY_ID = new Map(GRIMOIRE_WORDS.map((w) => [w.id, w]));
 
 // Two lines for the lodestone chain-reveal cutscene.
 export const LODE_LINES = [

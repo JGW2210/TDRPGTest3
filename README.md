@@ -40,15 +40,18 @@ any mount path.
 | **Hold either drag** | Rotate / tilt (the camera stays locked on your wisp) |
 | **Scroll** | Zoom, out to just beyond the current region |
 | **M** / the ✦ star chart ✦ button | Toggle the free camera: glide the whole orrery under space-chart labels (no sailing while open) |
-| **Esc** | Close the star chart |
+| **Esc** | Close the star chart (or the grimoire) |
+| **G** / the ᚱ grimoire button | Open the grimoire: choose your active hand of up to 8 spell words |
 | **F** | Find your wisp |
 | **Q** | Fire your relic (in combat, once its kill-charge is full) |
 | **R** | Generate a new cosmos (random seed) |
 | **H** | Re-show the controls hint |
 
 In **combat**: **WASD / arrows** move you square to square (and aim your
-strike), **Space / Enter / click** commits, **letters** spell the magical
-word, **Space** locks the timing bar, **Q** fires the relic.
+strike — against a burning fuse that commits the hovered square when it
+runs out), **Space / Enter / click** commits, **letters** spell the
+word drawn from your grimoire hand, **Space** locks the timing bar,
+**Q** fires the relic.
 
 In the star chart, **left-drag** glides, **right-drag** rotates, and
 **scroll** soars out to the full orrery.
@@ -201,25 +204,39 @@ In the star chart, **left-drag** glides, **right-drag** rotates, and
   translates the cosmos (Twin-Tongue). In-world 3D labels hang over bodies and
   gates, rune-only until discovered.
 
-- **Paper beasts that HUNT (Rounds 11-12)** — every biome keeps its own 2D
-  paper-cutout beast (a Cinderling of the reefs, a Mirage Viper of the
-  dunes, an Oculite of the shallows…) roaming its discovered region. Spot
-  one within six hexes and it turns hunter — stepping toward you hex by
-  hex, clearly slower than your sail in the early rings, quicker with
-  every ring outward. Beasts of the first two rings are **water-bound**:
-  they never set foot on an isle, so ashore is safe ground early. Battle
-  begins ONLY when you share a tile; **Elder** beasts instead hold their
-  ground and challenge you by dialogue choice — those fights are always
-  yours to accept.
-- **The duel (Rounds 11-12)** — sharing a tile zooms the world into a
+- **Paper beasts that HUNT, in packs (Rounds 11-13)** — every biome keeps
+  its own 2D paper-cutout beasts (a Cinderling of the reefs, a Mirage
+  Viper of the dunes, an Oculite of the shallows…) roaming its discovered
+  region — **five of them at the sun, one more per ring outward**, topped
+  up fast. Spot one within six hexes and it turns hunter — stepping
+  toward you hex by hex, clearly slower than your sail in the early
+  rings, quicker with every ring outward. Beasts of the first two rings
+  are **water-bound**: they never set foot on an isle, so ashore is safe
+  ground early. Battle begins ONLY when you share a tile; **Elder**
+  beasts instead hold their ground and challenge you by dialogue choice —
+  those fights are always yours to accept.
+- **The grimoire (Round 13)** — spell words are YOURS now. You start with
+  five 5-letter starters and learn stronger ones from **rune stones**: a
+  quarter of felled beasts carry one (elders and wardens always), drifting
+  stones hover over discovered seas, and bazaars sometimes sell one. A
+  word's **length is its strength** — 5-letter words cast at ×1.00,
+  9-letter sovereigns up to ×2.50, all scaled by your attack stat, and
+  stronger words roll burn / freeze / slow on a landed strike. Press
+  **G** to open the grimoire and choose your active **hand of up to
+  eight**: combat draws its word from the hand, so a long-word hand is a
+  deliberate high-risk, high-power loadout.
+- **The duel (Rounds 11-13)** — sharing a tile zooms the world into a
   papercraft **combat diorama** staged over the hex: two 3x3 boards face
-  each other, turns scheduled by **speed**. Your attack is a three-step
-  challenge — pick a target square (items widen the pattern), **type the
-  magical word** against the clock, then land an **Undertale-style timing
-  bar**. The moment your target locks, EVERY foe takes one step of its
-  patrol — aiming is a prediction, and foresight items preview the step —
-  then your staff-bolt flies and the strike lands where it bursts, spikes
-  snapping up through every covered square. On the foe's turn danger
+  each other, turns scheduled by **speed** (meters fill fast — fights
+  open in moments now). Your attack is a three-step challenge — pick a
+  target square against a burning **aim fuse** (1.5s at the sun, tighter
+  every ring: dawdle and it commits wherever you hover; items widen the
+  pattern), **type the word drawn from your grimoire hand** against the
+  clock, then land an **Undertale-style timing bar**. The moment your
+  target locks, EVERY foe takes one step of its patrol — aiming is a
+  prediction, and foresight items preview the step — then your staff-bolt
+  flies and the strike lands where it bursts, spikes snapping up through
+  every covered square. On the foe's turn danger
   squares track you in amber, lock red, and bite after a ~0.5s wind-up
   (a touch tighter in the deep rings) — melee lunges with a slashing arc,
   ranged bolts arc visibly through the whole wind-up and roll toward the

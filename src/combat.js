@@ -5,9 +5,13 @@
 //
 // Turns are scheduled by SPEED: both sides fill an initiative meter; whoever
 // brims, acts. The player's attack is a three-step challenge — pick a target
-// square on the foe's board (attack patterns from items widen the footprint),
-// SPELL the magical word against the clock, then land an Undertale-style
-// timing bar. Round 12: EVERY foe steps its patrol once at the moment the
+// square on the foe's board (attack patterns from items widen the footprint;
+// Round 13: against an AIM CLOCK of 1.5s minus 0.2s per ring that commits
+// the hovered square at zero), SPELL the word — drawn from the player's own
+// GRIMOIRE hand of up-to-eight active words, where length is strength
+// (power multiplies atk, status words roll burn/freeze/slow on a landed
+// strike) — then land an Undertale-style timing bar. Round 12: EVERY foe
+// steps its patrol once at the moment the
 // target locks (frozen foes hold still) — aiming is a prediction, and the
 // idle end-of-turn shuffle is gone. The foe's turn telegraphs danger squares
 // (amber, tracking), locks them red, and gives the player a ~0.5s react
@@ -21,7 +25,7 @@
 // is full.
 
 import * as THREE from 'three';
-import { SPELL_WORDS } from './config.js';
+import { GRIMOIRE_WORDS, WORD_BY_ID } from './config.js';
 import { magicianCanvas, makePaperFigure } from './sprites.js';
 import { makeGlowSpriteTexture } from './materials.js';
 
@@ -130,10 +134,12 @@ export class Combat {
   end(victory) {
     this.active = false;
     this.phase = 'off';
+    this.aim = null;
     this.fx = []; // fx meshes are stage children — the teardown sweeps them
     this.cui.combatShow(false);
     this.cui.spellHide();
     this.cui.barHide();
+    this.cui.aimHide();
     this.cui.hideFoe();
     if (this.stage) {
       this.scene.remove(this.stage);
@@ -364,12 +370,19 @@ export class Combat {
     this.phase = 'target';
     this.phaseT = 0;
     this.targetCell = this.enemyCell;
-    this.cui.combatBanner('YOUR TURN', 'pick a square ᛫ space or click to commit');
-    this.cui.combatHint('WASD aims ᛫ SPACE commits');
+    // Round 13: the AIM CLOCK — 1.5s at the sun, 0.2s tighter per ring
+    // (clarity stretches it); at zero the square under the cursor commits
+    const at = Math.max(0.5, 1.5 - 0.2 * this.enemy.ring) + (this.clarity ? 0.5 : 0);
+    this.aim = { deadline: at, total: at };
+    this.cui.aimShow();
+    this.cui.combatBanner('YOUR TURN', 'pick a square — quickly', 1500);
+    this.cui.combatHint('WASD aims ᛫ SPACE commits ᛫ the fuse burns');
   }
 
   _confirmTarget() {
     // the challenge begins: the word first
+    this.aim = null;
+    this.cui.aimHide();
     this.lockedTarget = this.targetCell;
     this.lockedCells = this._patternCells(this.targetCell);
     // Round 12: EVERY foe takes its patrol step the moment the target locks
@@ -379,22 +392,26 @@ export class Combat {
       this.enemy.patrolIdx = (this.enemy.patrolIdx + 1) % this.enemy.patrol.length;
       this.enemyCell = this.enemy.patrol[this.enemy.patrolIdx];
     }
+    // Round 13: the word is DRAWN FROM THE PLAYER'S HAND — the up-to-eight
+    // active grimoire words. Length is strength: power multiplies atk, and
+    // the word's status effect rolls on a landed strike.
+    const hand = this.run.grimoire?.active?.length
+      ? this.run.grimoire.active
+      : GRIMOIRE_WORDS.filter((w) => w.starter).map((w) => w.id);
+    const def = WORD_BY_ID.get(hand[(Math.random() * hand.length) | 0]) ?? GRIMOIRE_WORDS[0];
     if (this.run.stats.flags.autoSpell) {
-      this.spell = { score: 1, done: true };
+      this.spell = { score: 1, done: true, def };
       this._beginBar();
       return;
     }
     this.phase = 'spell';
     this.phaseT = 0;
     const ring = this.enemy.ring;
-    const tier = this.boss
-      ? (this.enemy.boundary >= 2 ? 'long' : 'medium')
-      : ring <= 1 ? 'short' : ring <= 3 ? 'medium' : 'long';
-    let word = SPELL_WORDS[tier][(Math.random() * SPELL_WORDS[tier].length) | 0];
+    let word = def.text;
     if (this.run.stats.flags.scholar && word.length > 3) word = word.slice(0, -1);
     const perChar = Math.max(0.4, 0.62 - 0.045 * ring) * this.run.stats.spellTime;
     this.spell = {
-      word, typed: 0, deadline: word.length * perChar, total: word.length * perChar,
+      word, def, typed: 0, deadline: word.length * perChar, total: word.length * perChar,
       score: 0, done: false,
     };
     this.cui.spellShow(word);
@@ -471,7 +488,8 @@ export class Combat {
     // on whatever square the prediction earned)
     const cells = this._patternCells(this.lockedTarget);
     const hit = cells.includes(this.enemyCell);
-    const spellScore = this.spell.score || 0.45;
+    // word power rides every cast: a fizzled word still keeps its tier
+    const spellScore = (this.spell.score || 0.45) * (this.spell.def?.power ?? 1);
     const crit = Math.random() < this.run.stats.crit;
     let dmg = this.run.stats.atk * spellScore * barMult * (crit ? 1.5 : 1);
     dmg = Math.round(dmg * 10) / 10;
@@ -511,6 +529,13 @@ export class Combat {
       if (Math.random() < this.run.stats.burn) st.burn = Math.min(3, st.burn + 1);
       if (Math.random() < this.run.stats.freeze) st.freezeTurns = Math.min(2, st.freezeTurns + 1);
       if (Math.random() < this.run.stats.slow) st.slowTurns = Math.min(3, st.slowTurns + 2);
+      // the word's own power rolls too (Round 13: status words)
+      const weff = this.spell.def?.effect;
+      if (weff && Math.random() < weff.chance) {
+        if (weff.kind === 'burn') st.burn = Math.min(3, st.burn + 1);
+        else if (weff.kind === 'freeze') st.freezeTurns = Math.min(2, st.freezeTurns + 1);
+        else if (weff.kind === 'slow') st.slowTurns = Math.min(3, st.slowTurns + 2);
+      }
       if (barCls === 'perfect' && this.run.stats.flags.doubleTap) {
         this.pendingEcho = { at: this.t + 0.28, dmg: Math.round(dmg * 5) / 10 };
       }
@@ -568,10 +593,11 @@ export class Combat {
     }
 
     // the strike timeline: cells are chosen when each strike LOCKS
+    // (Round 13: tighter intervals — the whole turn runs quicker)
     let count = this.enemy.strikes;
     if (this.eclipseTurns > 0) count = Math.max(1, Math.ceil(count / 2));
     const ring = this.enemy.ring;
-    const interval = Math.max(0.95, 1.5 - ring * 0.1);
+    const interval = Math.max(0.75, 1.2 - ring * 0.08);
     const react = this._reactWindow();
     this.strikes = [];
     for (let i = 0; i < count; i++) {
@@ -586,14 +612,14 @@ export class Combat {
       }
       this.strikes.push({
         type,
-        lockAt: 1.0 + i * (interval + react),
+        lockAt: 0.7 + i * (interval + react),
         react,
         cells: null, // chosen at lock
         struck: false,
         secondStruck: false,
       });
     }
-    this.turnEndsAt = 1.0 + count * (interval + react) + 0.7;
+    this.turnEndsAt = 0.7 + count * (interval + react) + 0.45;
   }
 
   _reactWindow() {
@@ -919,13 +945,23 @@ export class Combat {
       dirs.forEach((d, i) => { rnd.map[d] = shuffled[i]; });
     }
 
-    // meters
+    // the aim clock: dawdling commits the square under the cursor
+    if (this.phase === 'target' && this.aim) {
+      this.aim.deadline -= dt;
+      this.cui.aimTick(Math.max(0, this.aim.deadline) / this.aim.total);
+      if (this.aim.deadline <= 0) {
+        this._confirmTarget();
+        return;
+      }
+    }
+
+    // meters (Round 13: filled ~40% faster — fights open sooner)
     if (this.phase === 'idle') {
       const pspd = this.run.stats.spd * (this.overclock ? 2 : 1);
       let espd = this.enemy.spd;
       if (this.enemy.statuses.slowTurns > 0) espd *= 0.55;
-      this.playerMeter += pspd * 9 * dt;
-      this.enemyMeter += espd * 9 * dt;
+      this.playerMeter += pspd * 12.5 * dt;
+      this.enemyMeter += espd * 12.5 * dt;
       if (this.playerMeter >= METER_MAX && this.playerMeter >= this.enemyMeter) {
         this.playerMeter = 0;
         this._beginPlayerTurn();
@@ -955,8 +991,8 @@ export class Combat {
       if (this.bar.t >= 1) this._barTimeout();
     }
 
-    // resolve pause → back to the meters
-    if (this.phase === 'resolve' && this.phaseT > 0.85) {
+    // resolve pause → back to the meters (Round 13: shorter breath)
+    if (this.phase === 'resolve' && this.phaseT > 0.6) {
       if (this.pendingEcho && this.t >= this.pendingEcho.at) {
         this._damageEnemy(this.pendingEcho.dmg);
         this._burstAtCell('e', this.enemyCell, 0xffd27a);
@@ -1134,6 +1170,8 @@ export class Combat {
       phase: this.phase, playerCell: this.playerCell, enemyCell: this.enemyCell,
       enemyHp: this.enemy?.hp, meters: [this.playerMeter, this.enemyMeter],
       debuffs: this.debuffs.map((d) => d.kind),
+      aim: this.aim ? { deadline: this.aim.deadline, total: this.aim.total } : null,
+      word: this.spell?.def?.text ?? null,
     };
   }
 }
