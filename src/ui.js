@@ -187,7 +187,7 @@ export const ui = {
     }
   },
 
-  combatBanner(title, sub = '', holdMs = 2600) {
+  combatBanner(title, sub = '', holdMs = 2000) {
     const box = el('cbanner');
     el('cbanner-title').textContent = title;
     el('cbanner-sub').textContent = sub;
@@ -335,6 +335,56 @@ export const ui = {
   hideChoice() {
     el('choice').classList.remove('show');
     this.choiceOpen = false;
+  },
+
+  // ---- the grimoire (Round 13): choose up to 8 active words ----
+  showGrimoire(words, activeSet, onToggle) {
+    const list = el('grim-list');
+    list.innerHTML = '';
+    el('grim-sub').textContent =
+      `${activeSet.size} of 8 chosen ᛫ ${words.length} known ᛫ click a word to toggle it`;
+    for (const w of words) {
+      const chip = document.createElement('div');
+      chip.className = 'wchip' + (activeSet.has(w.id) ? ' on' : '');
+      chip.style.setProperty('--wtint', w.tierColor);
+      const eff = w.effect
+        ? ` ᛫ ${w.effect.kind} ${Math.round(w.effect.chance * 100)}%`
+        : '';
+      chip.innerHTML = `<div class="wtext">${w.text}</div>`
+        + `<div class="wmeta">${w.tierName} ᛫ ×${w.power.toFixed(2)}${eff}</div>`;
+      chip.onclick = () => onToggle(w.id);
+      list.appendChild(chip);
+    }
+    el('grim-close').onclick = () => this.hideGrimoire();
+    el('grimoire').classList.add('show');
+    this.grimoireOpen = true;
+  },
+
+  hideGrimoire() {
+    el('grimoire').classList.remove('show');
+    this.grimoireOpen = false;
+  },
+
+  setGrimoireCount(active, owned) {
+    el('grimbtn').textContent = `ᚱ grimoire ᛫ ${active}/${Math.min(8, owned)}`;
+  },
+
+  onGrimoireClick(fn) {
+    el('grimbtn').addEventListener('click', fn);
+  },
+
+  // ---- the aim clock (Round 13): the target phase runs on a fuse ----
+  aimShow() {
+    el('aimbar-fill').style.width = '100%';
+    el('aimbar').classList.add('show');
+  },
+
+  aimTick(frac) {
+    el('aimbar-fill').style.width = `${Math.max(0, frac) * 100}%`;
+  },
+
+  aimHide() {
+    el('aimbar').classList.remove('show');
   },
 
   // ---- the stats line ----

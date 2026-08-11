@@ -772,3 +772,62 @@ combat turn re-ordered so aiming is a prediction. All chosen by poll.
   bites, then rolls on toward the camera; sweep: a spike row; cross:
   falling bolts. Tile overlay flashes stay as the impact underlay.
 - ☐ Paper-cutout FX sprites · ☐ Hybrid mesh + paper.
+
+---
+
+## Round 13 — Polls 44–47: the grimoire, the aim clock, dense fast regions
+
+Words became the player's own arsenal, aiming got a fuse, and the whole
+game speeds up. All chosen by poll.
+
+## Poll 44 — The aim clock (custom answer)
+
+- ☑ **1.5s, −0.2s per ring** (user-written option) — the target phase runs
+  on a visible fuse: 1.5s at the sun, 0.2s tighter per ring (floor 0.5s;
+  the clarity relic adds 0.5s). At zero the square under the cursor
+  COMMITS automatically — the turn is never wasted, but hesitation aims
+  for you.
+- ☐ ~5s auto-commit · ☐ 4s fizzle · ☐ untimed first turn.
+
+## Poll 45 — Word powers
+
+- ☑ **Status words** — a word's LENGTH is its strength: 5-letter starters
+  (×1.00) through 9-letter sovereigns (×2.30–2.50); power multiplies the
+  attack stat on every cast (even a fizzle keeps its tier). Words of tier
+  1+ carry a burn / freeze / slow chance rolled on a landed strike, on
+  top of any item imbues. 28 words in `GRIMOIRE_WORDS` (config.js):
+  lesser ×1.00 · keen ×1.25 · greater ×1.55 · exalted ×1.90 · sovereign
+  ×2.30, capped by AETHERION at ×2.50.
+- ☐ Board-shaping words · ☐ Full grimoire mix.
+
+## Poll 46 — Rune stone sources (all three selected)
+
+- ☑ **Enemy drops** — a quarter of felled foes cough up a rune stone
+  (elders and wardens always); the word joins the pool on the spot.
+- ☑ **World pickups** — up to two drifting rune stones hover over
+  discovered regions (like heart-sprites); sail onto one to learn.
+- ☑ **Bazaar stock** — about a third of bazaars keep a rune stone on one
+  pedestal (12 ✦ stardust; vouchers work).
+  Words learned are tier-weighted around the ring they were found in; a
+  new word auto-joins the active hand while there is room.
+
+## Poll 47 — Pace levers (all four selected)
+
+- ☑ **Faster combat rhythm** — initiative meters fill ~40% faster
+  (9→12.5), resolve pause 0.85→0.6s, enemy-turn lead 1.0→0.7s and tail
+  0.7→0.45s, strike intervals 0.95-1.5→0.75-1.2s, banners hold 2.0s.
+- ☑ **Faster sailing** — base STEP_TIME 0.22→0.18s (~20% quicker; item
+  speed still stacks).
+- ☑ **Quicker roamer pressure** — spawn cadence 7-13s→2.2-4.2s, global
+  cap 22→60, per-region cap now **5 + ring** (5 at the sun, 9 in the
+  deep) — the density the round asked for.
+- ☑ **Denser events** — falling stars 100-160→60-100s, heart-sprites
+  16-26→11-18s, merchant visits 220-310→150-220s.
+
+### The grimoire panel
+
+`G` (or the ᚱ button under the star chart) opens the grimoire: every
+known word as a tier-colored chip (name, ×power, effect); click to toggle
+membership in the ACTIVE HAND of up to eight (never below one). Combat
+draws its spell word uniformly from the hand — a hand of long words is a
+high-risk, high-power loadout; a hand of starters is fast and safe.

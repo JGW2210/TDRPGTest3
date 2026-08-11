@@ -225,6 +225,21 @@ world-shaped is seeded (`?seed=`, default `AETHERION`). Live at
   deducts (or consumes a bounty voucher — free), `built.claimPedestal`
   bursts the ware, and the item applies like any drop. `grantBoon` now
   serves only hermits, the merchant leviathan, and stars.
+- **THE GRIMOIRE (Round 13, config + main + combat + ui)** — spell words
+  belong to the player. `GRIMOIRE_WORDS` (config.js): 28 words in five
+  tiers where LENGTH IS STRENGTH — 5-letter starters ×1.00 → 9-letter
+  sovereigns ×2.30 (AETHERION ×2.50); tier 1+ words carry a
+  burn/freeze/slow chance rolled on a landed strike. `run.grimoire =
+  { owned, active }` starts with the five starters; RUNE STONES teach
+  more (`learnWord(ring)` — tier-weighted around the ring, auto-joins
+  the hand while under 8): a quarter of felled foes drop one (elders/
+  wardens always), up to two drift over discovered regions
+  (`updateRuneDrops`), and ~a third of bazaars stock one on a pedestal
+  (12 ✦; `entry.runestone`). The PANEL (`G` / the ᚱ button,
+  `ui.showGrimoire`, `#grimoire` + `.wchip`) toggles the ACTIVE HAND of
+  1-8 words; combat draws uniformly from the hand at target commit —
+  long-word hands are high-risk/high-power loadouts. All-words-known
+  stones crumble into +10 stardust.
 - **Heart-sprites** — runtime-only (main.js `updateHeartDrops`): up to 3
   drifting hearts over discovered non-asteroid seas, heal half on catch,
   fade after 90s.
@@ -238,10 +253,17 @@ world-shaped is seeded (`?seed=`, default `AETHERION`). Live at
   foresight ghosts) → 'spell' (type a `SPELL_WORDS` tier word against a
   per-ring clock; typos cost 0.18s; timeout fizzles to 0.45x) → 'bar'
   (Undertale sweep; perfect 1.6x + shatters lane-hexes) → resolve. Round
-  12: EVERY foe steps its patrol ONE step at TARGET COMMIT (frozen foes
-  hold still; the end-of-turn shuffle and the dodger special-case are
-  gone) — aiming is a prediction, and the strike flies as a staff-bolt FX
-  that lands ~0.22s later (`_landStrike` applies damage on arrival).
+  13: the target phase runs on an AIM CLOCK — `max(0.5, 1.5 − 0.2·ring)`
+  seconds (+0.5 clarity), fuse bar shown, auto-committing the hovered
+  square at zero — and the spell word is DRAWN FROM THE GRIMOIRE HAND
+  (see below), its power multiplying atk and its status effect rolling on
+  a landed strike. Round 12: EVERY foe steps its patrol ONE step at
+  TARGET COMMIT (frozen foes hold still; the end-of-turn shuffle and the
+  dodger special-case are gone) — aiming is a prediction, and the strike
+  flies as a staff-bolt FX that lands ~0.22s later (`_landStrike` applies
+  damage on arrival). Round 13 pace: meters fill at 12.5x (was 9x),
+  resolve pause 0.6s, enemy turn lead 0.7s/tail 0.45s, strike interval
+  0.75-1.2s.
   Enemy turn: a strike timeline — danger squares TRACK the player in
   amber (reveal lead grows with sight), LOCK red, bite after a ~0.5s
   react window (`max(0.42, 0.55 − 0.03·ring)` + dodge stat). Melee = 1
@@ -253,10 +275,11 @@ world-shaped is seeded (`?seed=`, default `AETHERION`). Live at
   Control-hex debuffs: reverse, scramble (reshuffles every 1.5s),
   lanelock (perfect strike clears). RELIC on Q (12 relics, kill-charged).
   `combat.debugWin()` + `combat.debugState()` for tests.
-- **ROAMERS (Round 11; hunters Round 12, runtime-only in main)** — up to
-  ~22 paper beasts drift through discovered regions (≤3 per region, ring ≥
-  ringReached, spawn cadence ~7s; never on special/trigger/court hexes —
-  `roamerHexOk`). Round 12 they HUNT: within a 6-hex sight radius
+- **ROAMERS (Round 11; hunters Round 12; DENSE Round 13, runtime-only in
+  main)** — up to 60 paper beasts drift through discovered regions
+  (**5 + ring per region** — 5 at the sun, 9 in the deep; ring ≥
+  ringReached, spawn cadence ~2.2-4.2s; never on special/trigger/court
+  hexes — `roamerHexOk`). Round 12 they HUNT: within a 6-hex sight radius
   (`CHASE_RADIUS`) a beast steps toward the pilgrim (`chaseStep`: BFS
   next-hop over cells it may walk; no road → the legal step that closes
   the gap, so water-bound beasts pace the shoreline) at a ring-scaled
@@ -314,7 +337,7 @@ world-shaped is seeded (`?seed=`, default `AETHERION`). Live at
 
 | File | Role |
 | --- | --- |
-| `config.js` | HEX size, RINGS radii, STORM + STORM_BOUNDARIES, SHARD_LINES (arming) + WARD_LINES (launch), WARDENS (Round 11: names/tints/intro+defeat lines), SPELL_WORDS tiers, TRAPS atlas, HERMITS, LODE_LINES, biome tables, ASTEROID_BIOMES, TELEPORT_BIOMES, STILLMOON_CRYSTALS, runes |
+| `config.js` | HEX size, RINGS radii, STORM + STORM_BOUNDARIES, SHARD_LINES (arming) + WARD_LINES (launch), WARDENS (Round 11: names/tints/intro+defeat lines), GRIMOIRE_WORDS + WORD_TIERS (Round 13 — SPELL_WORDS retired), TRAPS atlas, HERMITS, LODE_LINES, biome tables, ASTEROID_BIOMES, TELEPORT_BIOMES, STILLMOON_CRYSTALS, runes |
 | `worldgen.js` | Seeded gen: layout (+ teleport concourses in ring gaps) → regions → gates (boundary gates via `placeBossNode` warden causeways) → storm wards → temple courts (`placeCourt` 7-hex annex pads, teleporter at the heart) → stillmoons → shrines (baseY platform + hidden helix chain + lodestone) → attachment chains (12-cell bazaar stamps / hermit islets) → spring courts (7-hex fountain pads) → spring stones → start hex → hazards (trap atlas; skips `hex.court`) |
 | `buildWorld.js` | All meshes/décor/animators + runtime API (igniteGate, claimShard, setStormFrontier, setGateCrystal, setTrackTarget, triggerSnare, geyserErupting, mawSnapping, claimAltar, revealChain, claimLodestone, stockPedestal, claimPedestal, exhaustSpring, merchant, burstAt, landmarkSpots, bounceIsle, boingGate, wobbleBody, revealArea, openThreshold) |
 | `bodies.js` | sculptBody: bespoke per-body geometry archetypes |
@@ -330,7 +353,7 @@ world-shaped is seeded (`?seed=`, default `AETHERION`). Live at
 | `player.js` | The paper magician (makePaperFigure billboard + warm light; the old torus halo is GONE — Round 12), click-to-sail BFS stepping, `speedMul` (stepSpeed items), `startBlast(destKey, 'arc'\|'line'\|'hop', {durMul})`, `blastPointAt(t)` path sampler, baseY-aware heights |
 | `controls.js` | mode 'locked' (either-drag rotate, capped zoom, no pan) \| 'free' (LMB glide), RMB rotate, wheel zoom (max 4400), smooth cap reel-in |
 | `main.js` | Wiring: run state (hearts/charm/voucher/stardust/death/ringReached + mods/stats/items/relic/kills), combat triggers + rewards (onCombatVictory/offerItem/offerRelic + stardust pay), roamer hunter AI (chaseStep, water-bound rings 0-1), bazaar stock + sales (rollMarketStock/tryPedestal), warden thresholds (bossFx intro), beam flights + ascension launches, star chart + map labels, teleport sequence, hop logic, hazard checks (hazardGuard/stormSoul), storm strikes + surges, heart-sprites, falling stars, merchant visits, bounties, shard/lodestone/altar/hermit/spring/teleporter handlers, hover+path UI, `window.__astral` |
-| `pathfind.js`, `hexmath.js`, `rng.js`, `labels.js`, `ui.js` | Support (ui adds the Round 11 combat surface: combatShow/Banner/Hint, foePanel/foeHp, spellShow/Progress, barShow/Cursor/Result, debuffs, itemCard — Round 12: + `note` row for sale patter/price, renderStardust — relicSlot, bossIntro, choice, statsLine) |
+| `pathfind.js`, `hexmath.js`, `rng.js`, `labels.js`, `ui.js` | Support (ui adds the Round 11 combat surface: combatShow/Banner/Hint, foePanel/foeHp, spellShow/Progress, barShow/Cursor/Result, debuffs, itemCard — Round 12: + `note` row for sale patter/price, renderStardust — Round 13: showGrimoire/hideGrimoire/setGrimoireCount, aimShow/aimTick/aimHide — relicSlot, bossIntro, choice, statsLine) |
 
 ## Dev workflow
 
@@ -520,6 +543,15 @@ world-shaped is seeded (`?seed=`, default `AETHERION`). Live at
   gate) and the fountain's visual state (`built.exhaustSpring`). Both are
   reset together in `onEnterHex`'s area-change branch — clear one without
   the other and the fountain will look wrong.
+- THE AIM CLOCK auto-commits via `_confirmTarget()` from inside
+  `update()` — anything watching the target phase must accept it ending
+  without input. The grimoire hand can never be empty (the UI refuses to
+  drop below one; combat falls back to the starters if it somehow is).
+  Bazaar stock entries are now `{ item, ... }` OR `{ runestone: true,
+  ... }` — anything iterating stock must handle both shapes.
+- The overworld keydown handler swallows everything while
+  `ui.grimoireOpen` except G/Escape (which close it) — R could otherwise
+  reseed under a misclick. Combat refuses to open the panel at all.
 
 ## Roadmap (undone, in rough priority)
 
@@ -606,6 +638,18 @@ so EVERY foe steps its patrol at target commit (end-of-turn shuffle gone
 — aiming is prediction), react windows ~0.5s ring-nudged, and an attack
 FX kit (tile spikes, caster→square shots, melee swing arcs, falling
 bolts) for both sides.
+
+→ Round 13 (Polls 44-47): THE GRIMOIRE — spell words became the player's
+arsenal (28 words in `GRIMOIRE_WORDS`, length = strength ×1.00→×2.50,
+tier-1+ words rolling burn/freeze/slow on landed strikes), learned from
+RUNE STONES (25% enemy drops, elders/wardens always; drifting world
+pickups; ~a third of bazaar pedestals) and curated in the grimoire panel
+(G key — an active HAND of 1-8 words combat draws from); the target
+phase gained an AIM CLOCK (1.5s − 0.2s/ring, floor 0.5s, auto-commits
+the hovered square at zero); regions run DENSE (5 + ring roamers each,
+global cap 60, ~2-4s spawn cadence); and the whole game quickened —
+meters 12.5x, shorter combat pauses, base sail 0.18s/hex, stars/hearts/
+merchant on tighter cadences.
 
 Dev branch convention: work happens on a `claude/...` branch, PR'd to
 `main` and merged; this round's branch is

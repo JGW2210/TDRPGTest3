@@ -9,7 +9,7 @@ import * as Hx from './hexmath.js';
 import { findPath } from './pathfind.js';
 import { magicianCanvas, makePaperFigure } from './sprites.js';
 
-const STEP_TIME = 0.22;
+const STEP_TIME = 0.18; // Round 13: the base sail runs ~20% quicker
 
 export class Player {
   constructor(world) {
