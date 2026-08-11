@@ -153,6 +153,141 @@ export function drawMagician(ctx, S, { robe = 0x4a4f7a, robe2 = 0x2a2f5c, eye = 
   ctx.stroke();
 }
 
+// ---------------------------------------------------------------- the trader
+// The Curio Peddler in person (Round 12): a broad paper cutout — a heavy
+// pack looming behind, a patched travelling robe, warm lantern eyes deep in
+// the hood, and a crook-hung lantern held out over the wares.
+export function drawTrader(ctx, S) {
+  const rng = new Rng('trader');
+  const cx = S * 0.44, base = S * 0.94;
+  ctx.clearRect(0, 0, S, S);
+  ctx.lineJoin = 'round';
+
+  // the pack: a lumpy bundle towering behind one shoulder
+  paperBlob(ctx, rng, cx + S * 0.17, S * 0.38, S * 0.17, S * 0.22, { points: 10, jitter: 0.2 });
+  inked(ctx, css(0x6a4a32), 4);
+  // strapped bundles atop the pack
+  paperBlob(ctx, rng, cx + S * 0.2, S * 0.17, S * 0.1, S * 0.06, { points: 8, jitter: 0.25 });
+  inked(ctx, css(0x8a5aa0), 3);
+  paperBlob(ctx, rng, cx + S * 0.1, S * 0.12, S * 0.07, S * 0.05, { points: 8, jitter: 0.25 });
+  inked(ctx, css(0xb8506a), 3);
+
+  // robe: a squat bell with a torn hem — a walker, not a wisp
+  ctx.beginPath();
+  ctx.moveTo(cx, S * 0.2);
+  ctx.bezierCurveTo(cx - S * 0.2, S * 0.28, cx - S * 0.26, S * 0.6, cx - S * 0.3, base);
+  for (let i = 0; i <= 6; i++) {
+    const x = cx - S * 0.3 + (i / 6) * S * 0.56;
+    ctx.lineTo(x, base - (i % 2 ? S * 0.03 : 0) - rng.float() * S * 0.018);
+  }
+  ctx.bezierCurveTo(cx + S * 0.24, S * 0.6, cx + S * 0.2, S * 0.28, cx, S * 0.2);
+  ctx.closePath();
+  inked(ctx, css(0x8c6e4a), 4.5);
+
+  // patches stitched on the robe
+  for (const [px, py, pw, phh, col] of [
+    [cx - S * 0.14, S * 0.55, S * 0.1, S * 0.09, 0xb8506a],
+    [cx + S * 0.05, S * 0.68, S * 0.09, S * 0.08, 0x5c6e9e],
+    [cx - S * 0.04, S * 0.8, S * 0.08, S * 0.07, 0xe8e4d2],
+  ]) {
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.rotate((rng.float() - 0.5) * 0.4);
+    ctx.beginPath();
+    ctx.rect(0, 0, pw, phh);
+    ctx.fillStyle = css(col);
+    ctx.fill();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([3, 3]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  // sash with hanging trinkets
+  ctx.beginPath();
+  ctx.moveTo(cx - S * 0.18, S * 0.52);
+  ctx.quadraticCurveTo(cx, S * 0.58, cx + S * 0.18, S * 0.52);
+  ctx.lineTo(cx + S * 0.15, S * 0.6);
+  ctx.quadraticCurveTo(cx, S * 0.65, cx - S * 0.15, S * 0.6);
+  ctx.closePath();
+  inked(ctx, css(0x59431f), 3);
+  for (const tx of [-0.08, 0, 0.09]) {
+    ctx.beginPath();
+    ctx.arc(cx + tx * S, S * 0.66, S * 0.016, 0, Math.PI * 2);
+    inked(ctx, tx === 0 ? '#ffd9a8' : '#9fd8ff', 2);
+  }
+
+  // the crook arm holding a lantern out over the counter
+  ctx.beginPath();
+  ctx.moveTo(cx - S * 0.06, S * 0.36);
+  ctx.quadraticCurveTo(cx - S * 0.26, S * 0.36, cx - S * 0.34, S * 0.44);
+  ctx.quadraticCurveTo(cx - S * 0.24, S * 0.48, cx - S * 0.08, S * 0.46);
+  ctx.closePath();
+  inked(ctx, css(0x8c6e4a), 4);
+  // the staff-crook
+  ctx.save();
+  ctx.translate(S * 0.12, S * 0.5);
+  ctx.rotate(-0.08);
+  ctx.fillStyle = shade(0x59431f, 0.9);
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.roundRect(-S * 0.016, -S * 0.34, S * 0.032, S * 0.76, S * 0.016);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+  // lantern swinging from the crook
+  const lx = S * 0.115, ly = S * 0.24;
+  ctx.beginPath();
+  ctx.moveTo(lx, ly - S * 0.055);
+  ctx.lineTo(lx, ly - S * 0.03);
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.roundRect(lx - S * 0.032, ly - S * 0.03, S * 0.064, S * 0.08, S * 0.012);
+  inked(ctx, css(0x2c2740), 3);
+  const lg = ctx.createRadialGradient(lx, ly + S * 0.01, 0, lx, ly + S * 0.01, S * 0.07);
+  lg.addColorStop(0, '#ffd9a8');
+  lg.addColorStop(0.5, '#ffd9a866');
+  lg.addColorStop(1, '#ffd9a800');
+  ctx.fillStyle = lg;
+  ctx.fillRect(lx - S * 0.07, ly - S * 0.06, S * 0.14, S * 0.14);
+  ctx.fillStyle = '#ffedd0';
+  ctx.beginPath();
+  ctx.arc(lx, ly + S * 0.01, S * 0.017, 0, Math.PI * 2);
+  ctx.fill();
+
+  // hood: deep, wide-brimmed, the face a warm-lit well
+  ctx.beginPath();
+  ctx.moveTo(cx, S * 0.08);
+  ctx.bezierCurveTo(cx - S * 0.2, S * 0.1, cx - S * 0.23, S * 0.28, cx - S * 0.13, S * 0.36);
+  ctx.quadraticCurveTo(cx, S * 0.41, cx + S * 0.13, S * 0.36);
+  ctx.bezierCurveTo(cx + S * 0.23, S * 0.28, cx + S * 0.2, S * 0.1, cx, S * 0.08);
+  ctx.closePath();
+  inked(ctx, css(0x59431f), 4.5);
+  ctx.beginPath();
+  ctx.ellipse(cx, S * 0.27, S * 0.1, S * 0.11, 0, 0, Math.PI * 2);
+  ctx.fillStyle = '#1a1410';
+  ctx.fill();
+
+  // lantern eyes, warm amber
+  glowEye(ctx, cx - S * 0.04, S * 0.265, S * 0.02, '#ffd9a8');
+  glowEye(ctx, cx + S * 0.04, S * 0.265, S * 0.02, '#ffd9a8');
+}
+
+export function traderCanvas(S = 192) {
+  const key = 'trader:' + S;
+  if (!canvasCache.has(key)) {
+    const c = makeCanvas(S);
+    drawTrader(c.getContext('2d'), S);
+    canvasCache.set(key, c);
+  }
+  return canvasCache.get(key);
+}
+
 // ---------------------------------------------------------------- creatures
 // One painter per silhouette family; enemies map onto them with a palette
 // and a few tweaks. All draw into a square canvas, feet at the bottom.

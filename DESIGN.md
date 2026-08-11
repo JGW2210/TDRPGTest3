@@ -644,3 +644,131 @@ atk / spd (turn frequency) / sight (telegraph reveal time) / foresight
 luck / stepSpeed (overworld sailing) / hopRange (spring-stone leaps) /
 hazardGuard / burn / freeze / slow / thorns / shield / lifesteal /
 relicRate — folded from item mods by `computeStats` into `run.stats`.
+
+---
+
+## Round 12 — Polls 33–43: annex courts, the bazaar economy, hunting roamers, commit-step combat, attack FX
+
+A mixed pass: small artifact fixes, two structure reworks onto dedicated
+7-hex platforms, markets made a real economy, roamers made hunters, and the
+combat turn re-ordered so aiming is a prediction. All chosen by poll.
+
+## Poll 33 — The player's ring
+
+- ☑ **Delete it entirely** — the spinning torus halo over the magician's
+  head was an artifact of the old wisp model. Gone from `player.js`; the
+  paper figure keeps only its sprite glow and warm point light.
+- ☐ Ground glow decal · ☐ Fade in at far zoom.
+
+## Poll 34 — Temple platform
+
+- ☑ **Annex pad off the rim** — every teleport concourse stamps a level
+  7-hex **ANNEX COURT** (a heart hex + six petals, `placeCourt` in
+  worldgen) on the rim side whose bearing bisects its two gate islets,
+  stone-paved back to the knot exactly like a gate islet. The teleporter
+  hex moved from the knot's heart to the court's; `makeTemple` grew from a
+  pillared hut into a true Parthenon (~2.2× — three-step stylobate,
+  five-column flanks, pediment gables, votive braziers, forecourt steps)
+  whose front faces the island between the gates.
+- ☐ Whole concourse = 7-hex flower · ☐ Carve a clearing inside the knot.
+
+## Poll 35 — Spring court + fountain
+
+- ☑ **Statue fountain, re-arms** — spring waystations stamp the same 7-hex
+  court at a free bearing. New `makeFountain`: a tiered marble fountain
+  (twin water sheets, crown jet, four spill jets, drifting mist) with a
+  robed **GUARDIAN STATUE** pouring from an ewer on a plinth at the back.
+  Drinking heals as before and **EXHAUSTS** the fountain — water drains
+  dark, jets die, the pour stops, the guardian's lantern eyes go out and
+  its head bows (`built.exhaustSpring(areaId, on)`). Both the heal and the
+  look re-arm when the pilgrim next re-enters the region.
+- ☐ Once per run, permanent · ☐ 2D papercraft statue.
+
+## Poll 36 — Market shape
+
+- ☑ **Stamped 12-hex bazaar** — market chains end in a hand-authored
+  12-cell stamp instead of the old 5-cell islet: a dock stone facing home,
+  a 3-wide walkable aisle, a 5-wide pedestal row (three **SALE PEDESTALS**
+  at lateral offsets −2/0/+2 — one walkable gap hex between each pair,
+  pedestal hexes `blocked`), and a 3-wide tent row whose heart holds the
+  trader (also blocked). `makeMarketStall` became a broad patched pavilion
+  (four poles, valance, canvas back wall, crates, a rolled carpet, a
+  swinging lantern) — and the cone-peddler was retired for a **2D
+  paper-cutout trader** (`drawTrader`/`traderCanvas` in sprites.js).
+  Hermit chains keep the old organic 5-cell islet.
+- ☐ Grown islet + placed set · ☐ Tent isle + floating pedestal spurs.
+
+## Poll 37 — Sale terms
+
+- ☑ **Stardust coins** — the run's first currency. Every felled foe shakes
+  loose `2 + ring (+2 elite, +8 warden)` stardust (counter beside the
+  hearts). Each bazaar's three pedestals stock items rolled from the run's
+  pool at world-wake (no duplicates across markets), priced by tier:
+  common 8 · rare 14 · super-rare 22 · legendary 30. Bounty vouchers
+  redeem any one pedestal ware free.
+- ☐ Heart-price devil deals · ☐ Free pick-one-of-three.
+
+## Poll 38 — Sale prompt
+
+- ☑ **Item card + trader line** — clicking a stocked pedestal from an
+  ADJACENT tile opens the familiar item card with a `#item-note` row: a
+  line of peddler patter plus the price (or "your bounty voucher covers
+  it"), and a buy/walk-away choice. Buying deducts, bursts the ware off
+  its pedestal, and applies the item like any drop. Standing anywhere
+  farther refuses with a flash; the pedestal tiles themselves are
+  unwalkable by construction.
+- ☐ Floating runic choice · ☐ Speech-bubble scene.
+
+## Poll 39 — Roamer pursuit (custom answer)
+
+- ☑ **Sight-radius chase, ring-scaled — and early beasts never set foot on
+  land** (user-written option). A roamer that sees the pilgrim within 6
+  hexes on its island steps toward them (BFS next-hop over cells it may
+  walk; failing a road, it paces the legal cell that closes the gap —
+  water-bound beasts circle the shoreline). Hunt cadence starts far below
+  sail speed (a step per 1.6s at ring 0) and quickens with depth (0.55s
+  floor). Elders still stand their ground and challenge by dialogue;
+  battle still triggers ONLY by sharing a tile.
+- ☐ Chase + retire elder prompts · ☐ Territorial lunge.
+
+## Poll 40 — Water-bound boundary
+
+- ☑ **Rings 0-1 water-only** — beasts of the first two rings spawn on and
+  chase across water hexes only; isles are safe ground early. From ring 2
+  outward they cross land too (never onto special/trigger hexes).
+- ☐ Ring 0 only · ☐ Water-only until ring 3.
+
+## Poll 41 — When the combat foe steps
+
+- ☑ **All foes step on commit** — every enemy advances its patrol exactly
+  one step the moment the player LOCKS a target square (frozen foes hold
+  still), easing visibly while the spell and bar play out; the strike then
+  lands on whatever square the prediction earned. The old end-of-turn
+  patrol shuffle is gone, and the dodger special-case with it — aiming is
+  now a prediction for every foe, with foresight ghosts previewing the
+  step.
+- ☐ Step at the strike (after spell + bar) · ☐ Commit-step gated by
+  statuses/temperament.
+
+## Poll 42 — Telegraph wind-up
+
+- ☑ **0.5s base, ring-nudged** — the lock-to-impact react window became
+  `max(0.42, 0.55 − 0.03·ring)`: 0.55s at the sun easing to ~0.43s in the
+  deep rings (dodge items and the clarity relic still add). The amber
+  tracking lead is unchanged.
+- ☐ Flat 0.5s everywhere · ☐ Whole telegraph (amber + red) in 0.5s.
+
+## Poll 43 — Attack FX
+
+- ☑ **Mesh FX kit + impact bursts** — a pooled effect kit in combat.js,
+  all stage-local children torn down with the diorama: **SPIKES** (tinted
+  cones snapping out of struck tiles), **SHOTS** (glowing orb + halo
+  arcing caster → square), **SWINGS** (an additive arc slashing over the
+  bitten cell), **FALLS** (stone bolts dropping with a squash). Mapping —
+  player strike: a staff bolt flies to the marked square and the strike
+  lands where it bursts (spikes through every covered cell, a slash arc
+  for wide patterns); enemy melee: lunge + swing; ranged: the bolt is
+  visible for the whole react window and lands exactly as the red square
+  bites, then rolls on toward the camera; sweep: a spike row; cross:
+  falling bolts. Tile overlay flashes stay as the impact underlay.
+- ☐ Paper-cutout FX sprites · ☐ Hybrid mesh + paper.

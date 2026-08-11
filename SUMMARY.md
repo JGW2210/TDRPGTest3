@@ -28,8 +28,12 @@ world-shaped is seeded (`?seed=`, default `AETHERION`). Live at
   shorelines); waters ≈ 80-90% of walkable tiles; region radius sized to
   its sea, hard-capped so facing gate islets can never bridge the void.
   Asteroid areas (`generateAsteroidRegion`, `area.asteroid`) are one
-  connected knot of ~10-18 rock hexes; each keeps a glowing HEALING SPRING
-  (`hex.spring` — one heart, once per visit, re-armed on area re-entry).
+  connected knot of ~10-18 rock hexes; each spring waystation annexes a
+  7-hex FOUNTAIN COURT (Round 12, `placeCourt` — heart + six petals off
+  the rim, stone-paved to the knot) whose heart hex carries `hex.spring`:
+  a tiered guardian fountain (`makeFountain`), one heart once per visit.
+  Drinking EXHAUSTS it visually (water drains dark, jets die, the statue
+  bows — `built.exhaustSpring`); heal AND look re-arm on area re-entry.
 - **WARDEN CAUSEWAYS (Round 11)** — each ring boundary's ascension gate no
   longer perches 2-4 hexes off the rim: `worldgen placeBossNode` reaches a
   ~20-tile causeway straight out toward the next ring (spine via `Hx.line`,
@@ -96,12 +100,16 @@ world-shaped is seeded (`?seed=`, default `AETHERION`). Live at
   the true rim. Each moon carries instanced crystals in ONE colour
   (`STILLMOON_CRYSTALS`, shuffled, cycled) and a small polygonal rock body
   (`makeStillmoonBody`) afloat over its `moonCore` hex. Fog-registered.
-- **TELEPORT CONCOURSES + SPRING STONES (Round 10)** — rings 2-4 each
-  thread ONE marble waystation (`TELEPORT_BIOMES`, `area.teleport`,
-  biome-flagged `asteroid` so all waystation exclusions apply; no spring)
-  into a free gap of the ring's gate chain. Its central hex
-  (`hex.teleporter`, `area.teleportStoneKey`) bears a Parthenon-style
-  pillared hut (`makeTemple`) with the teleport stone. Stepping on (or
+- **TELEPORT CONCOURSES + SPRING STONES (Round 10, courts Round 12)** —
+  rings 2-4 each thread ONE marble waystation (`TELEPORT_BIOMES`,
+  `area.teleport`, biome-flagged `asteroid` so all waystation exclusions
+  apply; no spring) into a free gap of the ring's gate chain. Round 12:
+  the temple no longer sits in the knot — a 7-hex ANNEX COURT
+  (`placeCourt`, `area.court`, `hex.court`) is stamped off the rim at the
+  bearing BISECTING the two gate islets and paved to the island; the
+  teleporter hex (`hex.teleporter`, `area.teleportStoneKey`) is the
+  court's heart, and `makeTemple` is now a full-size Parthenon (~2.2×,
+  forecourt steps facing the island). Stepping on (or
   clicking under) the stone opens the STAR CHART in TELEPORT-SELECT mode
   (`tpSelect`): the current orbit burns violet (ring band + halos behind
   each choice), the DISCOVERED true regions' bodies are the picker —
@@ -145,10 +153,11 @@ world-shaped is seeded (`?seed=`, default `AETHERION`). Live at
   main). STORM STRIKES are runtime-only (`updateStrikes` in main): ring ≥ 2
   (or during a SURGE), random hex in the wisp's region, 0.95s crackle
   telegraph then bolt.
-- **HEARTS (Round 8) + CHARM/VOUCHER (Round 9)** — `run` state in main.js:
-  `maxHalves` (6 start, cap 12), `halves`, `invulnUntil` (1.15s window +
-  wisp blink), `dead`, `charm` (0/1 — a ward-charm eats one hit before
-  hearts do, `ui.renderCharm`), `voucher` (bounty boons owed). Any hazard
+- **HEARTS (Round 8) + CHARM/VOUCHER (Round 9) + STARDUST (Round 12)** —
+  `run` state in main.js: `maxHalves` (6 start, cap 12), `halves`,
+  `invulnUntil` (1.15s window + wisp blink), `dead`, `charm` (0/1 — a
+  ward-charm eats one hit before hearts do, `ui.renderCharm`), `voucher`
+  (bounty vouchers, redeemed at bazaar pedestals), `stardust`. Any hazard
   = half a heart. `grantBoon()` = mend if hurt, else charm, else nothing
   consumed. `ui.renderHearts` draws papercraft split-heart SVGs top-left;
   damage = red `#hurtflash` + hearts shake. Zero → `die()`: announce,
@@ -184,50 +193,82 @@ world-shaped is seeded (`?seed=`, default `AETHERION`). Live at
   heart container (+2 max halves, filled). `player._hexY`, hover marker,
   and path dots all add `baseY`; sail-follow lifts the camera target to
   the destination's baseY.
-- **ROCK-HOP CHAINS (Round 9)** — `world.chains[]` (`kind`:
-  'shrine'|'market'|'event'; `nodes` = [launchKey, ...hopKeys, dock/pad];
-  `destKeys`, `boonKey`, `dockKey` for attachments). ~40% of non-secret,
+- **ROCK-HOP CHAINS (Round 9; bazaars Round 12)** — `world.chains[]`
+  (`kind`: 'shrine'|'market'|'event'; `nodes` = [launchKey, ...hopKeys,
+  dock/pad]; `destKeys`, `dockKey`; markets add `pedestalKeys`,
+  `traderKey`, `stock`; hermits keep `boonKey`). ~40% of non-secret,
   non-asteroid regions grow a VISIBLE attachment chain: launch springboard
   (`makeSpringboard`, `chainRole='launch'`) → 2-4 isolated hop-rocks
-  bowing over the void (baseY 2.5-7) → a 5-cell orbiting islet: either the
-  CURIO PEDDLER's gift market (`makeMarketStall` + `makeBoonPedestal`,
-  `chainRole='boon'` — one free boon per run via `grantBoon`; bounty
-  vouchers also redeem here) or a HERMIT (`makeHermit` + a drifting curio;
-  `HERMITS` in config, dialogue via cutscene, gift on first visit). HOPS
-  START ONLY FROM CHAIN NODES: `tryHop` in main walks `chain.nodes`
-  sequentially with `player.startBlast(key, 'hop')` (short snappy arc);
-  clicking any node while on a node hops rock-to-rock toward it. Hop cells
-  are claimed by `claimIsolated` (cell + all 6 neighbors empty) because
-  BFS is elevation-blind — adjacency would let the wisp sail aboard.
+  bowing over the void (baseY 2.5-7) → the destination islet. MARKETS
+  (Round 12) are a hand-authored 12-cell BAZAAR STAMP: dock stone facing
+  home → 3-wide aisle → 5-wide pedestal row (three SALE PEDESTALS one
+  walkable gap apart, `chainRole='pedestal'` + `hex.pedestal` idx,
+  BLOCKED — never stood on, clicked from an adjacent tile) → 3-wide tent
+  row (heart = the 2D paper trader, `chainRole='trader'`, also blocked)
+  under a broad pavilion (`makeMarketStall` + `makeSalePedestal`;
+  `drawTrader` in sprites). HERMIT chains keep the organic 5-cell islet
+  (`makeHermit` + a drifting curio; `HERMITS` in config, dialogue via
+  cutscene, gift on first visit). HOPS START ONLY FROM CHAIN NODES:
+  `tryHop` in main walks `chain.nodes` sequentially with
+  `player.startBlast(key, 'hop')` (short snappy arc); clicking any node
+  while on a node hops rock-to-rock toward it. Hop cells are claimed by
+  `claimIsolated` (cell + all 6 neighbors empty) because BFS is
+  elevation-blind — adjacency would let the wisp sail aboard.
+- **STARDUST + BAZAAR SALES (Round 12, main.js)** — the run's first
+  currency: every combat victory pays `2 + ring (+2 elite, +8 warden)`
+  stardust (`run.stardust`, `ui.renderStardust` beside the hearts). At
+  world-wake `rollMarketStock` stocks each bazaar's three pedestals from
+  the run's pool (no cross-market duplicates; tints the wares by tier via
+  `built.stockPedestal`), priced by `STARDUST_PRICES` (8/14/22/30).
+  Clicking a stocked pedestal from an ADJACENT tile (`tryPedestal`) opens
+  the item card with a trader-patter + price `#item-note` row; buying
+  deducts (or consumes a bounty voucher — free), `built.claimPedestal`
+  bursts the ware, and the item applies like any drop. `grantBoon` now
+  serves only hermits, the merchant leviathan, and stars.
 - **Heart-sprites** — runtime-only (main.js `updateHeartDrops`): up to 3
   drifting hearts over discovered non-asteroid seas, heal half on catch,
   fade after 90s.
-- **COMBAT (Round 11, `combat.js`)** — a papercraft DIORAMA floats over the
-  encounter hex (torn disc + cut peaks in the biome's colors, camera drops
-  to over-the-shoulder; the combat OWNS the camera + keyboard + clicks).
-  Two 3x3 boards: on the player board row 0 faces the foe, row 2 the
-  camera; on the enemy board row 0 is the back rank. Turns fill initiative
-  meters at each side's SPEED. Player attack: 'target' (WASD cursor,
-  `PATTERNS[run.stats.pattern]` footprint preview, foresight ghosts) →
-  'spell' (type a `SPELL_WORDS` tier word against a per-ring clock; typos
-  cost 0.18s; timeout fizzles to 0.45x) → 'bar' (Undertale sweep; perfect
-  1.6x + shatters lane-hexes) → resolve (dodgers advance their patrol ONE
-  step on commit — predictable; imbues roll burn/freeze/slow). Enemy turn:
-  a strike timeline — danger squares TRACK the player in amber (reveal lead
-  grows with sight), LOCK red, bite after a react window (0.8s ring 0 →
-  0.3s deep, + dodge stat). Melee = 1 square, ranged = 2 squares rolling
-  toward the camera, wardens add sweep/cross. Control-hex debuffs: reverse,
-  scramble (reshuffles every 1.5s), lanelock (perfect strike clears).
-  RELIC on Q (12 relics, kill-charged). `combat.debugWin()` +
-  `combat.debugState()` for tests.
-- **ROAMERS (Round 11, runtime-only in main)** — up to ~22 paper beasts
-  drift through discovered regions (≤3 per region, ring ≥ ringReached, spawn
-  cadence ~7s; never on special/trigger hexes — `roamerHexOk`). Sharing a
-  tile starts combat; an ELDER (16%, ring ≥ 1) sits still and challenges by
-  dialogue choice (`ui.choice`) when adjacent. The BESTIARY (enemies.js)
-  keys one archetype per biome: painter silhouette + patrol
-  (`PATROLS`) + dodge temperament + ranged weight + debuff kit (ring ≥ 3, or
-  elite ring ≥ 2). `makeEnemy` seasons hp/spd by ring + dread.
+- **COMBAT (Round 11, `combat.js`; reworked Round 12)** — a papercraft
+  DIORAMA floats over the encounter hex (torn disc + cut peaks in the
+  biome's colors, camera drops to over-the-shoulder; the combat OWNS the
+  camera + keyboard + clicks). Two 3x3 boards: on the player board row 0
+  faces the foe, row 2 the camera; on the enemy board row 0 is the back
+  rank. Turns fill initiative meters at each side's SPEED. Player attack:
+  'target' (WASD cursor, `PATTERNS[run.stats.pattern]` footprint preview,
+  foresight ghosts) → 'spell' (type a `SPELL_WORDS` tier word against a
+  per-ring clock; typos cost 0.18s; timeout fizzles to 0.45x) → 'bar'
+  (Undertale sweep; perfect 1.6x + shatters lane-hexes) → resolve. Round
+  12: EVERY foe steps its patrol ONE step at TARGET COMMIT (frozen foes
+  hold still; the end-of-turn shuffle and the dodger special-case are
+  gone) — aiming is a prediction, and the strike flies as a staff-bolt FX
+  that lands ~0.22s later (`_landStrike` applies damage on arrival).
+  Enemy turn: a strike timeline — danger squares TRACK the player in
+  amber (reveal lead grows with sight), LOCK red, bite after a ~0.5s
+  react window (`max(0.42, 0.55 − 0.03·ring)` + dodge stat). Melee = 1
+  square, ranged = 2 squares rolling toward the camera, wardens add
+  sweep/cross. ATTACK FX KIT (Round 12, stage-local, torn down with the
+  diorama): spikes snap out of struck tiles, shots arc caster→square
+  (ranged bolts visible for the whole react window), swings slash melee
+  bites, stone bolts fall on cross patterns; overlays stay as underlay.
+  Control-hex debuffs: reverse, scramble (reshuffles every 1.5s),
+  lanelock (perfect strike clears). RELIC on Q (12 relics, kill-charged).
+  `combat.debugWin()` + `combat.debugState()` for tests.
+- **ROAMERS (Round 11; hunters Round 12, runtime-only in main)** — up to
+  ~22 paper beasts drift through discovered regions (≤3 per region, ring ≥
+  ringReached, spawn cadence ~7s; never on special/trigger/court hexes —
+  `roamerHexOk`). Round 12 they HUNT: within a 6-hex sight radius
+  (`CHASE_RADIUS`) a beast steps toward the pilgrim (`chaseStep`: BFS
+  next-hop over cells it may walk; no road → the legal step that closes
+  the gap, so water-bound beasts pace the shoreline) at a ring-scaled
+  cadence far below sail speed early (`stepEvery` 1.6s ring 0 → 0.55s
+  floor). RINGS 0-1 BEASTS ARE WATER-BOUND (`roamer.waterOnly` — spawn on
+  and move across water only; isles are safe ground early); ring 2+ cross
+  land. Sharing a tile starts combat — that is the ONLY trigger; an ELDER
+  (16%, ring ≥ 1) sits still and challenges by dialogue choice
+  (`ui.choice`) when adjacent. The BESTIARY (enemies.js) keys one
+  archetype per biome: painter silhouette + patrol (`PATROLS`) + dodge
+  temperament + ranged weight + debuff kit (ring ≥ 3, or elite ring ≥ 2).
+  `makeEnemy` seasons hp/spd by ring + dread.
 - **ITEMS + META (Round 11)** — `items.js`: 512-piece pool (200 common /
   150 rare, last 3 per line "cracked" with trade-offs / 100 super-rare
   playstyle benders incl. patterns + imbues + overworld movement / 50
@@ -274,22 +315,22 @@ world-shaped is seeded (`?seed=`, default `AETHERION`). Live at
 | File | Role |
 | --- | --- |
 | `config.js` | HEX size, RINGS radii, STORM + STORM_BOUNDARIES, SHARD_LINES (arming) + WARD_LINES (launch), WARDENS (Round 11: names/tints/intro+defeat lines), SPELL_WORDS tiers, TRAPS atlas, HERMITS, LODE_LINES, biome tables, ASTEROID_BIOMES, TELEPORT_BIOMES, STILLMOON_CRYSTALS, runes |
-| `worldgen.js` | Seeded gen: layout (+ teleport concourses in ring gaps) → regions (+ teleporter hex) → gates (boundary gates via `placeBossNode` warden causeways) → storm wards → wardens → stillmoons → shrines (baseY platform + hidden helix chain + lodestone) → attachment chains (markets/hermits) → springs → spring stones → start hex → hazards (trap atlas) |
-| `buildWorld.js` | All meshes/décor/animators + runtime API (igniteGate, claimShard, setStormFrontier, setGateCrystal, setTrackTarget, triggerSnare, geyserErupting, mawSnapping, claimAltar, revealChain, claimLodestone, claimBoon, merchant, burstAt, landmarkSpots, bounceIsle, boingGate, wobbleBody, revealArea, openThreshold) |
+| `worldgen.js` | Seeded gen: layout (+ teleport concourses in ring gaps) → regions → gates (boundary gates via `placeBossNode` warden causeways) → storm wards → temple courts (`placeCourt` 7-hex annex pads, teleporter at the heart) → stillmoons → shrines (baseY platform + hidden helix chain + lodestone) → attachment chains (12-cell bazaar stamps / hermit islets) → spring courts (7-hex fountain pads) → spring stones → start hex → hazards (trap atlas; skips `hex.court`) |
+| `buildWorld.js` | All meshes/décor/animators + runtime API (igniteGate, claimShard, setStormFrontier, setGateCrystal, setTrackTarget, triggerSnare, geyserErupting, mawSnapping, claimAltar, revealChain, claimLodestone, stockPedestal, claimPedestal, exhaustSpring, merchant, burstAt, landmarkSpots, bounceIsle, boingGate, wobbleBody, revealArea, openThreshold) |
 | `bodies.js` | sculptBody: bespoke per-body geometry archetypes |
-| `structures.js` | makeDolmenGate (startLit/ignite; grand + setCrystal for ascension gates), makeThresholdGate (Round 11 boss-gate + ward-lattice, open()), makeTemple (Parthenon hut + teleport stone), makeStillmoonBody, makeChomper (6 trap archetypes, setOpen), makeSpringboard, makeMarketStall, makeBoonPedestal, makeHermit, makeAltar, makeLandmark, makeHerald + makeShrineStone (both retired, unused) |
-| `sprites.js` | Round 11 paper-cutout atelier: drawMagician, ~18 creature silhouette painters, drawWarden (4 regalia), item card sprites (tier frame + glyph + tint), `makePaperFigure` billboard helper, canvas caches |
-| `combat.js` | The combat engine: diorama stage, speed meters, target→spell→bar attack, telegraphed strike timelines, control-hex debuffs, statuses, relics, PATTERNS |
+| `structures.js` | makeDolmenGate (startLit/ignite; grand + setCrystal for ascension gates), makeThresholdGate (Round 11 boss-gate + ward-lattice, open()), makeTemple (Round 12: full Parthenon spanning its court, forecourt steps front), makeFountain (Round 12: tiered fountain + guardian statue, setExhausted), makeStillmoonBody, makeChomper (6 trap archetypes, setOpen), makeSpringboard, makeMarketStall (Round 12: broad pavilion + 2D trader), makeSalePedestal (setTint/claim), makeHermit, makeAltar, makeLandmark, makeHerald + makeShrineStone + makeBoonPedestal (all retired, unused) |
+| `sprites.js` | Round 11 paper-cutout atelier: drawMagician, drawTrader (Round 12 — the Curio Peddler cutout), ~18 creature silhouette painters, drawWarden (4 regalia), item card sprites (tier frame + glyph + tint), `makePaperFigure` billboard helper, canvas caches |
+| `combat.js` | The combat engine: diorama stage, speed meters, target→spell→bar attack (foes step patrol on target commit — Round 12), ~0.5s ring-nudged react windows, the attack FX kit (spikes/shots/swings/falls), telegraphed strike timelines, control-hex debuffs, statuses, relics, PATTERNS |
 | `enemies.js` | BESTIARY (per-biome archetypes + PATROLS), makeEnemy (ring/dread seasoning, elites), makeWardenEnemy |
 | `items.js` | The 512-piece pool (generated tables + 50 hand-cut legendaries + 12 relics), computeStats/applyItem, rollDrop/rollRelic with unlock gating |
 | `meta.js` | localStorage meta: counters + ~15 achievements, onAward hook |
 | `cutscene.js` | Camera glide + click-through dialogue (discovery + gate arming + warden defeat) |
 | `decorSets.js` | buildDecorLibrary: ~40 merged decor geometries |
 | `materials.js` | Water shader, energy veil (uIgnite), storm sheet shader, canvas textures |
-| `player.js` | The paper magician (makePaperFigure billboard + halo/light), click-to-sail BFS stepping, `speedMul` (stepSpeed items), `startBlast(destKey, 'arc'\|'line'\|'hop', {durMul})`, `blastPointAt(t)` path sampler, baseY-aware heights |
+| `player.js` | The paper magician (makePaperFigure billboard + warm light; the old torus halo is GONE — Round 12), click-to-sail BFS stepping, `speedMul` (stepSpeed items), `startBlast(destKey, 'arc'\|'line'\|'hop', {durMul})`, `blastPointAt(t)` path sampler, baseY-aware heights |
 | `controls.js` | mode 'locked' (either-drag rotate, capped zoom, no pan) \| 'free' (LMB glide), RMB rotate, wheel zoom (max 4400), smooth cap reel-in |
-| `main.js` | Wiring: run state (hearts/charm/voucher/death/ringReached + mods/stats/items/relic/kills), combat triggers + rewards (onCombatVictory/offerItem/offerRelic), roamer spawner, warden thresholds (bossFx intro), beam flights + ascension launches, star chart + map labels, teleport sequence, hop logic, hazard checks (hazardGuard/stormSoul), storm strikes + surges, heart-sprites, falling stars, merchant visits, bounties, shard/lodestone/altar/boon/hermit/spring/teleporter handlers, hover+path UI, `window.__astral` |
-| `pathfind.js`, `hexmath.js`, `rng.js`, `labels.js`, `ui.js` | Support (ui adds the Round 11 combat surface: combatShow/Banner/Hint, foePanel/foeHp, spellShow/Progress, barShow/Cursor/Result, debuffs, itemCard, relicSlot, bossIntro, choice, statsLine) |
+| `main.js` | Wiring: run state (hearts/charm/voucher/stardust/death/ringReached + mods/stats/items/relic/kills), combat triggers + rewards (onCombatVictory/offerItem/offerRelic + stardust pay), roamer hunter AI (chaseStep, water-bound rings 0-1), bazaar stock + sales (rollMarketStock/tryPedestal), warden thresholds (bossFx intro), beam flights + ascension launches, star chart + map labels, teleport sequence, hop logic, hazard checks (hazardGuard/stormSoul), storm strikes + surges, heart-sprites, falling stars, merchant visits, bounties, shard/lodestone/altar/hermit/spring/teleporter handlers, hover+path UI, `window.__astral` |
+| `pathfind.js`, `hexmath.js`, `rng.js`, `labels.js`, `ui.js` | Support (ui adds the Round 11 combat surface: combatShow/Banner/Hint, foePanel/foeHp, spellShow/Progress, barShow/Cursor/Result, debuffs, itemCard — Round 12: + `note` row for sale patter/price, renderStardust — relicSlot, bossIntro, choice, statsLine) |
 
 ## Dev workflow
 
@@ -330,8 +371,27 @@ world-shaped is seeded (`?seed=`, default `AETHERION`). Live at
 ## Gotchas
 
 - Worldgen/build rng call ORDER is the seed contract — reordering rng
-  calls reshuffles every world. (Rounds 8 and 11 both re-ordered it: old
-  seeds now produce different worlds. That's expected.)
+  calls reshuffles every world. (Rounds 8, 11 and 12 all re-ordered it:
+  old seeds now produce different worlds. That's expected.)
+- ANNEX COURTS (`placeCourt`) commit AFTER gates/wards (temples need the
+  two gate bearings to bisect) and reject any cell whose neighbor belongs
+  to ANOTHER area — BFS is elevation-blind, a touching pad is a bridge.
+  Court cells carry `hex.court`; hazards skip them, `roamerHexOk` and the
+  falling-star picker exclude them. `placeCourt` also bumps
+  `area.hexRadius` so the locked camera's zoom cap covers the pad.
+- BAZAAR pedestal + trader hexes are `blocked` — pathfinding never enters
+  them, and `startCombatWith` can never fire there (roamers skip all chain
+  cells anyway). The pedestal INTERACTION is click-driven in
+  `controls.onClick` (BEFORE the requestMove fallback): `tryPedestal`
+  demands the player stand within hex-dist 1 and not be moving. Sale
+  stock lives on `chain.stock[i] = { item, price, sold }` — rolled once
+  per run by `rollMarketStock` at world-wake (call it before offering
+  anything; it also tints the wares).
+- The player's strike now lands ~0.22s AFTER the bar locks (`_fxShot` →
+  `_landStrike` applies damage on arrival). Tests watching `enemy.hp`
+  after a bar lock must poll; `combat.debugWin()` is still instant. The
+  FX arrival can END the combat synchronously — `_fxUpdate` bails if
+  `!this.active` after any `onArrive`.
 - ORBIT GEOMETRY IS ONE COUPLED CONTRACT (Round 11): `RINGS`
   (350/700/1050/1400), `STORM_BOUNDARIES` (222/572/922/1272), and the ~20
   tile warden causeways were derived together. Worst case per boundary r:
@@ -444,7 +504,14 @@ world-shaped is seeded (`?seed=`, default `AETHERION`). Live at
   because each Playwright context is fresh.
 - Roamers never spawn on / walk onto special hexes (`roamerHexOk`) — the
   overlap trigger would otherwise fire combat on top of a gate/teleporter
-  handler.
+  handler. Round 12: rings 0-1 roamers additionally require WATER hexes
+  (`waterOnly`) for both spawn and every step — `chaseStep`'s goal cell
+  (the player's own hex) obeys the same terrain rule, so a shore-bound
+  pilgrim can watch a beast pace the waterline but never be boarded.
+- Spring exhaustion state is TWO halves: `springRested` (main, the heal
+  gate) and the fountain's visual state (`built.exhaustSpring`). Both are
+  reset together in `onEnterHex`'s area-change branch — clear one without
+  the other and the fountain will look wrong.
 
 ## Roadmap (undone, in rough priority)
 
@@ -515,9 +582,26 @@ causeways behind threshold boss-gates (camera pan + burst-of-light name
 reveal into combat). Orbits widened to 350/700/1050/1400 to fit the
 causeways.
 
+→ Round 12 (Polls 33-43): the magician's leftover torus halo deleted;
+7-hex ANNEX COURTS (`placeCourt`) — every teleport concourse's temple
+moved onto a court stamped between its two gate islets (makeTemple grown
+into a full Parthenon), every spring waystation given a fountain court
+with a tiered guardian fountain that visibly EXHAUSTS when drunk
+(`makeFountain` + `built.exhaustSpring`, re-armed on re-entry); markets
+rebuilt as 12-cell BAZAARS (broad pavilion tent, 2D paper trader, three
+blocked sale pedestals one hex apart, clicked from beside) selling
+run-pool items for the new STARDUST currency (combat pays it; vouchers
+redeem one ware free; the item card gained a patter+price note row);
+roamers made HUNTERS (6-hex sight chase, ring-scaled cadence slower than
+sailing, rings 0-1 water-bound so land is safe early); combat re-ordered
+so EVERY foe steps its patrol at target commit (end-of-turn shuffle gone
+— aiming is prediction), react windows ~0.5s ring-nudged, and an attack
+FX kit (tile spikes, caster→square shots, melee swing arcs, falling
+bolts) for both sides.
+
 Dev branch convention: work happens on a `claude/...` branch, PR'd to
 `main` and merged; this round's branch is
-`claude/combat-enemies-stats-items-4oo1wz`. NOTE: GitHub Pages deploys
+`claude/game-mechanics-visual-polish-kuh8u3`. NOTE: GitHub Pages deploys
 from `main` only — dev branches must NOT be added to the deploy workflow
 triggers (the `github-pages` environment rejects them, and via the shared
 concurrency group a failing dev run can cancel the real deploy).

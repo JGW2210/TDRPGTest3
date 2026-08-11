@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeVeilMaterial } from './materials.js';
+import { traderCanvas, makePaperFigure } from './sprites.js';
 
 const INK = 0x1f1a36;
 
@@ -594,60 +595,154 @@ export function makeSpringboard({ rng, gradientMap, glowTex }) {
 }
 
 // ---------------------------------------------------------------- gift market
-// The Curio Peddler's stall: paper crates, a patched awning, a hooded
-// wisp-figure with lantern eyes.
+// The Curio Peddler's tent — Round 12: a broad patched pavilion spanning the
+// bazaar's back row, and the trader in person as a 2D paper cutout beneath
+// it. Local +Z is the tent's FRONT (toward the pedestal row and the dock);
+// buildWorld rotates the group to face the aisle.
 export function makeMarketStall({ rng, gradientMap, glowTex, animators }) {
   const g = new THREE.Group();
   const toon = (c) => new THREE.MeshToonMaterial({ color: c, gradientMap });
-  // crates
+
+  // four timber poles: the front pair taller, so the canvas sheds starlight
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      const h = sz > 0 ? 4.6 : 3.6;
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.15, h, 5), toon(0x59431f));
+      pole.position.set(sx * 5.6, h / 2, sz * 2.3);
+      pole.rotation.z = sx * 0.03;
+      g.add(pole);
+    }
+  }
+  // the awning: one broad patched sheet pitched down toward the back
+  const awning = new THREE.Mesh(new THREE.BoxGeometry(12.6, 0.14, 5.8), toon(0xb8506a));
+  awning.position.set(0, 4.15, -0.1);
+  awning.rotation.x = 0.19;
+  g.add(awning);
+  // patches sewn onto the canvas
   for (let i = 0; i < 4; i++) {
-    const s = 0.55 + rng.float() * 0.4;
+    const patch = new THREE.Mesh(
+      new THREE.BoxGeometry(1.2 + rng.float() * 1.4, 0.05, 1.0 + rng.float()),
+      toon(i % 2 ? 0xe8e4d2 : 0x8c5a6e)
+    );
+    patch.position.set(-4.6 + rng.float() * 9.2, 4.24 + i * 0.001, -1.6 + rng.float() * 3.2);
+    patch.rotation.x = 0.19;
+    patch.rotation.y = (rng.float() - 0.5) * 0.3;
+    g.add(patch);
+  }
+  // scalloped valance along the front lip
+  const valance = new THREE.Mesh(new THREE.BoxGeometry(12.7, 0.5, 0.1), toon(0xe8e4d2));
+  valance.position.set(0, 4.4, 2.75);
+  g.add(valance);
+  // a canvas back wall keeping the void wind out
+  const back = new THREE.Mesh(new THREE.BoxGeometry(12.2, 2.8, 0.12), toon(0xa04a60));
+  back.position.set(0, 1.5, -2.45);
+  g.add(back);
+
+  // wares stacked in the wings: crates, sacks, a rolled carpet
+  for (let i = 0; i < 6; i++) {
+    const s = 0.6 + rng.float() * 0.5;
     const crate = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), toon(i % 2 ? 0xa6845c : 0x8c6e4a));
-    crate.position.set(-1.1 + rng.float() * 0.8, s / 2 + (i > 2 ? 0.8 : 0), 0.4 + rng.float() * 0.8);
+    const sx = i < 3 ? -1 : 1;
+    crate.position.set(sx * (3.4 + rng.float() * 1.4), s / 2 + (i % 3 === 2 ? 0.9 : 0), -1.2 + rng.float() * 1.6);
     crate.rotation.y = rng.angle();
     g.add(crate);
   }
-  // awning on two poles
-  for (const side of [-1, 1]) {
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 2.6, 5), toon(0x59431f));
-    pole.position.set(side * 1.5, 1.3, -0.4);
-    g.add(pole);
-  }
-  const awning = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.08, 2.2), toon(0xb8506a));
-  awning.position.set(0, 2.6, 0.2);
-  awning.rotation.x = -0.22;
-  const awning2 = new THREE.Mesh(new THREE.BoxGeometry(3.42, 0.06, 0.5), toon(0xe8e4d2));
-  awning2.position.set(0, 2.66, 0.75);
-  awning2.rotation.x = -0.22;
-  g.add(awning, awning2);
-  // the peddler: a taller, hooded cousin of the wisp
-  const body = new THREE.Mesh(new THREE.ConeGeometry(0.72, 2.4, 6), toon(0x3a3454));
-  body.position.set(0.4, 1.2, -0.6);
-  const hood = new THREE.Mesh(new THREE.ConeGeometry(0.5, 0.9, 6), toon(0x2c2740));
-  hood.position.set(0.4, 2.55, -0.6);
-  g.add(body, hood);
-  const eyes = [];
-  for (const side of [-1, 1]) {
-    const eye = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: glowTex, color: 0xffd9a8, transparent: true, opacity: 0.9,
-      blending: THREE.AdditiveBlending, depthWrite: false,
-    }));
-    eye.position.set(0.4 + side * 0.16, 2.25, -0.28);
-    eye.scale.setScalar(0.5);
-    eye.renderOrder = 3;
-    g.add(eye);
-    eyes.push(eye);
-  }
+  const carpet = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 2.6, 7), toon(0x8a5aa0));
+  carpet.position.set(-4.4, 0.35, 1.4);
+  carpet.rotation.z = Math.PI / 2;
+  carpet.rotation.y = 0.4;
+  g.add(carpet);
+
+  // the trader: a paper cutout waiting at the tent's heart
+  const trader = makePaperFigure(traderCanvas(), {
+    height: 3.7, glow: 0xffd9a8, glowScale: 1.5,
+  });
+  trader.position.set(0.2, 0.05, -0.7);
+  g.add(trader);
+
+  // the hanging lantern over the counter
+  const lantern = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTex, color: 0xffd9a8, transparent: true, opacity: 0.6,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  }));
+  lantern.position.set(1.6, 3.4, 1.6);
+  lantern.scale.setScalar(2.6);
+  lantern.renderOrder = 3;
+  g.add(lantern);
+
   const ph = rng.angle();
   animators.push((t) => {
-    const blink = Math.sin(t * 0.7 + ph) > -0.97 ? 1 : 0.1;
-    for (const e of eyes) e.material.opacity = 0.75 * blink;
+    lantern.material.opacity = 0.45 + 0.18 * Math.sin(t * 2.1 + ph) * Math.sin(t * 0.9);
+    // the trader sways gently, paper in a soft wind
+    trader.rotation.z = Math.sin(t * 0.8 + ph) * 0.03;
   });
-  g.rotation.y = rng.angle();
   return g;
 }
 
+// A sale pedestal (Round 12): a waist-high plinth on its own blocked hex,
+// the ware floating above as a tier-tinted sigil. Bought (or bare), the
+// ware shrinks away and the runelight dies.
+export function makeSalePedestal({ rng, gradientMap, glowTex, animators }) {
+  const g = new THREE.Group();
+  const ped = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.55, 0.85, 1.5, 7),
+    new THREE.MeshToonMaterial({ color: 0x7d76a1, gradientMap })
+  );
+  ped.position.y = 0.75;
+  const cap = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.72, 0.6, 0.22, 7),
+    new THREE.MeshToonMaterial({ color: 0x8f88b5, gradientMap })
+  );
+  cap.position.y = 1.58;
+  const ware = new THREE.Mesh(
+    new THREE.OctahedronGeometry(0.48, 0),
+    new THREE.MeshBasicMaterial({ color: 0xffd9a8 })
+  );
+  ware.position.y = 2.7;
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTex, color: 0xffd9a8, transparent: true, opacity: 0.5,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  }));
+  glow.position.y = 2.7;
+  glow.scale.setScalar(3.4);
+  glow.renderOrder = 3;
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(0.8, 0.05, 6, 20),
+    new THREE.MeshBasicMaterial({ color: 0xcfe8ff, transparent: true, opacity: 0.5 })
+  );
+  ring.position.y = 2.7;
+  ring.renderOrder = 2;
+  g.add(ped, cap, ware, glow, ring);
+  const state = { claimed: false };
+  const ph = rng.angle();
+  animators.push((t, dt) => {
+    if (state.claimed) {
+      ware.scale.lerp(new THREE.Vector3(0.001, 0.001, 0.001), Math.min(1, dt * 3));
+      glow.material.opacity = Math.max(0, glow.material.opacity - dt * 0.8);
+      ring.material.opacity = Math.max(0, ring.material.opacity - dt * 0.8);
+    } else {
+      ware.rotation.y += dt * 1.2;
+      ware.position.y = 2.7 + Math.sin(t * 1.7 + ph) * 0.16;
+      glow.position.y = ware.position.y;
+      ring.position.y = ware.position.y;
+      ring.rotation.x = Math.PI / 2 + Math.sin(t * 0.8 + ph) * 0.4;
+      ring.rotation.y = t * 0.5;
+      glow.material.opacity = 0.36 + 0.16 * Math.sin(t * 2.4 + ph);
+    }
+  });
+  return {
+    group: g,
+    setTint: (c) => {
+      ware.material.color.setHex(c);
+      glow.material.color.setHex(c);
+    },
+    claim: () => { state.claimed = true; },
+  };
+}
+
 // The boon pedestal: the peddler's one free gift, floating until taken.
+// RETIRED (Round 12): the bazaar's three makeSalePedestal wares replaced
+// it. Kept for reference, like makeShrineStone — nothing imports it.
 export function makeBoonPedestal({ rng, gradientMap, glowTex, animators }) {
   const g = new THREE.Group();
   const ped = new THREE.Mesh(
@@ -749,9 +844,12 @@ export function makeHerald({ rng, glowTex }) {
 }
 
 // ---------------------------------------------------------------- teleport temple
-// The pillared hut of a teleport concourse: a Parthenon in miniature — a
-// stepped stylobate, a peristyle of marble columns, a gabled roof — keeping
-// the ring's teleport stone on its omphalos.
+// The temple of a teleport concourse — Round 12: grown from a pillared hut
+// into a true Parthenon spanning its 7-hex annex court. A three-stepped
+// stylobate, a full peristyle of marble columns, a gabled roof, and broad
+// forecourt steps spilling from the FRONT (local +Z — buildWorld turns it
+// to face the island between the two gates). The ring's teleport stone
+// still burns on its omphalos at the heart.
 export function makeTemple({ rng, gradientMap, glowTex, animators }) {
   const g = new THREE.Group();
   const seed = (rng.float() * 1e6) | 0;
@@ -769,28 +867,31 @@ export function makeTemple({ rng, gradientMap, glowTex, animators }) {
     inks.push(o);
   };
 
-  // stepped stylobate
-  add(roughen(new THREE.BoxGeometry(5.2, 0.4, 4.2), seed, 0.08), compose(0, 0.2, 0), 1.03);
-  add(roughen(new THREE.BoxGeometry(4.7, 0.4, 3.7), seed + 1, 0.08), compose(0, 0.58, 0), 1.03);
-  add(roughen(new THREE.BoxGeometry(4.2, 0.4, 3.2), seed + 2, 0.06), compose(0, 0.96, 0), 1.03);
+  // stepped stylobate, broad enough to hold the court
+  add(roughen(new THREE.BoxGeometry(11.6, 0.5, 9.4), seed, 0.1), compose(0, 0.25, 0), 1.02);
+  add(roughen(new THREE.BoxGeometry(10.6, 0.5, 8.4), seed + 1, 0.1), compose(0, 0.72, 0), 1.02);
+  add(roughen(new THREE.BoxGeometry(9.6, 0.5, 7.4), seed + 2, 0.08), compose(0, 1.19, 0), 1.02);
 
-  // the peristyle: fluted-ish columns with plinth and capital
-  const colXs = [-1.55, -0.52, 0.52, 1.55];
+  // forecourt steps spilling toward the island
+  add(roughen(new THREE.BoxGeometry(6.6, 0.42, 1.7), seed + 3, 0.06), compose(0, 0.21, 5.6), 1.02);
+  add(roughen(new THREE.BoxGeometry(5.4, 0.42, 1.4), seed + 4, 0.06), compose(0, 0.62, 4.95), 1.02);
+
+  // the peristyle: five columns a flank, a pair holding each end
   const colPos = [];
-  for (const x of colXs) for (const z of [-1.15, 1.15]) colPos.push([x, z]);
-  for (const z of [0]) for (const x of [-1.55, 1.55]) colPos.push([x, z]);
+  for (const x of [-3.9, -1.95, 0, 1.95, 3.9]) for (const z of [-2.85, 2.85]) colPos.push([x, z]);
+  for (const x of [-3.9, 3.9]) colPos.push([x, 0]);
   for (const [x, z] of colPos) {
-    add(new THREE.CylinderGeometry(0.15, 0.18, 1.9, 7), compose(x, 2.1, z, 0, rng.angle(), 0), 1.14);
-    add(new THREE.BoxGeometry(0.42, 0.12, 0.42), compose(x, 3.1, z), 1.1);
-    add(new THREE.BoxGeometry(0.4, 0.1, 0.4), compose(x, 1.2, z), 1.1);
+    add(new THREE.CylinderGeometry(0.3, 0.37, 3.7, 7), compose(x, 3.3, z, 0, rng.angle(), 0), 1.1);
+    add(new THREE.BoxGeometry(0.86, 0.22, 0.86), compose(x, 5.26, z), 1.08);
+    add(new THREE.BoxGeometry(0.82, 0.2, 0.82), compose(x, 1.55, z), 1.08);
   }
 
   // entablature + gabled roof
-  add(roughen(new THREE.BoxGeometry(4.3, 0.34, 3.1), seed + 3, 0.05), compose(0, 3.33, 0), 1.04);
-  const roofA = new THREE.BoxGeometry(4.5, 0.14, 1.95);
-  add(roofA, compose(0, 3.95, -0.82, 0.47, 0, 0), 1.05, parts);
-  const roofB = new THREE.BoxGeometry(4.5, 0.14, 1.95);
-  add(roofB, compose(0, 3.95, 0.82, -0.47, 0, 0), 1.05, parts);
+  add(roughen(new THREE.BoxGeometry(9.9, 0.62, 6.9), seed + 5, 0.06), compose(0, 5.7, 0), 1.03);
+  const roofA = new THREE.BoxGeometry(10.3, 0.24, 4.3);
+  add(roofA, compose(0, 6.95, -1.8, 0.47, 0, 0), 1.04, parts);
+  const roofB = new THREE.BoxGeometry(10.3, 0.24, 4.3);
+  add(roofB, compose(0, 6.95, 1.8, -0.47, 0, 0), 1.04, parts);
 
   g.add(new THREE.Mesh(mergeGeometries(parts), marble));
   g.add(new THREE.Mesh(
@@ -800,53 +901,217 @@ export function makeTemple({ rng, gradientMap, glowTex, animators }) {
 
   // pediment gables closing the roof ends
   const gableShape = new THREE.Shape();
-  gableShape.moveTo(-1.55, 0);
-  gableShape.lineTo(1.55, 0);
-  gableShape.lineTo(0, 0.85);
+  gableShape.moveTo(-3.45, 0);
+  gableShape.lineTo(3.45, 0);
+  gableShape.lineTo(0, 1.85);
   gableShape.closePath();
   for (const side of [-1, 1]) {
     const gable = new THREE.Mesh(
-      new THREE.ExtrudeGeometry(gableShape, { depth: 0.12, bevelEnabled: false }),
+      new THREE.ExtrudeGeometry(gableShape, { depth: 0.16, bevelEnabled: false }),
       marbleDim
     );
     gable.rotation.y = Math.PI / 2;
-    gable.position.set(side * 2.12, 3.5, side * 0.06);
+    gable.position.set(side * 5.0, 6.0, side * 0.08);
     g.add(gable);
   }
 
+  // votive braziers flanking the forecourt steps
+  for (const side of [-1, 1]) {
+    const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.24, 0.5, 7), marbleDim);
+    bowl.position.set(side * 3.6, 1.65, 4.6);
+    g.add(bowl);
+    const flame = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: glowTex, color: 0x9fd8ff, transparent: true, opacity: 0.55,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    }));
+    flame.position.set(side * 3.6, 2.15, 4.6);
+    flame.scale.setScalar(1.6);
+    flame.renderOrder = 3;
+    g.add(flame);
+    const fp = rng.angle();
+    animators.push((t) => {
+      flame.material.opacity = 0.4 + 0.18 * Math.sin(t * 3.4 + fp) * Math.sin(t * 1.7);
+    });
+  }
+
   // the teleport stone: a glowing orb on its omphalos, ringed by runelight
-  const omphalos = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.6, 0.9, 8), marbleDim);
-  omphalos.position.y = 1.6;
+  const omphalos = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.85, 1.3, 8), marbleDim);
+  omphalos.position.y = 2.1;
   const orb = new THREE.Mesh(
-    new THREE.IcosahedronGeometry(0.44, 1),
+    new THREE.IcosahedronGeometry(0.62, 1),
     new THREE.MeshBasicMaterial({ color: 0x9fd8ff })
   );
-  orb.position.y = 2.45;
+  orb.position.y = 3.35;
   const orbGlow = new THREE.Sprite(new THREE.SpriteMaterial({
     map: glowTex, color: 0x9fd8ff, transparent: true, opacity: 0.5,
     blending: THREE.AdditiveBlending, depthWrite: false,
   }));
-  orbGlow.position.y = 2.45;
-  orbGlow.scale.setScalar(4.5);
+  orbGlow.position.y = 3.35;
+  orbGlow.scale.setScalar(6.2);
   orbGlow.renderOrder = 3;
   const ring = new THREE.Mesh(
-    new THREE.TorusGeometry(0.75, 0.05, 6, 22),
+    new THREE.TorusGeometry(1.05, 0.06, 6, 22),
     new THREE.MeshBasicMaterial({ color: 0xcfe8ff, transparent: true, opacity: 0.6 })
   );
-  ring.position.y = 2.45;
+  ring.position.y = 3.35;
   ring.renderOrder = 2;
   g.add(omphalos, orb, orbGlow, ring);
 
   const ph = rng.angle();
   animators.push((t, dt) => {
     orb.rotation.y += dt * 0.5;
-    orb.position.y = 2.45 + Math.sin(t * 1.3 + ph) * 0.08;
+    orb.position.y = 3.35 + Math.sin(t * 1.3 + ph) * 0.1;
     orbGlow.position.y = orb.position.y;
     orbGlow.material.opacity = 0.36 + 0.2 * Math.sin(t * 2.3 + ph);
     ring.rotation.x = Math.PI / 2 + Math.sin(t * 0.7 + ph) * 0.35;
     ring.rotation.y = t * 0.4;
   });
   return g;
+}
+
+// ---------------------------------------------------------------- fountain
+// Round 12: the healing spring made stone. A tiered marble fountain at the
+// heart of a waystation's 7-hex court — twin basins, a crown jet, drifting
+// mist — with a robed GUARDIAN STATUE on a plinth at the back (local -Z),
+// its ewer pouring starlit water. Drunk dry it EXHAUSTS: the water drains
+// dark, the jets die, the pour stops, the statue's lantern eyes go out and
+// its head bows — until the pilgrim next returns to the region.
+export function makeFountain({ rng, gradientMap, glowTex, animators }) {
+  const g = new THREE.Group();
+  const toon = (c) => new THREE.MeshToonMaterial({ color: c, gradientMap });
+  const stone = toon(0x8f8a9e);
+  const stoneDim = toon(0x716b85);
+
+  // the basins: a wide lower pool, a raised middle tier, the crown bowl
+  const basin = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 2.95, 0.85, 10), stone);
+  basin.position.y = 0.42;
+  const lip = new THREE.Mesh(new THREE.TorusGeometry(2.62, 0.17, 6, 14), stoneDim);
+  lip.rotation.x = Math.PI / 2;
+  lip.position.y = 0.86;
+  const column = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.55, 0.9, 7), stoneDim);
+  column.position.y = 1.25;
+  const tier = new THREE.Mesh(new THREE.CylinderGeometry(1.35, 1.55, 0.5, 9), stone);
+  tier.position.y = 1.85;
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.32, 0.6, 7), stoneDim);
+  stem.position.y = 2.35;
+  const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.5, 0.42, 9), stone);
+  bowl.position.y = 2.75;
+  g.add(basin, lip, column, tier, stem, bowl);
+
+  const LIVE_WATER = new THREE.Color(0x9adbc0);
+  const DEAD_WATER = new THREE.Color(0x3d4452);
+
+  // water sheets: additive discs riding each basin
+  const waterMatOf = () => new THREE.MeshBasicMaterial({
+    color: 0x9adbc0, transparent: true, opacity: 0.55,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  });
+  const waterLow = new THREE.Mesh(new THREE.CircleGeometry(2.45, 16).rotateX(-Math.PI / 2), waterMatOf());
+  waterLow.position.y = 0.9;
+  waterLow.renderOrder = 2;
+  const waterMid = new THREE.Mesh(new THREE.CircleGeometry(1.25, 14).rotateX(-Math.PI / 2), waterMatOf());
+  waterMid.position.y = 2.14;
+  waterMid.renderOrder = 2;
+  g.add(waterLow, waterMid);
+
+  // the crown jet + four spill jets arcing to the lower pool
+  const jetMat = new THREE.MeshBasicMaterial({
+    color: 0xc9f2e4, transparent: true, opacity: 0.7,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  });
+  const jet = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.24, 1.7, 6, 1, true), jetMat);
+  jet.position.y = 3.7;
+  g.add(jet);
+  const spills = [];
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + 0.4;
+    const spill = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.1, 1.5, 5, 1, true), jetMat.clone());
+    spill.position.set(Math.cos(a) * 1.65, 1.55, Math.sin(a) * 1.65);
+    spill.rotation.z = Math.cos(a) * 0.55;
+    spill.rotation.x = -Math.sin(a) * 0.55;
+    g.add(spill);
+    spills.push(spill);
+  }
+  // drifting mist over the water
+  const mist = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTex, color: 0x9adbc0, transparent: true, opacity: 0.35,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  }));
+  mist.position.y = 2.6;
+  mist.scale.setScalar(7.5);
+  mist.renderOrder = 3;
+  g.add(mist);
+
+  // the guardian statue: robed, hooded, pouring from a stone ewer
+  const statue = new THREE.Group();
+  const plinth = new THREE.Mesh(
+    roughen(new THREE.BoxGeometry(2.0, 1.0, 1.6), (rng.float() * 1e6) | 0, 0.08), stoneDim
+  );
+  plinth.position.y = 0.5;
+  const robe = new THREE.Mesh(new THREE.ConeGeometry(0.85, 3.0, 7), stone);
+  robe.position.y = 2.5;
+  const head = new THREE.Group(); // pivot at the shoulders, so it can bow
+  head.position.y = 3.8;
+  const hood = new THREE.Mesh(new THREE.ConeGeometry(0.52, 1.0, 7), stoneDim);
+  hood.position.y = 0.28;
+  head.add(hood);
+  const eyes = [];
+  for (const side of [-1, 1]) {
+    const eye = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: glowTex, color: 0x9adbc0, transparent: true, opacity: 0.75,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    }));
+    eye.position.set(side * 0.16, 0.05, 0.3);
+    eye.scale.setScalar(0.5);
+    eye.renderOrder = 3;
+    head.add(eye);
+    eyes.push(eye);
+  }
+  // arms cradling the ewer, tipped toward the pool
+  const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 1.1, 5), stone);
+  arm.position.set(0, 2.9, 0.55);
+  arm.rotation.x = 1.15;
+  const ewer = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.34, 0.62, 7), stoneDim);
+  ewer.position.set(0, 3.0, 0.95);
+  ewer.rotation.x = 0.9;
+  statue.add(plinth, robe, head, arm, ewer);
+  statue.position.set(0, 0, -3.6);
+  g.add(statue);
+  // the pour: a thin ribbon of starlit water from the ewer to the pool
+  const pour = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.09, 2.6, 5, 1, true), jetMat.clone());
+  pour.position.set(0, 1.9, -2.2);
+  pour.rotation.x = 0.32;
+  g.add(pour);
+
+  // exhaustion state: visuals ease between full song and drained silence
+  const state = { exhausted: false, u: 0 };
+  const ph = rng.angle();
+  animators.push((t, dt) => {
+    state.u += ((state.exhausted ? 1 : 0) - state.u) * Math.min(1, dt * 2.2);
+    const live = 1 - state.u;
+    const pulse = Math.sin(t * 1.4 + ph);
+    waterLow.material.opacity = 0.14 + (0.4 + 0.14 * pulse) * live;
+    waterMid.material.opacity = 0.12 + (0.42 + 0.14 * Math.sin(t * 1.9 + ph)) * live;
+    waterLow.material.color.copy(DEAD_WATER).lerp(LIVE_WATER, live);
+    waterMid.material.color.copy(DEAD_WATER).lerp(LIVE_WATER, live);
+    const js = Math.max(0.001, live);
+    jet.scale.set(js, js * (1 + 0.08 * Math.sin(t * 6 + ph)), js);
+    jet.material.opacity = 0.65 * live;
+    for (const s of spills) {
+      s.scale.setScalar(Math.max(0.001, live));
+      s.material.opacity = 0.5 * live;
+    }
+    pour.scale.setScalar(Math.max(0.001, live));
+    pour.material.opacity = 0.6 * live;
+    mist.material.opacity = (0.24 + 0.12 * Math.sin(t * 2.2 + ph)) * live;
+    for (const e of eyes) e.material.opacity = 0.06 + 0.7 * live * (0.8 + 0.2 * Math.sin(t * 1.1 + ph));
+    // the guardian bows as the spring runs dry
+    head.rotation.x = 0.52 * state.u;
+  });
+  return {
+    group: g,
+    setExhausted: (on) => { state.exhausted = !!on; },
+  };
 }
 
 // ---------------------------------------------------------------- stillmoon body

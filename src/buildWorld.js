@@ -14,8 +14,8 @@ import {
 import { sculptBody } from './bodies.js';
 import {
   makeDolmenGate, makeLandmark, makeAltar, makeChomper,
-  makeSpringboard, makeMarketStall, makeBoonPedestal, makeHermit,
-  makeTemple, makeStillmoonBody, makeThresholdGate,
+  makeSpringboard, makeMarketStall, makeSalePedestal, makeHermit,
+  makeTemple, makeFountain, makeStillmoonBody, makeThresholdGate,
 } from './structures.js';
 import { buildDecorLibrary } from './decorSets.js';
 import { makeLabel } from './labels.js';
@@ -1208,35 +1208,26 @@ export function buildWorld(world, rng) {
   }
 
   // ------------------------------------------------------------ springs
+  // Round 12: each waystation spring is a tiered FOUNTAIN with a guardian
+  // statue at the back of its 7-hex court. built.exhaustSpring(areaId, on)
+  // toggles the drained look; main re-arms it when the pilgrim returns.
+  const springFx = new Map(); // areaId -> { setExhausted }
   for (const [k, h] of world.hexes) {
     if (!h.spring) continue;
     const p = Hx.toWorld(h.q, h.r, HEX);
-    const g = new THREE.Group();
-    const pool = new THREE.Mesh(
-      new THREE.CircleGeometry(1.9, 14).rotateX(-Math.PI / 2),
-      new THREE.MeshBasicMaterial({
-        color: 0x9adbc0, transparent: true, opacity: 0.5,
-        blending: THREE.AdditiveBlending, depthWrite: false,
-      })
-    );
-    pool.position.y = h.elev + 0.08;
-    pool.renderOrder = 2;
-    const glow = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: glowTex, color: 0x9adbc0, transparent: true, opacity: 0.4,
-      blending: THREE.AdditiveBlending, depthWrite: false,
-    }));
-    glow.position.y = h.elev + 1.4;
-    glow.scale.setScalar(5);
-    glow.renderOrder = 3;
-    g.add(pool, glow);
-    g.position.set(p.x, 0, p.z);
-    group.add(g);
-    regFx(h.areaId, g);
-    const ph = rng.angle();
-    animators.push((t) => {
-      pool.material.opacity = 0.36 + 0.18 * Math.sin(t * 1.3 + ph);
-      glow.material.opacity = 0.3 + 0.14 * Math.sin(t * 2.1 + ph);
-    });
+    const area = world.areas[h.areaId];
+    const fountain = makeFountain({ rng, gradientMap, glowTex, animators });
+    fountain.group.position.set(p.x, h.elev, p.z);
+    // the statue keeps the court's BACK — the front (+Z) faces the knot
+    const courtAng = area.court?.kind === 'spring' ? area.court.angle : rng.angle();
+    fountain.group.rotation.y = Math.atan2(-Math.cos(courtAng), -Math.sin(courtAng));
+    group.add(fountain.group);
+    regFx(h.areaId, fountain.group);
+    springFx.set(h.areaId, fountain);
+    void k;
+  }
+  function exhaustSpring(areaId, on = true) {
+    springFx.get(areaId)?.setExhausted(on);
   }
 
   // ------------------------------------------------------------ stillmoons
@@ -1315,7 +1306,9 @@ export function buildWorld(world, rng) {
       const p = Hx.toWorld(h.q, h.r, HEX);
       const temple = makeTemple({ rng, gradientMap, glowTex, animators });
       temple.position.set(p.x, h.elev, p.z);
-      temple.rotation.y = rng.angle();
+      // the forecourt steps (+Z) spill toward the island between the gates
+      const courtAng = area.court?.kind === 'temple' ? area.court.angle : rng.angle();
+      temple.rotation.y = Math.atan2(-Math.cos(courtAng), -Math.sin(courtAng));
       group.add(temple);
       regFx(area.id, temple);
     }
@@ -1448,21 +1441,27 @@ export function buildWorld(world, rng) {
     }
 
     if (chain.kind === 'market') {
-      // the Curio Peddler's stall on a quiet islet cell, the boon beside it
-      const stallKey = chain.destKeys.find((k) => k !== chain.dockKey && k !== chain.boonKey);
-      const sh = world.hexes.get(stallKey ?? chain.destKeys[0]);
-      const sp = Hx.toWorld(sh.q, sh.r, HEX);
+      // Round 12 bazaar: the peddler's tent spans the back row (the 2D
+      // trader beneath it), three sale pedestals waiting a hex apart
+      const th = world.hexes.get(chain.traderKey);
+      const tp = Hx.toWorld(th.q, th.r, HEX);
+      const dh = world.hexes.get(chain.dockKey);
+      const dp = Hx.toWorld(dh.q, dh.r, HEX);
       const stall = makeMarketStall({ rng, gradientMap, glowTex, animators });
-      stall.position.set(sp.x, (sh.baseY || 0) + sh.elev, sp.z);
+      stall.position.set(tp.x, (th.baseY || 0) + th.elev, tp.z);
+      stall.rotation.y = Math.atan2(dp.x - tp.x, dp.z - tp.z); // face the dock
       group.add(stall);
-      reg(sh, stall);
-      const bh = world.hexes.get(chain.boonKey);
-      const bp = Hx.toWorld(bh.q, bh.r, HEX);
-      const boon = makeBoonPedestal({ rng, gradientMap, glowTex, animators });
-      boon.group.position.set(bp.x, (bh.baseY || 0) + bh.elev, bp.z);
-      group.add(boon.group);
-      reg(bh, boon.group);
-      fx.boon = boon;
+      reg(th, stall);
+      fx.pedestals = [];
+      for (const pk of chain.pedestalKeys ?? []) {
+        const ph3 = world.hexes.get(pk);
+        const pp = Hx.toWorld(ph3.q, ph3.r, HEX);
+        const ped = makeSalePedestal({ rng, gradientMap, glowTex, animators });
+        ped.group.position.set(pp.x, (ph3.baseY || 0) + ph3.elev, pp.z);
+        group.add(ped.group);
+        reg(ph3, ped.group);
+        fx.pedestals.push(ped);
+      }
     } else if (chain.kind === 'event') {
       // a hermit and its tiny astral curio wheeling overhead
       const bh = world.hexes.get(chain.boonKey);
@@ -1559,11 +1558,16 @@ export function buildWorld(world, rng) {
     });
   }
 
-  function claimBoon(chainId) {
-    const fx = chainFx.get(chainId);
-    if (fx?.boon) {
-      fx.boon.claim();
-      burstAt(fx.boon.group.position.clone().add(new THREE.Vector3(0, 1.9, 0)), 0xffd9a8, 7);
+  // Round 12 bazaar pedestals: tint each ware to its item's tier when the
+  // stock is rolled, and burst it away when bought (or given for a voucher).
+  function stockPedestal(chainId, idx, tint) {
+    chainFx.get(chainId)?.pedestals?.[idx]?.setTint(tint);
+  }
+  function claimPedestal(chainId, idx) {
+    const ped = chainFx.get(chainId)?.pedestals?.[idx];
+    if (ped) {
+      ped.claim();
+      burstAt(ped.group.position.clone().add(new THREE.Vector3(0, 2.7, 0)), 0xffd9a8, 7);
     }
   }
 
@@ -2290,8 +2294,8 @@ export function buildWorld(world, rng) {
     labelsByArea, labelsByGate, labelsByLandmark, landmarkSpots,
     igniteGate, claimShard, setStormFrontier, setGateCrystal,
     triggerSnare, geyserErupting, mawSnapping, claimAltar,
-    revealChain, claimLodestone, claimBoon, merchant, burstAt,
-    bounceIsle, boingGate, wobbleBody, revealArea, setTrackTarget,
-    openThreshold,
+    revealChain, claimLodestone, stockPedestal, claimPedestal, merchant,
+    burstAt, bounceIsle, boingGate, wobbleBody, revealArea, setTrackTarget,
+    openThreshold, exhaustSpring,
   };
 }

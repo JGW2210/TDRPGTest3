@@ -29,14 +29,6 @@ export class Player {
     });
     group.add(this.figure);
 
-    this.halo = new THREE.Mesh(
-      new THREE.TorusGeometry(1.35, 0.07, 6, 24),
-      new THREE.MeshBasicMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0.85 })
-    );
-    this.halo.rotation.x = Math.PI / 2;
-    this.halo.position.y = 1.8;
-    group.add(this.halo);
-
     this.light = new THREE.PointLight(0xffd9a8, 60, 40, 1.8);
     this.light.position.y = 3.2;
     group.add(this.light);
@@ -146,8 +138,6 @@ export class Player {
   }
 
   update(dt, scene, time) {
-    this.halo.rotation.z += dt * 1.4;
-    this.halo.position.y = 1.8 + Math.sin(time * 2.1) * 0.12;
     this.light.intensity = 55 + Math.sin(time * 3.1) * 10;
 
     for (let i = this.ripples.length - 1; i >= 0; i--) {
