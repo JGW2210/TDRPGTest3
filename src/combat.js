@@ -155,22 +155,26 @@ export class Combat {
     this.stageYaw = this.controls.yaw;
 
     // papercraft footing: a torn disc in the biome's isle colors
+    // (sized so the backdrop arc stands WELL clear of the back rank — the
+    // billboard figures must never share depth with the scenery)
     const disc = new THREE.Mesh(
-      new THREE.CylinderGeometry(12.5, 13.2, 0.7, 22),
+      new THREE.CylinderGeometry(16.6, 17.3, 0.7, 22),
       new THREE.MeshStandardMaterial({ color: biome.island.top, flatShading: true })
     );
     disc.position.y = -0.55;
     g.add(disc);
     const rim = new THREE.Mesh(
-      new THREE.CylinderGeometry(12.9, 13.4, 0.25, 22),
+      new THREE.CylinderGeometry(17.0, 17.5, 0.25, 22),
       new THREE.MeshBasicMaterial({ color: INK })
     );
     rim.position.y = -0.95;
     g.add(rim);
 
-    // a paper backdrop arc behind the foe: cut peaks in the biome's colors
+    // a paper backdrop arc behind the foe: cut peaks in the biome's colors.
+    // The back rank sits at z ≈ -9.4; the nearest cone surface stays past
+    // z ≈ -12 so even a boss cutout (and its lunge sway) never intersects.
     for (let i = 0; i < 7; i++) {
-      const a = Math.PI + (i - 3) * 0.28; // behind the enemy board (local -Z)
+      const a = Math.PI + (i - 3) * 0.26; // behind the enemy board (local -Z)
       const h = 3.2 + Math.abs(3 - i) * -0.4 + (i % 2) * 1.1 + 2.4;
       const peak = new THREE.Mesh(
         new THREE.ConeGeometry(1.7 + (i % 3) * 0.5, h, 4),
@@ -178,7 +182,7 @@ export class Combat {
           color: i % 2 ? biome.island.top2 : biome.island.side, flatShading: true,
         })
       );
-      peak.position.set(Math.sin(a) * 11.2, h / 2 - 0.4, Math.cos(a) * 11.2);
+      peak.position.set(Math.sin(a) * 14.6, h / 2 - 0.4, Math.cos(a) * 14.6);
       peak.rotation.y = (i * Math.PI) / 3.5;
       g.add(peak);
     }

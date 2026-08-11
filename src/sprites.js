@@ -891,6 +891,12 @@ export function makePaperFigure(canvas, { height = 3.2, glow = null, glowScale =
   tex.colorSpace = THREE.SRGBColorSpace;
   const mat = new THREE.SpriteMaterial({
     map: tex, transparent: true, alphaTest: 0.08, depthWrite: false, toneMapped: false,
+    // bias the cutout toward the camera in the depth test: scenery that
+    // merely grazes the billboard's plane (decor, tent props, terrain
+    // lips, diorama dressing) can no longer slice into the paper, while
+    // genuine occlusion — a whole island between camera and figure —
+    // still wins the test as before
+    polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -24,
   });
   const sprite = new THREE.Sprite(mat);
   sprite.scale.set(height, height, 1);
@@ -901,6 +907,7 @@ export function makePaperFigure(canvas, { height = 3.2, glow = null, glowScale =
     const gm = new THREE.SpriteMaterial({
       map: paperGlowTex(), color: glow, transparent: true, opacity: 0.4,
       blending: THREE.AdditiveBlending, depthWrite: false,
+      polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -24,
     });
     const gs = new THREE.Sprite(gm);
     gs.scale.setScalar(height * glowScale);

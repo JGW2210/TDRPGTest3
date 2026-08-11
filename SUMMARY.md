@@ -392,6 +392,14 @@ world-shaped is seeded (`?seed=`, default `AETHERION`). Live at
   after a bar lock must poll; `combat.debugWin()` is still instant. The
   FX arrival can END the combat synchronously — `_fxUpdate` bails if
   `!this.active` after any `onArrive`.
+- BILLBOARD CLEARANCE: the paper cutouts are depth-tested billboards, so
+  scenery must never share their depth. The diorama's backdrop arc stands
+  at radius 14.6 on a 17.3 disc precisely so the nearest cone surface
+  stays ~2.5 units behind the back rank (z ≈ -9.4) — shrink either and
+  figures will slice into the peaks again. `makePaperFigure` additionally
+  biases its sprites toward the camera (`polygonOffset -4/-24`) so decor
+  or terrain that merely GRAZES a cutout's plane can't shave it; genuine
+  occlusion (a whole island in front) still wins.
 - ORBIT GEOMETRY IS ONE COUPLED CONTRACT (Round 11): `RINGS`
   (350/700/1050/1400), `STORM_BOUNDARIES` (222/572/922/1272), and the ~20
   tile warden causeways were derived together. Worst case per boundary r:
